@@ -1,0 +1,109 @@
+@import '~style';
+.@{prefix}-field-recommendation {
+  &-input {
+    display: flex;
+    height: 28px;
+    align-items: center;
+    border: 1px solid transparent;
+    &:focus-within { border-color: @primary-color; }
+    input { border: 0; outline: none; width: 100%; min-width: 0; height: 100%; background: transparent; color: @font-color; padding: 0 5px; }
+    button { background: transparent; color: @second-font-color; border: 0; padding: 0 6px; cursor: pointer; }
+  }
+  &-panel {
+    box-sizing: border-box;
+    position: fixed;
+    z-index: 10000;
+    overflow: auto;
+    background: @background-color;
+    color: @font-color;
+    border: 1px solid @primary-border-color;
+    border-radius: 4px;
+    box-shadow: 0 3px 12px rgba(0,0,0,.18);
+    padding: 12px;
+    h4 { margin: 0 0 8px; font-size: 13px; }
+    h4 small { color: @third-font-color; font-weight: normal; }
+    section { min-width: 0; }
+    > section { margin-top: 14px; }
+    button, select { font: inherit; color: inherit; }
+    select { border: 1px solid @primary-border-color; background: @background-color; max-width: 130px; }
+  }
+  &-top { display: flex; gap: 12px; > section { flex: 1; } }
+  &-heading {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    margin: -12px -12px 12px; padding: 9px 12px;
+    background: @third-primary-color; border-bottom: 1px solid @primary-border-color;
+    strong { font-size: 13px; color: @primary-color; }
+    button {
+      font: inherit; cursor: pointer; color: @primary-color;
+      border: 1px solid @primary-border-color; border-radius: 4px;
+      padding: 4px 8px; background: @background-color;
+      &:hover { border-color: @primary-color; }
+      &:focus-visible { outline: 2px solid @primary-color; outline-offset: 1px; }
+    }
+  }
+  &-list { max-height: 160px; overflow: auto; &.similar { max-height: 170px; } }
+  &-candidate {
+    width: 100%; border: 0; border-bottom: 1px solid @primary-border-color;
+    background: transparent; color: @font-color; text-align: left; cursor: pointer;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 7px 5px;
+    &[aria-selected='true'], &:hover, &:focus { background: @third-primary-color; }
+    > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    > small { color: @second-font-color; }
+    span small { display: block; color: @third-font-color; overflow: hidden; text-overflow: ellipsis; }
+  }
+  &-group { flex-basis: 100%; color: @third-font-color; }
+  &-empty { color: @third-font-color; text-align: center; margin: 20px 5px; }
+  &-combination { padding-top: 8px; p { margin: 6px 0; word-break: break-word; } }
+  &-tags { display: flex; flex-wrap: wrap; gap: 4px; span { padding: 2px 5px; background: @third-primary-color; border-radius: 3px; } }
+  &-actions { display: flex; gap: 8px; align-items: center; margin: 8px 0; flex-wrap: wrap;
+    button { border: 1px solid @primary-border-color; background: @background-color; color: @primary-color; border-radius: 3px; padding: 3px 8px; cursor: pointer;
+      &:disabled { color: @third-font-color; cursor: default; }
+    }
+  }
+  &-style { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; }
+  &-warning { color: @primary-color; margin: 8px 0; }
+  // 推荐入口与字段工具栏其他控件统一——紧凑按钮（约24px高、12px文字、
+  // 细边框/圆角、hover/focus/展开态），不再是无边框的着色文本
+  &-settings { display: inline-block; position: relative; margin: 0 0 0 10px; color: @font-color;
+    flex: 0 0 auto; white-space: nowrap;
+    summary {
+      cursor: pointer; color: @font-color; font-size: 12px;
+      display: inline-flex; align-items: center; gap: 4px;
+      height: 24px; padding: 0 8px; border-radius: 3px;
+      border: 1px solid @primary-border-color; background: @background-color;
+      list-style: none;
+      &::-webkit-details-marker { display: none; }
+      i { font-size: 12px; color: @third-font-color; transition: transform .12s ease;
+        &.is-open { transform: rotate(180deg); } }
+      &:hover { color: @primary-color; border-color: @primary-color;
+        i { color: @primary-color; } }
+      &:focus-visible { outline: 2px solid @primary-color; outline-offset: 1px; }
+    }
+    &[open] > summary { color: @primary-color; border-color: @primary-color; }
+  }
+  &-options { position: fixed; z-index: 10001; width: 184px; padding: 10px; background: @background-color;
+      box-sizing: border-box;
+      color: @font-color;
+      font-size: 12px;
+      border: 1px solid @primary-border-color; border-radius: 3px; box-shadow: 0 3px 10px rgba(0,0,0,.15);
+      label { display: flex; align-items: center; gap: 6px; padding: 5px 0; white-space: nowrap; cursor: pointer; }
+      button { margin-top: 5px; border: 0; background: transparent; color: @primary-color; cursor: pointer; }
+  }
+}
+.@{prefix}-table td > .@{prefix}-field-recommendation-input { display: flex; text-align: left; }
+.@{prefix}-word-roots-manager {
+  display: flex; flex-direction: column; max-height: 65vh; color: @font-color;
+  .@{prefix}-word-roots-scroll { overflow: auto; min-height: 100px; flex: 1; }
+  .@{prefix}-word-roots-detail { background: @background-color;
+    input:not([type='file']), select { width: auto; min-width: 80px; } }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { border: 1px solid @primary-border-color; padding: 5px; }
+  th { background: @tr-background; position: sticky; top: 0; }
+  input:not([type='file']), select { width: 100%; min-width: 60px; box-sizing: border-box; padding: 5px; color: @font-color;
+    background: @background-color; border: 1px solid @primary-border-color; }
+  button { cursor: pointer; }
+}
+.@{prefix}-field-recommendation-dirty {
+  display: flex; gap: 8px; align-items: center; margin: 8px 0; padding: 6px 8px;
+  border: 1px solid @warring-color; font-size: 12px; color: @font-color;
+}

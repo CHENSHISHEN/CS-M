@@ -1,0 +1,512 @@
+// Shared controls include body portals. Keep this boundary separate from classic UI,
+// graph/user colours, editor syntax, and third-party canvas rendering.
+body[data-ui='workbench'] {
+  color: var(--wb-text);
+  background: var(--wb-bg);
+  font-size: 12px;
+
+  .chiner-toolbar {
+    background: var(--wb-side);
+    border-bottom: 1px solid var(--wb-line);
+    color: var(--wb-muted);
+  }
+  .chiner-toolbar-title, .chiner-toolbar-info { color: var(--wb-muted); }
+
+  a { color: var(--wb-blue); }
+  ::-webkit-scrollbar-thumb { background-color: var(--wb-muted); }
+  ::-webkit-scrollbar-thumb:hover { background-color: var(--wb-blue); }
+  ::-webkit-scrollbar-corner { background: var(--wb-bg); }
+
+  .chiner-modal, .chiner-drawer { background: var(--wb-overlay); }
+  .chiner-modal-container, .chiner-drawer-container {
+    color: var(--wb-text);
+    box-shadow: var(--wb-shadow);
+  }
+  .chiner-modal-container {
+    max-width: 100%;
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .chiner-modal-header { flex-shrink: 0; }
+  .chiner-modal-content { min-height: 0; overflow: auto; }
+  .chiner-modal-footer { position: sticky; bottom: 0; z-index: 1; flex-shrink: 0; }
+  .chiner-modal-header, .chiner-drawer-header {
+    color: var(--wb-text);
+    background: var(--wb-side);
+    border-bottom: 1px solid var(--wb-line);
+  }
+  .chiner-modal-header { border-radius: 6px 6px 0 0; }
+  .chiner-modal-header-title, .chiner-drawer-header-title { font-size: 13px; font-weight: 600; }
+  .chiner-modal-header-icon, .chiner-drawer-header-icon {
+    color: var(--wb-muted);
+    &:hover { color: var(--wb-danger); }
+  }
+  .chiner-modal-content, .chiner-modal-footer, .chiner-drawer-container,
+  .chiner-drawer-content, .chiner-drawer-button-left, .chiner-drawer-button-right {
+    color: var(--wb-text);
+    background: var(--wb-bg);
+  }
+  .chiner-modal-content { border-radius: 0 0 6px 6px; }
+  .chiner-modal-footer { border-top: 1px solid var(--wb-line); }
+  // Drawer content computes its height from the existing 32px header contract.
+  .chiner-drawer-header { height: 32px; }
+  .chiner-modal-content-small-error i { background: var(--wb-danger); color: var(--wb-bg); }
+  .chiner-modal-content-small-warring i { background: var(--wb-warning); color: var(--wb-bg); }
+  .chiner-modal-content-small-success i { background: var(--wb-success); color: var(--wb-bg); }
+  .chiner-modal-content-small-info i { background: var(--wb-blue); color: var(--wb-bg); }
+
+  .chiner-form-item-label { color: var(--wb-muted); }
+  .chiner-form-item-label-require { color: var(--wb-danger); }
+  .chiner-form-item-component-message { color: var(--wb-success); }
+  .chiner-input > span:first-child,
+  .chiner-textarea, .chiner-numberinput,
+  .chiner-modal-input input,
+  .chiner-form-item-component > input:not([type='checkbox']):not([type='radio']):not([type='file']),
+  .chiner-form-item-component > textarea, .chiner-form-item-component select {
+    color: var(--wb-text);
+    background: var(--wb-bg);
+    border-color: var(--wb-line);
+    border-radius: 4px;
+    font-size: 12px;
+    &:hover { border-color: var(--wb-blue); }
+  }
+  .chiner-input > span:first-child > input {
+    color: var(--wb-text);
+    background: transparent;
+    font-size: 12px;
+  }
+  .chiner-input input::placeholder, .chiner-textarea::placeholder,
+  .chiner-numberinput::placeholder { color: var(--wb-muted); }
+  .chiner-input-count { color: var(--wb-muted); }
+  .chiner-input-focus, .chiner-input > span:first-child:focus-within,
+  .chiner-textarea:focus, .chiner-numberinput:focus {
+    border-color: var(--wb-blue) !important;
+    box-shadow: 0 0 0 2px var(--wb-accent);
+  }
+  .chiner-input-suffix, .chiner-input-toggle {
+    border-color: var(--wb-line);
+    color: var(--wb-text);
+    background: var(--wb-side);
+  }
+  .chiner-input-toggle > span:nth-child(2) { background: var(--wb-line); }
+  .chiner-path-select-input, .chiner-upload-input,
+  .chiner-form-item-component-upload-in { color: var(--wb-blue); border-color: var(--wb-line); }
+  .chiner-input input:disabled, .chiner-textarea:disabled, .chiner-numberinput:disabled,
+  .chiner-form-item-component select:disabled {
+    color: var(--wb-disabled-text);
+    background: var(--wb-disabled-bg);
+    border-color: var(--wb-line);
+  }
+
+  .chiner-button {
+    color: var(--wb-text);
+    background: var(--wb-bg);
+    border-color: var(--wb-line);
+    border-radius: 4px;
+    font-size: 12px;
+    &:focus-visible { outline: 2px solid var(--wb-blue); outline-offset: 2px; }
+  }
+  .chiner-button-default:hover, .chiner-button-default-active,
+  .chiner-button-group .chiner-button-default:hover {
+    color: var(--wb-blue);
+    border-color: var(--wb-blue);
+    background: var(--wb-accent);
+  }
+  .chiner-button-primary, .chiner-button-primary:hover, .chiner-button-primary-active,
+  .chiner-button-group .chiner-button-default-active:hover {
+    color: var(--wb-primary-text) !important;
+    background: var(--wb-rail-active) !important;
+    border-color: var(--wb-rail-active) !important;
+  }
+  .chiner-button-disable, .chiner-button-loading,
+  .chiner-button-disable:hover, .chiner-button-loading:hover {
+    color: var(--wb-disabled-text) !important;
+    background: var(--wb-disabled-bg) !important;
+    border-color: var(--wb-line) !important;
+    box-shadow: none;
+  }
+  .chiner-checkbox-checked, .chiner-radio-checked { color: var(--wb-blue); }
+  .chiner-checkbox-unchecked, .chiner-radio-unchecked { color: var(--wb-muted); }
+  .chiner-checkbox-disable .chiner-checkbox-checked,
+  .chiner-checkbox-disable .chiner-checkbox-unchecked { color: var(--wb-disabled-text); }
+  .chiner-checkbox input:focus-visible + span,
+  .chiner-radio input:focus-visible + span { outline: 2px solid var(--wb-blue); }
+
+  .chiner-dropdown-container, .chiner-contextmenu-show,
+  .chiner-multiple-select-children, .chiner-tooltip-content,
+  .chiner-search-suggest-list, .chiner-field-recommendation-panel,
+  .chiner-field-recommendation-options, .chiner-cell-tooltip,
+  .chiner-edge-tooltip-content-item-data,
+  .chiner-wb-menu, .chiner-catalog-menu, .ercanvas-menus {
+    color: var(--wb-text);
+    background: var(--wb-bg);
+    border: 1px solid var(--wb-line);
+    border-radius: 5px;
+    box-shadow: var(--wb-shadow);
+    font-size: 12px;
+  }
+  .chiner-dropdown-item:hover, .chiner-contextmenu-show li:hover,
+  .ercanvas-menus ul li:hover, .chiner-wb-menu-item:hover,
+  .chiner-wb-menu-item-active, .chiner-catalog-menu button:hover {
+    color: var(--wb-blue);
+    background: var(--wb-accent);
+  }
+  .chiner-dropdown-item-group, .chiner-wb-menu-group { color: var(--wb-muted); }
+  .chiner-dropdown-item-disable, .chiner-dropdown-item-disable:hover,
+  .chiner-wb-menu-item-disable, .chiner-wb-menu-item-disable:hover {
+    color: var(--wb-disabled-text);
+    background: transparent;
+  }
+  .chiner-dropbutton > span:first-child:after { background: var(--wb-line); }
+  .chiner-tooltip-content-arrow-bottom, .chiner-tooltip-content-arrow-top,
+  .chiner-tooltip-content-arrow-topLeft, .chiner-tooltip-content-arrow-left {
+    border-bottom-color: var(--wb-bg);
+  }
+  .chiner-tooltip-content pre { white-space: pre-wrap; }
+  .chiner-multiple-select-data {
+    color: var(--wb-text);
+    border-color: var(--wb-line);
+    border-radius: 4px;
+    background: var(--wb-bg);
+    &:hover { border-color: var(--wb-blue); }
+    &-focus { border-color: var(--wb-blue); box-shadow: 0 0 0 2px var(--wb-accent); }
+    &-normal-input, &-simple-input { color: var(--wb-text); font-size: 12px; }
+    &-hidden-input { font-size: 12px; }
+    &-input-icon, &-input-placeholder { color: var(--wb-muted); }
+    &-item { background: var(--wb-accent); color: var(--wb-blue); }
+    &-item-simple { color: var(--wb-text); background: transparent; }
+    &-item-simple-clear { color: var(--wb-muted); background: var(--wb-bg); }
+    &-disable, &-disable:hover {
+      background: var(--wb-disabled-bg);
+      border-color: var(--wb-line);
+      color: var(--wb-disabled-text);
+    }
+  }
+  .chiner-multiple-select-option:hover,
+  .chiner-multiple-select-option > span:hover,
+  .chiner-multiple-select-option-check {
+    background: var(--wb-accent);
+    color: var(--wb-blue);
+    i { color: var(--wb-blue); }
+  }
+  .chiner-multiple-select-empty, .chiner-search-suggest-empty,
+  .chiner-list-empty, .chiner-listselect-right-empty { color: var(--wb-muted); }
+  .chiner-search-input {
+    color: var(--wb-muted);
+    border: 1px solid var(--wb-line);
+    border-radius: 4px;
+    background: var(--wb-side);
+    input { color: var(--wb-text); background: transparent; font-size: 12px; }
+    input::placeholder { color: var(--wb-muted); }
+    .chiner-input > span:first-child { background: transparent; }
+    &:focus-within { border-color: var(--wb-blue); }
+  }
+  .chiner-search-suggest > div:first-child { background: var(--wb-side); color: var(--wb-muted); }
+  .chiner-search-suggest-list-group > span {
+    color: var(--wb-section-text);
+    background: var(--wb-section-bg);
+    border-color: var(--wb-line);
+  }
+  .chiner-search-suggest-list-search { background: var(--wb-accent); color: var(--wb-blue); }
+  .chiner-search-suggest-list-item-refs { color: var(--wb-text); background: var(--wb-side); }
+  .chiner-search-suggest-list-item:hover, .chiner-search-suggest-more:hover {
+    color: var(--wb-blue);
+    background: var(--wb-accent);
+    a { color: var(--wb-blue) !important; }
+  }
+  .chiner-search-suggest-more { border-color: var(--wb-line); color: var(--wb-blue); }
+  .chiner-field-recommendation-input {
+    input { color: var(--wb-text); }
+    button { color: var(--wb-muted); }
+    &:focus-within { border-color: var(--wb-blue); }
+  }
+  .chiner-field-recommendation-heading {
+    background: var(--wb-section-bg);
+    border-color: var(--wb-line);
+    strong { color: var(--wb-section-text); }
+  }
+  .chiner-field-recommendation-heading button,
+  .chiner-field-recommendation-actions button,
+  .chiner-field-recommendation-settings summary,
+  .chiner-field-recommendation-panel select {
+    color: var(--wb-text);
+    background: var(--wb-bg);
+    border-color: var(--wb-line);
+    &:hover { border-color: var(--wb-blue); }
+    &:focus-visible { outline: 2px solid var(--wb-blue); }
+  }
+  .chiner-field-recommendation-candidate {
+    color: var(--wb-text);
+    border-color: var(--wb-line);
+    &[aria-selected='true'], &:hover, &:focus { background: var(--wb-accent); }
+  }
+  .chiner-field-recommendation-empty, .chiner-field-recommendation-group,
+  .chiner-field-recommendation-candidate small,
+  .chiner-field-recommendation-panel h4 small,
+  .chiner-field-recommendation-settings summary i { color: var(--wb-muted); }
+  .chiner-field-recommendation-warning { color: var(--wb-warning); }
+  .chiner-field-recommendation-tags span { color: var(--wb-blue); background: var(--wb-accent); }
+  .chiner-field-recommendation-options button { color: var(--wb-blue); }
+  .chiner-field-recommendation-actions button:disabled {
+    color: var(--wb-disabled-text); background: var(--wb-disabled-bg); border-color: var(--wb-line);
+  }
+  .chiner-field-recommendation-dirty { color: var(--wb-text); border-color: var(--wb-warning); }
+
+  .chiner-table {
+    color: var(--wb-text);
+    td, th { border-color: var(--wb-line); background: var(--wb-bg); }
+    th { background: var(--wb-section-bg); color: var(--wb-section-text); font-weight: 600; }
+    td input:not([type='checkbox']):not([type='radio']), td select {
+      color: var(--wb-text); background: transparent; border-color: var(--wb-line);
+    }
+    &-default:nth-child(2n) td { background: var(--wb-canvas); }
+    &-default:hover td { background: var(--wb-side) !important; }
+    &-selected, &-selected td { background: var(--wb-accent) !important; }
+    &-insert > td { border-bottom-color: var(--wb-blue) !important; }
+    &-type-link, &-dict-view-normal, &-opt-setting,
+    &-opt-config > div > button { color: var(--wb-blue); }
+    &-dict-view-disabled { color: var(--wb-disabled-text); }
+    &-opt-help, &-dict-items { color: var(--wb-text); background: var(--wb-bg); }
+    &-dict-create, &-opt > span { border-color: var(--wb-line); }
+    &-opt > span { border-radius: 4px; }
+    &-opt > span > span + span:before { background: var(--wb-line); }
+    &-opt-normal > span:last-child > i { color: var(--wb-danger); }
+    &-opt-normal > span:nth-child(5) i { color: var(--wb-blue); }
+  }
+  .chiner-drag-container { color: var(--wb-text); background: var(--wb-bg); }
+  .chiner-word-roots-manager {
+    color: var(--wb-text);
+    .chiner-word-roots-detail { background: var(--wb-bg); }
+    th, td { border-color: var(--wb-line); }
+    th { color: var(--wb-section-text); background: var(--wb-section-bg); }
+    input:not([type='file']), select { color: var(--wb-text); background: var(--wb-bg); border-color: var(--wb-line); }
+  }
+  .chiner-icon-title-normal:hover { color: var(--wb-blue); background: var(--wb-accent); }
+  .chiner-icon-title-disable, .chiner-group-icon-disable { color: var(--wb-disabled-text); }
+  .chiner-group-icon:not(.chiner-group-icon-disable):hover { color: var(--wb-blue); background: var(--wb-accent); }
+  .chiner-group-icon-menu-showbackground { color: var(--wb-text); background: var(--wb-bg); }
+  .chiner-group-icon-menu-item { color: var(--wb-text); }
+  .chiner-fieldset { color: var(--wb-text); background: var(--wb-bg); border-color: var(--wb-line); }
+  .chiner-fieldset > div:first-child {
+    color: var(--wb-section-text); background: var(--wb-section-bg);
+    box-shadow: inset 2px 0 var(--wb-blue); font-weight: 600;
+  }
+
+  .chiner-simple-tab-titles, .chiner-tab { background: var(--wb-side); }
+  .chiner-simple-tab-contents, .chiner-simple-tab-titles-left,
+  .chiner-simple-tab-titles-block, .chiner-tab-header-container,
+  .chiner-tab-header-left { color: var(--wb-text); background: var(--wb-bg); border-color: var(--wb-line); }
+  .chiner-simple-tab-titles-title-default { color: var(--wb-muted); }
+  .chiner-simple-tab-titles-title-default:hover { color: var(--wb-blue); background: var(--wb-side); }
+  .chiner-simple-tab-titles-top .chiner-simple-tab-titles-title-active {
+    color: var(--wb-blue); background: var(--wb-bg); border-color: var(--wb-line);
+    border-radius: 3px 3px 0 0; box-shadow: inset 0 2px var(--wb-blue);
+  }
+  .chiner-simple-tab-titles-left .chiner-simple-tab-titles-title-active {
+    color: var(--wb-blue); background: var(--wb-accent);
+    &:before { background: var(--wb-blue); }
+  }
+  .chiner-simple-tab-titles-block {
+    .chiner-simple-tab-titles-title-active { color: var(--wb-blue); background: var(--wb-accent); }
+    > span + span:before { background: var(--wb-line); }
+  }
+  .chiner-tab-header-left .chiner-tab-header-item-hidden { color: var(--wb-muted); }
+  .chiner-tab-header-left .chiner-tab-header-item-show { color: var(--wb-blue); border-left-color: var(--wb-blue); }
+  .chiner-tab-header-left .chiner-tab-header-item-hidden > span:first-child { background: var(--wb-disabled-bg); }
+  .chiner-tab-header-left .chiner-tab-header-item-show > span:first-child { background: var(--wb-rail-active); }
+  .chiner-tab-header-top .chiner-tab-header-item-hidden { color: var(--wb-muted); background: var(--wb-side); }
+  .chiner-tab-header-top .chiner-tab-header-item-show { color: var(--wb-blue); background: var(--wb-accent); }
+  .chiner-step-title-item-line { background: var(--wb-line); }
+  .chiner-step-title-item-active, .chiner-step-title-item-done {
+    color: var(--wb-text);
+    span:first-child { color: var(--wb-primary-text); background: var(--wb-rail-active); }
+  }
+  .chiner-step-title-item-rest {
+    color: var(--wb-muted);
+    span:first-child { color: var(--wb-muted); border-color: var(--wb-line); background: var(--wb-bg); }
+  }
+  .chiner-step-title-item-success span:first-child { color: var(--wb-success); border-color: var(--wb-success); }
+  .chiner-list, .chiner-menu-container-fold, .chiner-tree-all {
+    color: var(--wb-text); background: var(--wb-bg);
+  }
+  .chiner-list-item-active, .chiner-menu-container-fold-item-selected,
+  .chiner-menu-container-fold-item-child-selected { color: var(--wb-blue); background: var(--wb-accent); }
+  .chiner-menu-container-fold-item-child-selected span { color: var(--wb-blue); }
+  .chiner-list-item-default:hover { background: var(--wb-side); }
+  .chiner-menu-container-fold-item-drag { background: var(--wb-bg); }
+  .chiner-menu-container-fold-item-drag > div > span { background: var(--wb-muted); }
+  .chiner-listselect-opt, .chiner-listselect-left-container,
+  .chiner-listselect-right-container, .chiner-listselect-right-header { border-color: var(--wb-line); }
+  .chiner-listselect-opt-normal, .chiner-listselect-opt-ind { background: var(--wb-bg); border-color: var(--wb-line); }
+  .chiner-listselect-opt-all { background: var(--wb-rail-active); border-color: var(--wb-rail-active); }
+  .chiner-listselect-opt-all:after { border-color: var(--wb-primary-text); }
+  .chiner-listselect-opt-ind:after { background: var(--wb-blue); }
+  .chiner-listselect-left-item-bg, .chiner-listselect-right-item-bg { background: var(--wb-side); }
+  .chiner-listselect-left-item-repeat, .chiner-listselect-right-item-disable { color: var(--wb-warning); }
+
+  .chiner-message { color: var(--wb-text); background: var(--wb-bg); border-color: var(--wb-line); box-shadow: var(--wb-shadow); }
+  .chiner-message-success { background: var(--wb-success); color: var(--wb-bg); }
+  .chiner-message-error { background: var(--wb-danger); color: var(--wb-bg); }
+  .chiner-message-warring { background: var(--wb-warning); color: var(--wb-bg); }
+  .chiner-loading-bg { background: var(--wb-overlay); }
+  .chiner-loading-content { color: var(--wb-primary-text); }
+  .chiner-slider-track { background: var(--wb-blue); }
+  .chiner-slider-handle { background: var(--wb-bg); border-color: var(--wb-blue); }
+  .chiner-slider-disable .chiner-slider-track,
+  .chiner-slider-disable .chiner-slider-handle { background: var(--wb-disabled-text); border-color: var(--wb-disabled-text); }
+  .chiner-progressbar { background: var(--wb-side); border-color: var(--wb-line); }
+  .chiner-progressbar-title { color: var(--wb-blue); }
+  .chiner-progressbar-content { background-image: linear-gradient(to right, var(--wb-accent), var(--wb-blue)); }
+  .chiner-progressbar-content:after { border-color: var(--wb-blue); }
+
+  // Only tool shells: user-selected swatches, graph fills and line colours stay intact.
+  .chiner-color-picker { color: var(--wb-text); background: var(--wb-bg); box-shadow: var(--wb-shadow); }
+  .chiner-color-picker-footer > div:nth-child(2) { border-color: var(--wb-line); }
+  .chiner-edge-tooltip-content-line { background: var(--wb-line); }
+  .chiner-edge-tooltip-content-item-data-arrow-border { border-color: var(--wb-line); }
+  .chiner-node-tooltip-content-color-edit > div:first-child { border-color: var(--wb-line); }
+  .chiner-node-tooltip-content-color-edit-container-label-default { color: var(--wb-blue); }
+  .chiner-node-tooltip-content-layout-checked { background: var(--wb-accent); }
+  .chiner-edge-tooltip-content-item-data-line-selected { background: var(--wb-accent); color: var(--wb-blue); }
+  .chiner-edge-tooltip-content-item-data-line > div > div:last-child { background: var(--wb-side); }
+  .chiner-node-tooltip-content > div:hover,
+  .chiner-edge-tooltip-content-item i:hover,
+  .chiner-edge-tooltip-content-item-data-arrow > div:hover { background: var(--wb-accent); }
+  .chiner-code-editor-content-opt { background: var(--wb-side); border-bottom: 1px solid var(--wb-line); }
+  .chiner-code-editor-content-opt span { color: var(--wb-blue); border-color: var(--wb-blue); }
+  .chiner-preview, .chiner-database-container, .chiner-datatype { color: var(--wb-text); }
+  .chiner-database-container-tab { border-color: var(--wb-line); }
+  .chiner-database-container-tab > div:first-child { background: var(--wb-bg); }
+  .chiner-database-container-tab > div:first-child > span[class$='active'] { border-bottom-color: var(--wb-blue); }
+  .chiner-database-container-defaultdb-message { color: var(--wb-success); }
+  .chiner-datatype-title > span:first-child { background: var(--wb-blue); }
+  .chiner-database-dothelp table, .chiner-database-dothelp table th { border-color: var(--wb-line); }
+  .chiner-database-dothelp table tr:nth-child(2n) th { background: var(--wb-side); }
+  .chiner-dbconnect-left, .chiner-dbconnect-left-header-opt,
+  .chiner-dbconnect-left-header-desc { border-color: var(--wb-line); background: var(--wb-bg); }
+  .chiner-dbconnect-left-header-opt > span + span:before { background: var(--wb-line); }
+  .chiner-dbconnect-left-header-opt > span:first-child i { color: var(--wb-blue); }
+  .chiner-dbconnect-left-header-opt > span:last-child i { color: var(--wb-danger); }
+  .chiner-dbconnect-example-config-item { border-color: var(--wb-success); }
+  .chiner-dbconnect-example-config-item-header { color: var(--wb-text); }
+  .chiner-dbconnect-example-config-item-content-label { color: var(--wb-success); }
+  .chiner-dbconnect-example-config-item-content-value { color: var(--wb-danger); }
+  .chiner-standard-fields-list-group { color: var(--wb-blue); }
+  .chiner-standard-fields-list-title { color: var(--wb-text); }
+  .chiner-standard-fields-list-title:before { background: var(--wb-blue); }
+  .chiner-standard-fields-list-title-opt { border-color: var(--wb-line); }
+  .chiner-standard-fields-list-title-opt > span + span:before { background: var(--wb-line); }
+  .chiner-standard-fields-list-title-help, .chiner-standard-fields-list-unfold { color: var(--wb-text); background: var(--wb-bg); }
+  .chiner-standard-fields-list-content-selected { color: var(--wb-blue); background: var(--wb-accent); }
+
+  .chiner-version-list, .chiner-compare { color: var(--wb-text); background: var(--wb-bg); }
+  .chiner-version-list-card, .chiner-version-info-h { border-color: var(--wb-line); }
+  .chiner-version-list-card-h { color: var(--wb-section-text); background: var(--wb-section-bg); }
+  .chiner-version-list-card-h-primary { color: var(--wb-primary-text); background: var(--wb-rail-active); }
+  .chiner-version-list-card-h-warn { color: var(--wb-danger); background: var(--wb-danger-bg); }
+  .chiner-version-list-card-h-warn .chiner-version-list-card-h-r i { color: var(--wb-danger); }
+  .chiner-version-list-card-panel-warn { color: var(--wb-danger); }
+  .chiner-version-list-card-more { color: var(--wb-blue); }
+  .chiner-version-list-card-all, .chiner-version-info-edit-type { color: var(--wb-muted); }
+  .chiner-compare-title { color: var(--wb-section-text); background: var(--wb-section-bg); }
+  .chiner-compare-title:before { background: var(--wb-blue); }
+  .chiner-compare-body, .chiner-compare-body-item,
+  .chiner-compare-list-container-content { border-color: var(--wb-line); }
+  .chiner-compare-body-item > span:nth-child(2) { color: var(--wb-muted); }
+  .chiner-compare-body-item-selected { color: var(--wb-blue); background: var(--wb-accent); }
+  .chiner-compare-body-item-opt { color: var(--wb-text) !important; background: var(--wb-bg); }
+  .chiner-compare-list-container-header,
+  .chiner-compare-list-container-content-list-header,
+  .chiner-compare-list-container-content-list-header > span:first-child,
+  .chiner-compare-list-container-content-list-item,
+  .chiner-compare-list-container-content-list-item > span:first-child,
+  .chiner-compare-list-container-content-list-item-remove,
+  .chiner-compare-list-container-content-list-item-field-container { background: var(--wb-bg); }
+  .chiner-compare-list-container-content-list-item:not([class*=first]):hover,
+  .chiner-compare-list-container-content-list-item:not([class*=first]):hover span { background: var(--wb-side); }
+  .chiner-compare-list-container-content-list-item-first > span,
+  .chiner-compare-list-container-content-list-item-first span[class*='remove'],
+  .chiner-compare-list-container-content-list-item-field-second { background: var(--wb-section-bg) !important; }
+  .chiner-compare-list-container-content-list-item-search { background: var(--wb-accent) !important; }
+  .chiner-compare-list-container-content-list-item-diff i { color: var(--wb-danger); }
+  .chiner-compare-list-container-content-list-item-same i { color: var(--wb-success); }
+  .chiner-compare-list-container-content-list-item-wait i,
+  .chiner-compare-list-container-content-list-item-change,
+  .chiner-compare-list-container-content-list-item-field-change { color: var(--wb-warning); }
+
+  .chiner-setting-uiHint > div, .chiner-setting-uiHint-opt { border-color: var(--wb-line); }
+  .chiner-setting-uiHint-opt { color: var(--wb-text); background: var(--wb-bg); }
+  .chiner-setting-uiHint-opt > span + span:before { background: var(--wb-line); }
+  .chiner-setting-uiHint-opt > span:first-child i { color: var(--wb-blue); }
+  .chiner-setting-uiHint-opt > span:nth-child(2) i { color: var(--wb-danger); }
+  .chiner-check-rule-result, .chiner-check-rule-edit { color: var(--wb-text); background: var(--wb-bg); }
+  .chiner-check-rule-list-data-item-header > span,
+  .chiner-check-rule-edit-list-item-header { color: var(--wb-section-text); background: var(--wb-section-bg); }
+  .chiner-check-rule-list-data-item:nth-child(2n - 1),
+  .chiner-check-rule-list-data-item:nth-child(2n - 1) > span:last-child,
+  .chiner-check-rule-list-data-item:nth-child(2n - 1) > span:nth-child(5) { background: var(--wb-side); }
+  .chiner-check-rule-list-data-item > span:nth-child(5),
+  .chiner-check-rule-list-data-item > span:last-child { background: var(--wb-bg); border-color: var(--wb-line); }
+  .chiner-check-rule-list-data-item > span:nth-child(3),
+  .chiner-check-rule-list-data-item > span:last-child > span,
+  .chiner-check-rule-edit-buttons-icon > span,
+  .chiner-check-rule-edit-list-item-opt { color: var(--wb-blue); }
+  .chiner-check-rule-list-data-item-status-check { color: var(--wb-success); }
+  .chiner-check-rule-list-data-item-status-close { color: var(--wb-danger); }
+  .chiner-check-rule-list-data-item-status-exclamation-triangle { color: var(--wb-warning); }
+  .chiner-check-rule-list-data-item-status-question { color: var(--wb-muted); }
+  .chiner-check-rule-edit-list-item-row-selected { background: var(--wb-accent); }
+  .chiner-check-rule-edit-list-item-row-selected > span:first-child > span:first-child { color: var(--wb-text) !important; }
+  .chiner-check-rule-edit-list-item-row-disable,
+  .chiner-check-rule-edit-list-item-row-empty,
+  .chiner-check-rule-edit-list-item-opt-disable > span:not(:first-child) { color: var(--wb-disabled-text); }
+  .chiner-check-rule-edit-buttons { border-color: var(--wb-line); }
+  .chiner-check-rule-list-opt > span:first-child:before,
+  .chiner-check-rule-edit-list-opt > div:before { background: var(--wb-blue); }
+  .chiner-check-rule-edit-list-item-opt-border { background: var(--wb-line); }
+  .chiner-export-word-export-button { color: var(--wb-primary-text); background: var(--wb-rail-active); border-radius: 4px; }
+  .chiner-export-word-template > div:first-child > div:first-child { color: var(--wb-muted); background: var(--wb-bg); }
+  .chiner-export-word-template > div:first-child > div:last-child { background: var(--wb-line); }
+  .chiner-history-item { border-color: var(--wb-line); }
+  .chiner-history-item > span:first-child > span:first-child,
+  .chiner-history-item > span:last-child > span { color: var(--wb-blue); }
+  .chiner-history-item > span:last-child > span:last-child { color: var(--wb-danger); }
+
+  .chiner-home-container-body { color: var(--wb-text); background: var(--wb-side); }
+  .chiner-home-container-body-left { background: var(--wb-bg); }
+  .chiner-home-container-body-right-nav { border-color: var(--wb-line); }
+  .chiner-home-container-body-left-opt-item:hover,
+  .chiner-home-container-body-left-opt-item-selected,
+  .chiner-home-container-body-right-nav-type > div:hover,
+  .chiner-home-container-body-right-nav-type-selected { color: var(--wb-blue); background: var(--wb-accent); }
+  .chiner-home-container-body-right-nav-type-unselected { color: var(--wb-blue); }
+  .chiner-home-container-body-right-list-tab-header-title-selected:after { background: var(--wb-blue); }
+  .chiner-home-container-body-right-list-tab-item {
+    background-image: none; background-color: var(--wb-bg); border: 1px solid var(--wb-line); border-radius: 6px;
+  }
+  .chiner-home-container-body-right-list-tab-item-body { color: var(--wb-text); background: var(--wb-bg); border-color: var(--wb-line); }
+  .chiner-home-container-body-right-list-tab-item:hover > div:last-child { background: var(--wb-accent); border-color: var(--wb-blue); }
+  .chiner-home-container-body-right-list-tab-item-tooltip { background: var(--wb-bg) !important; box-shadow: var(--wb-shadow) !important; }
+  .chiner-home-container-body-right-list-tab-item-tool { color: var(--wb-muted); }
+  .chiner-home-container-body-right-list-tab-item-tool > span:last-child > span:last-child,
+  .chiner-home-container-body-right-list-tab-item-tool > span:last-child > span:last-child > div { color: var(--wb-text); background: var(--wb-bg); border-color: var(--wb-line); }
+  .chiner-home-container-body-right-list-tab-item-tool > span:last-child > span:last-child > div:hover { color: var(--wb-blue); background: var(--wb-accent); }
+  .chiner-welcome, .chiner-welcome-header { color: var(--wb-text); background: var(--wb-bg); border-color: var(--wb-line); }
+  .chiner-welcome-body-right-loading-block { background: var(--wb-blue); }
+
+  // Luckysheet draws cell backgrounds/text onto canvas. Keep its sheet as a light
+  // paper surface; theme only DOM chrome/portals, never invert the rendered cells.
+  .chiner-sheet { border-color: var(--wb-line); background: var(--wb-side); }
+  .luckysheet-cols-menu, .luckysheet-rightclick-menu,
+  .luckysheet-rightclick-menu .luckysheet-cols-menuitem,
+  .luckysheet-input-box, .luckysheet-modal-dialog,
+  .luckysheet-modal-dialog-content, .luckysheet-modal-dialog-buttons {
+    background: var(--wb-bg); color: var(--wb-text); border-color: var(--wb-line);
+  }
+  .luckysheet-cols-menuitem:hover { background: var(--wb-accent); color: var(--wb-blue); }
+  .luckysheet-modal-dialog-title, .chiner-sheet-opt { background: var(--wb-side); color: var(--wb-text); border-color: var(--wb-line); }
+  .luckysheet-modal-dialog-mask { background: var(--wb-overlay); }
+  .chiner-sheet-opt > span:last-child { border-color: var(--wb-line); border-radius: 4px; }
+  .chiner-sheet-opt > span:first-child { color: var(--wb-primary-text); background: var(--wb-rail-active); border-color: var(--wb-rail-active); border-radius: 4px; }
+}

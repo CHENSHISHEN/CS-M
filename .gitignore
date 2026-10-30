@@ -1,0 +1,69 @@
+# 依赖：保留根目录及 app/ 下的 package.json、package-lock.json
+node_modules/
+
+# 构建、安装包与验收运行产出；源码、测试脚本和文档仍需提交
+/build/
+/app/build/
+/dist/
+/CS-M-*.dmg
+/CS-M-*.exe
+/CS-M-*.deb
+*.blockmap
+
+# 缓存、日志与测试报告
+.cache/
+.node/
+.eslintcache
+.stylelintcache
+*.log
+/coverage/
+/test-results/
+/playwright-report/
+__pycache__/
+*.py[cod]
+
+# macOS / Windows 本机文件
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# IDE 与本机 agent 状态；不忽略项目公开的 AGENTS.md 等协作说明
+.idea/
+.vscode/
+/.agents/
+/.claude/
+/.codex/
+/.orca/
+
+# 本机环境、凭据与签名材料；脱敏的环境变量示例可提交
+.env
+.env.*
+!.env.example
+!.env.*.example
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+*.mobileprovision
+/.npmrc.local
+/secrets/
+
+# 真实业务工程、截图与临时实验统一放 local/ 或 scratch/，不要放入源码
+/local/
+/scratch/
+/*.pdma.json
+/*.chnr.json
+*.pdmaner-write-lock
+*.tmp
+
+# 上游遗留的开发更新描述（旧 3.5.4 发布信息，当前源码无引用）
+/src/dev-app-update.yml
+
+# 图标中间产物（icns 生成用 iconset 工作目录）
+/assets/branding/app.iconset/
+
+# 不要全局忽略 tgz/jar/json/图片/Office 模板：
+# vendor/xlsx-0.20.3.tgz、public/ 运行资源、内置通用工程模板均需提交。

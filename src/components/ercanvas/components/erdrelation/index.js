@@ -1,0 +1,116 @@
+import { Graph } from '@antv/x6';
+
+Graph.registerMarker('relation', (args) => {
+  const { relation, fillColor, ...attrs} = args;
+  const r = 4;
+  const x = 4;
+  const y = 0;
+  const relationArrow = {
+    n: `M${x + 2 * r + 1},${y - r}a ${r},${r},0,1,1,0,${2 * r}a ${r},${r},0,1,1,0,${-2 * r}M ${x + r + 1},${r + 1}L ${x + r + 1},${-r - 1}M ${x + r + 1},${y}L ${y},-${r}M ${x + r + 1},${y}L ${y},${r} z`,
+    '0,1' : `M${x + 2 * r + 1},${y - r}a ${r},${r},0,1,1,0,${2 * r}a ${r},${r},0,1,1,0,${-2 * r}M ${x + r + 1},${r + 1}L ${x + r + 1},${-r - 1} z`,
+    '0,n' : `M${x + 2 * r + 1},${y - r}a ${r},${r},0,1,1,0,${2 * r}a ${r},${r},0,1,1,0,${-2 * r}M ${x + r + 1},${r + 1}L ${x + r + 1},${-r - 1}M ${x + r + 1},${y}L ${y},-${r}M ${x + r + 1},${y}L ${y},${r} z`,
+    1 : `M ${x + r + 1},${r + 1}L ${x + r + 1},${-r - 1} z`,
+    '1,n' : `M ${x + r + 1},${r + 1}L ${x + r + 1},${-r - 1}M ${x + r + 1},${y}L ${y},-${r}M ${x + r + 1},${y}L ${y},${r} z`,
+    0 : `M${x},${y - r}a ${r},${r},0,1,1,0,${2 * r}a ${r},${r},0,1,1,0,${-2 * r}`,
+    arrow: `M ${r * 2} -${r} 0 0 ${r * 2} ${r} Z`,
+    'triangle-stroke': `M ${r * 2} -${r} 0 0 ${r * 2} ${r} Z`,
+    'triangle-fill': `M ${r * 2} -${r} 0 0 ${r * 2} ${r} Z`,
+    concave: `M 0 0 L ${r * 2} -${r} L ${r + 1} 0 L ${r * 2} ${r} Z`,
+    right: `M ${r * 2} -${r} 0 0 ${r * 2} ${r}`,
+  };
+  const arrowFillColor = {
+    right: 'transparent',
+    'triangle-fill': fillColor || '#ACDAFC',
+    concave:  fillColor || '#ACDAFC',
+  };
+  return {
+    ...attrs, // 原样返回非特殊涵义的参数
+    tagName: 'path',
+    fill: arrowFillColor[relation] || '#fff',  // 使用自定义填充色
+    stroke: fillColor || '#ACDAFC', // 使用自定义边框色
+    d: relationArrow[relation],
+  };
+});
+
+Graph.registerEdge('erdRelation', {
+  inherit: 'edge',
+  router: {
+    name: 'manhattan',
+    args: {
+      excludeShapes: ['group'],
+    },
+  },
+  zIndex: 3,
+  defaultLabel: {
+    markup: [
+      {
+        tagName: 'rect',
+        selector: 'body',
+      },
+      {
+        tagName: 'text',
+        selector: 'label',
+      },
+    ],
+    attrs: {
+      label: {
+        fill: '#595959',
+        fontSize: 11,
+        textAnchor: 'middle',
+        textVerticalAnchor: 'middle',
+      },
+      body: {
+        ref: 'label',
+        fill: '#ffffff',
+        stroke: '#d9d9d9',
+        strokeWidth: 1,
+        rx: 3,
+        ry: 3,
+        refWidth: '100%',
+        refHeight: '100%',
+        refX: -4,
+        refY: -2,
+        refWidthPadding: 8,
+        refHeightPadding: 4,
+      },
+    },
+    position: {
+      distance: 0.5,
+    },
+  },
+  propHooks(metadata) {
+    const { relation, fillColor, ...others } = metadata;
+    if (relation) {
+      return {
+        ...metadata,
+        attrs: {
+          line: {
+            stroke: fillColor,
+            strokeDasharray: metadata?.attrs?.line?.strokeDasharray,
+            sourceMarker: {
+              fillColor,
+              relation: relation.split(':')[0],
+            },
+            targetMarker: {
+              fillColor,
+              relation: relation.split(':')[1],
+            },
+          },
+        },
+      };
+    }
+    return others;
+  },
+  attrs: {
+    line: {
+      strokeWidth: 1,
+      stroke: '#ACDAFC',
+      sourceMarker: {
+        name: 'relation',
+      },
+      targetMarker: {
+        name: 'relation',
+      },
+    },
+  },
+});

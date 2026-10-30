@@ -1,0 +1,41 @@
+name: build-windows
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            app/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install app runtime dependencies
+        run: npm ci --prefix app
+
+      - name: Preflight
+        run: npm run preflight -- win
+
+      - name: Build & package (NSIS x64, unsigned)
+        run: npm run package-win
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CS-M-win_x64-installer
+          path: |
+            dist/*.exe
+            dist/*.exe.blockmap
+          if-no-files-found: error
