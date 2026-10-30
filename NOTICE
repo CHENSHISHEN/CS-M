@@ -1,0 +1,17 @@
+CS-M
+Copyright (c) 2026 CHENSHISHEN. Licensed under the Mulan PubL v2.0 (see LICENSE).
+
+This product is a secondary development based on PDManer v4.9.4:
+  Upstream project: https://github.com/roberGroup/PDManer
+  Upstream license: Mulan PubL v2.0 (MulanPubL-2.0)
+  Core modeling capabilities (relational/ER modeling, multi-database DDL,
+  data dictionary, etc.) originate from the upstream project and its
+  contributors; their copyright and license notices are retained.
+
+Source code for binary distributions is available at:
+  https://github.com/CHENSHISHEN/CS-M
+
+The binary distribution bundles third-party runtime components
+(React, Redux, lodash, SheetJS xlsx, AntV X6, Electron, etc.).
+Their licenses are listed in THIRD_PARTY_NOTICES.md and in the
+license files accompanying each component.
