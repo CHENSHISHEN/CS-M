@@ -165,6 +165,7 @@
     },
     "mac": {
       "icon": "assets/branding/app.icns",
+      "identity": null,
       "artifactName": "${productName}-${os}_${arch}_v${version}.${ext}",
       "target": {
         "target": "dmg",
