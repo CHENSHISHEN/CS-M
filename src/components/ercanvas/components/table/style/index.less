@@ -110,4 +110,105 @@
   }
 }
 
+.@{prefix}-er-concept-card {
+  box-shadow: 0 2px 8px rgba(114, 46, 209, 0.12);
+  border: 1px solid #d3adf7;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+
+  .@{prefix}-er-concept-header {
+    height: 32px;
+    line-height: 32px;
+    padding: 0 10px;
+    color: #fff;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-radius: 4px 4px 0 0;
+    user-select: none;
+    box-sizing: border-box;
+
+    &-left {
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+
+    &-tag {
+      background: rgba(255, 255, 255, 0.25);
+      color: #fff;
+      font-size: 10px;
+      font-weight: normal;
+      padding: 1px 5px;
+      border-radius: 3px;
+      margin-right: 6px;
+      flex-shrink: 0;
+      line-height: 1.4;
+    }
+
+    &-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+      color: #fff;
+    }
+
+    &-code {
+      font-weight: normal;
+      opacity: 0.85;
+      font-size: 11px;
+      margin-left: 4px;
+    }
+
+    &-icon {
+      margin-left: 8px;
+      cursor: pointer;
+      opacity: 0.9;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      &:hover {
+        opacity: 1;
+      }
+    }
+  }
+
+  .@{prefix}-er-concept-body {
+    flex: 1;
+    padding: 8px 10px;
+    background: #fafafa;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    box-sizing: border-box;
+    cursor: default;
+
+    .@{prefix}-er-concept-desc {
+      font-size: 11px;
+      color: #595959;
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 4;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      word-break: break-all;
+    }
+
+    .@{prefix}-er-concept-empty {
+      font-size: 11px;
+      color: #bfbfbf;
+      font-style: italic;
+      text-align: center;
+    }
+  }
+}
+
 

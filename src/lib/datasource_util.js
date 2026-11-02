@@ -16,11 +16,12 @@ import {
   _mergeData,
   _mergeDataSource,
   _transform,
-  _mergeId, demoTable
+  _mergeId, _remapModelCatalog, demoTable
 } from './utils';
 import {postWorkerFuc} from './event_tool';
 
 export const allType = [
+  { type: 'conceptEntity', name: 'conceptEntities', defKey: 'defKey' },
   { type: 'logicEntity', name: 'logicEntities', defKey: 'defKey' },
   { type: 'entity', name: 'entities', defKey: 'defKey' },
   { type: 'view', name: 'views', defKey: 'defKey' },
@@ -61,9 +62,11 @@ export const updateAllData = (dataSource) => {
   let repeatError = [];
   let entityRepeatError = [];
   let logicEntityRepeatError = [];
+  let conceptEntityRepeatError = [];
   let currentDefKey = {
     entity: [],
     view: [],
+    conceptEntity: [],
   };
   Object.keys(allTabData).reduce((p,n) => {
     return p.concat(allTabData[n])
@@ -106,6 +109,14 @@ export const updateAllData = (dataSource) => {
           entityRepeatError.push(newDefKey);
         }
       }
+    } else if(t.type === 'conceptEntity') {
+      const newDefKey = t.data.defKey?.toLocaleLowerCase();
+      if (newDefKey && (currentDefKey.conceptEntity.includes(newDefKey)
+          || dataSource.conceptEntities?.some(e => e.id !== t.data.id
+            && e.defKey?.toLocaleLowerCase() === newDefKey))) {
+        conceptEntityRepeatError.push(t.data.defKey);
+      }
+      currentDefKey.conceptEntity.push(newDefKey);
     } else if(t.type === 'logicEntity') {
       const newDefKey = `${t.data?.defKey || ''}${t.data?.defName || ''}`;
       if (dataSource.logicEntities?.findIndex(e => {
@@ -116,6 +127,10 @@ export const updateAllData = (dataSource) => {
       }
     }
   })
+  if (conceptEntityRepeatError.length > 0) {
+    message += FormatMessage.string({id: 'modelCatalog.conceptEntityUniqueDefKeyError',
+      data: {entities: conceptEntityRepeatError.join(',')}}) + ';';
+  }
   if (logicEntityRepeatError.length > 0) {
     message += FormatMessage.string({
       id: 'logicEntityUniqueDefKeyError',
@@ -243,7 +258,9 @@ export const updateAllData = (dataSource) => {
                   };
                 });
               }
-              return _.omit(currentData, 'group');
+              return type.type === 'conceptEntity'
+                ? {..._.omit(currentData, 'group'), type: 'C', fields: [], headers: []}
+                : _.omit(currentData, 'group');
             }
             return d;
           }),
@@ -1377,10 +1394,11 @@ export const getTitle = (data, displayMode) => {
 
 export  const calcNodeData = ({data: preData, needTransform = true, ...rest},
                               nodeData, dataSource, groups) => {
+  const isConcept = (rest.type || nodeData?.type || preData?.type) === 'C';
   const displayMode = rest.displayMode || preData?.displayMode || nodeData?.displayMode;
   const size = rest.autoSize ? null : rest.size;
   // 节点源数据
-  let headers = (nodeData?.headers || []).filter(h => {
+  let headers = (isConcept ? [] : (nodeData?.headers || [])).filter(h => {
     const columnOthers = (dataSource?.profile?.headers || [])
         .filter(c => c.refKey === h.refKey)[0] || {};
     return (!h.hideInGraph) && (columnOthers.enable !== false);
@@ -1414,7 +1432,7 @@ export  const calcNodeData = ({data: preData, needTransform = true, ...rest},
   // 不再被全局默认方言改写；无该键（概念/逻辑/旧实体）保持旧行为不变
   const physicalDbTypeId = nodeData?.physicalDbTypeId != null
       && nodeData.physicalDbTypeId !== '' ? nodeData.physicalDbTypeId : undefined;
-  let fields = filterFields((nodeData?.fields || []).filter(f => !f.hideInGraph)
+  let fields = filterFields((isConcept ? [] : (nodeData?.fields || [])).filter(f => !f.hideInGraph)
       .map(f => ({...f, ...(needTransform ? transform(f, dataSource, physicalDbTypeId) : {})
         , extProps: Object.keys(f.extProps || {}).length})));
   const pkFields = [];
@@ -1474,24 +1492,36 @@ export  const calcNodeData = ({data: preData, needTransform = true, ...rest},
   // 计算矩形的宽高
   let width;
   let height;
-  if (displayMode === 'pk') {
-    fields = pkFields.length > 0 ? pkFields : fields.filter(f => f.primaryKey);
+  if (isConcept) {
+    width = Math.max(headerWidth + 36, 220);
+    const comment = (nodeData.comment || '').trim();
+    if (displayMode === 'compact') {
+      height = 32;
+    } else {
+      const commentLines = comment ? Math.min(Math.ceil(getTextWidth(comment, 12) / Math.max(width - 24, 100)), 4) : 1;
+      const bodyHeight = Math.max(commentLines * 18 + 16, 44);
+      height = 34 + bodyHeight;
+    }
+  } else {
+    if (displayMode === 'pk') {
+      fields = pkFields.length > 0 ? pkFields : fields.filter(f => f.primaryKey);
+    }
+    width = headers.reduce((a, b) => {
+      return a + (maxWidth[b.refKey] || 10) + 8;
+    }, 0) + 16; // 内容宽度加上左侧边距
+    if (width < headerWidth) {
+      width = headerWidth;
+    }
+    // 高度除了字段还包含表名 所以需要字段 +1 同时需要加上上边距
+    height = (nodeData.type === 'L' && nodeData?.sysProps?.lePropOrient === 'H') ?
+        (pkFields.length + 1) * 23 + 8 +
+        getTextHeight(normalFields.map(f => {
+          if(nodeData?.sysProps?.propShowFields?.includes('N')) {
+            return f.defName || f.defKey;
+          }
+          return f.defKey || f.defName;
+        }).join(';'), 12, width - 8) : (fields.length + 1) * 23 + 8;
   }
-  width = headers.reduce((a, b) => {
-    return a + (maxWidth[b.refKey] || 10) + 8;
-  }, 0) + 16; // 内容宽度加上左侧边距
-  if (width < headerWidth) {
-    width = headerWidth;
-  }
-  // 高度除了字段还包含表名 所以需要字段 +1 同时需要加上上边距
-  height = (nodeData.type === 'L' && nodeData?.sysProps?.lePropOrient === 'H') ?
-      (pkFields.length + 1) * 23 + 8 +
-      getTextHeight(normalFields.map(f => {
-        if(nodeData?.sysProps?.propShowFields?.includes('N')) {
-          return f.defName || f.defKey;
-        }
-        return f.defKey || f.defName;
-      }).join(';'), 12, width - 8) : (fields.length + 1) * 23 + 8;
   const realWidth = size ? size.width : width;
   const realHeight = size ? size.height : height;
   let sliceCount = -1;
@@ -1606,8 +1636,8 @@ export  const calcNodeData = ({data: preData, needTransform = true, ...rest},
 
 export const mapData2Table = (n, dataSource, updateFields, groups, commonPorts,
                               relationType, commonEntityPorts, nodeClickText, displayMode) => {
-  const isEntity = n.type !== 'L';
-  const collection = isEntity ? 'entities' : 'logicEntities';
+  const isEntity = !['L', 'C'].includes(n.type);
+  const collection = n.type === 'C' ? 'conceptEntities' : (isEntity ? 'entities' : 'logicEntities');
   const nodeData = (dataSource?.[collection] || [])
       .concat(isEntity ? (dataSource.views || []) : [])
       .find(e => e.id === n.originKey);
@@ -2201,8 +2231,31 @@ export const reduceProject = (emptyProject, type) => {
       }),
     };
   }) || [];
-  const entities = calcEntityOrView(emptyProject?.entities || [], dicts, domains, uiHint, null, type);
+  const catalog = emptyProject.profile?.modelCatalog;
+  const databases = (catalog?.physicalDatabases || []).map(db =>
+    ({...db, old: db.id, [type]: db.id, id: Math.uuid()}));
+  const remapReducedPhysical = (obj) => {
+    if (obj.physicalDatabaseId == null && obj.physicalDbTypeId == null) return obj;
+    const next = {...obj};
+    if (next.physicalDatabaseId != null) {
+      next.physicalDatabaseId = databases.filter(d => d.old === next.physicalDatabaseId)[0]?.id
+        || next.physicalDatabaseId;
+    }
+    if (next.physicalDbTypeId != null) {
+      next.physicalDbTypeId = dataTypeSupports.filter(t => t.old === next.physicalDbTypeId)[0]?.id
+        || next.physicalDbTypeId;
+    }
+    return next;
+  };
+  const entities = calcEntityOrView(emptyProject?.entities || [], dicts, domains, uiHint, null, type)
+    .map(remapReducedPhysical);
+  const conceptEntities = (emptyProject.conceptEntities || []).map(entity => ({
+    ...entity, old: type === 'defKey' ? entity.defKey : entity.id,
+    id: Math.uuid(), type: 'C', fields: [], headers: [],
+  }));
   const logicEntities = calcEntityOrView(emptyProject.logicEntities || [], dicts, domains, uiHint, null, type);
+  const layers = (catalog?.layers || []).map(layer => ({...layer, old: layer.id, [type]: layer.id, id: Math.uuid()}));
+  const categories = (catalog?.categories || []).map(category => ({...category, old: category.id, [type]: category.id, id: Math.uuid()}));
   const viewGroups = (emptyProject.viewGroups || []).map(group => ({...group,
     old: type === 'defKey' ? group.defKey : group.id, id: Math.uuid(),
   }));
@@ -2243,7 +2296,8 @@ export const reduceProject = (emptyProject, type) => {
           if (c.shape === 'table') {
             return {
               ...c,
-              originKey: (c.type === 'L' ? logicEntities : entities.concat(views))
+              originKey: (c.type === 'C' ? conceptEntities
+                : (c.type === 'L' ? logicEntities : entities.concat(views)))
                 .find(e => e[type] === c.originKey)?.id || c.originKey,
             };
           } else if (c.shape === 'erdRelation') {
@@ -2287,11 +2341,18 @@ export const reduceProject = (emptyProject, type) => {
             return calcField(f, entities, dicts, domains, uiHint, type);
           }).map(f => _.omit(f, 'old'))
       },
+      ...(catalog ? {modelCatalog: _remapModelCatalog(catalog, {
+        layer: layers, category: categories, legacyGroup: viewGroups,
+        conceptEntity: conceptEntities, logicEntity: logicEntities, entity: entities,
+        diagram: diagrams, view: views, dict: dicts,
+        database: databases, dataTypeSupport: dataTypeSupports,
+      }, type)} : {}),
       dataTypeSupports: dataTypeSupports.map(d => _.omit(d, 'old')),
       codeTemplates,
       uiHint: uiHint.map(u => _.omit(u, 'old')),
     },
     dicts: dicts.map(d => _.omit(d, 'old')),
+    conceptEntities: conceptEntities.map(entity => _.omit(entity, 'old')),
     logicEntities: logicEntities.map(entity => ({..._.omit(entity, 'old'),
       fields: (entity.fields || []).map(field => _.omit(field, 'old')),
     })),
@@ -2332,6 +2393,7 @@ export const reduceProject = (emptyProject, type) => {
     domains: domains.map(d => _.omit(d, 'old')),
     viewGroups: viewGroups.map(v => ({
       ..._.omit(v, 'old'),
+      refConceptEntities: calcId(conceptEntities, v.refConceptEntities),
       refLogicEntities: calcId(logicEntities, v.refLogicEntities),
       refEntities: calcId(entities, v.refEntities),
       refDicts: calcId(dicts, v.refDicts),

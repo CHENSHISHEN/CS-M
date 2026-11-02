@@ -22,6 +22,7 @@ import {separator} from '../../../../profile';
 import {getCache, getDataByTabId} from '../../../lib/cache';
 import Entity from '../../../app/container/entity';
 import LogicEntity from '../../../app/container/logicentity';
+import ConceptEntity from '../../../app/container/conceptentity';
 import { edgeNodeAddTool} from '../components/tool';
 import {openUrl} from '../../../lib/json2code_util';
 import LabelEditor from '../LabelEditor';
@@ -212,7 +213,7 @@ export default class ER {
     constructor({validateTableStatus, updateDataSource, relationType, graph, changeTab,
                     dnd, dataChange, tabDataChange, isView, save, openDict, jumpEntity,
                     openTab, closeTab, getDataSource, common, changes,
-                    currentPrefix, container, tabKey}) {
+                    currentPrefix, container, tabKey, modelLevel}) {
         this.validateTableStatus = validateTableStatus;
         this.updateDataSource = updateDataSource;
         this.relationType = relationType;
@@ -233,6 +234,7 @@ export default class ER {
         this.currentPrefix = currentPrefix;
         this.container = container;
         this.tabKey = tabKey;
+        this.modelLevel = modelLevel;
     }
     filterErCell = (cells) => {
         // 菱形 圆角矩形 原形 分组 连线 数据表 矩形
@@ -378,26 +380,48 @@ export default class ER {
         return _.get(dataSource, 'profile.default.entityInitProperties', {});
     };
     getEntityType = (type) => {
-        if (type === 'L' || type === 'logicEntity') {
-            return {type: 'L', name: 'logicEntity', names: 'logicEntities', refNames: 'refLogicEntities'};
+        if (type === 'C' || type === 'conceptEntity') {
+            return {type: 'C', name: 'conceptEntity', names: 'conceptEntities', refNames: 'refConceptEntities', level: 'conceptual'};
         }
-        return {type: 'P', name: 'entity', names: 'entities', refNames: 'refEntities'};
+        if (type === 'L' || type === 'logicEntity') {
+            return {type: 'L', name: 'logicEntity', names: 'logicEntities', refNames: 'refLogicEntities', level: 'logical'};
+        }
+        return {type: 'P', name: 'entity', names: 'entities', refNames: 'refEntities', level: 'physical'};
+    };
+    acceptsType = (type) => {
+        const diagramId = this.tabKey?.split(separator)[0];
+        const level = this.getDataSource?.()?.diagrams
+            ?.find(diagram => diagram.id === diagramId)?.modelLevel || this.modelLevel;
+        return !level || this.getEntityType(type).level === level;
+    };
+    levelMismatch = () => {
+        Message.error({title: FormatMessage.string({id: 'modelCatalog.diagramLevelMismatch'})});
     };
     startDrag = (e, key, dataSource, type) => {
         const entityType = this.getEntityType(type);
+        if (!this.acceptsType(entityType.type)) {
+            this.levelMismatch();
+            return;
+        }
         const isEntity = entityType.type === 'P';
+        const isConcept = entityType.type === 'C';
         let empty;
         let count = 0;
+        const initialKey = {C: 'CONCEPT_1', L: 'LOGIC_1', P: 'TABLE_1'};
+        const initialName = {C: 'modelCatalog.conceptEntity', L: 'menus.logicEntity', P: 'tableEdit.data'};
+        const initialHeaders = isEntity ? resetHeader(dataSource, {}) : getLogicHeaders();
         if (!key) {
             empty = {
-                ...getEmptyEntity(),
-                headers: isEntity ? resetHeader(dataSource, {}) : getLogicHeaders(),
+                ...(isConcept ? {id: Math.uuid(), type: 'C', comment: ''} : getEmptyEntity()),
+                headers: isConcept ? [] : initialHeaders,
                 count: 0,
-                defKey: generatorTableKey(isEntity ? 'TABLE_1' : 'LOGIC_1',
+                defKey: generatorTableKey(initialKey[entityType.type],
                     dataSource, entityType.names),
-                defName: FormatMessage.string({id: isEntity ? 'tableEdit.data' : 'menus.logicEntity'}),
+                defName: FormatMessage.string({
+                    id: initialName[entityType.type],
+                }),
                 fields: isEntity ? this.getEntityInitFields(dataSource) : [],
-                properties: this.getEntityInitProperties(dataSource),
+                ...(isConcept ? {} : {properties: this.getEntityInitProperties(dataSource)}),
             };
         } else {
             const dataSourceEntity = dataSource?.[entityType.names]
@@ -422,6 +446,11 @@ export default class ER {
             type: entityType.type,
             data: {...empty, fields, headers, maxWidth, originWidth},
         });
+        if (isConcept && !node.getProp('fillColor')) {
+            node.setProp('fillColor', '#722ed1');
+        } else if (entityType.type === 'L' && !node.getProp('fillColor')) {
+            node.setProp('fillColor', '#389e0d');
+        }
         this.dnd.start(node, e.nativeEvent);
     };
     startRemarkDrag = (e, type) => {
@@ -486,6 +515,7 @@ export default class ER {
                 const iconMap = {
                     entities: 'fa-table',
                     logicEntities: 'fa-columns',
+                    conceptEntities: 'fa-cube',
                     views: 'icon-shitu',
                     diagrams: 'icon-guanxitu',
                     dicts: 'icon-shujuzidian',
@@ -493,6 +523,7 @@ export default class ER {
                 const keyMap = {
                     entities: 'entity',
                     logicEntities: 'logicEntity',
+                    conceptEntities: 'conceptEntity',
                     views: 'view',
                     diagrams: 'diagram',
                     dicts: 'dict',
@@ -523,13 +554,23 @@ export default class ER {
         //console.log(node);
     }
     render = (data, dataSource) => {
+        this.modelLevel = data?.modelLevel;
+        this.displayMode = data?.displayMode;
         return calcCellData(data?.canvasData?.cells || [],
             dataSource,
             this.updateFields,
             this.getTableGroup(), this.commonPorts, this.relationType,
-            this.commonEntityPorts, this.nodeTextClick);
+            this.commonEntityPorts, this.nodeTextClick, this.displayMode);
     }
-    update = (dataSource) => {
+    setDisplayMode = (mode, dataSource) => {
+        this.displayMode = mode;
+        this.update(dataSource, mode);
+    }
+    update = (dataSource, displayMode) => {
+        const mode = displayMode || this.displayMode;
+        if (mode) {
+            this.displayMode = mode;
+        }
         const cells = this.graph.getCells();
         this.graph.batchUpdate('update', () => {
             cells.filter(c => c.shape === 'table').forEach((c) => {
@@ -540,17 +581,20 @@ export default class ER {
                         size: c.size(),
                         autoSize: c.getProp('autoSize'),
                         type: c.getProp('type'),
+                        displayMode: mode,
                     },
                     dataSource,
                     this.updateFields,
                     this.getTableGroup(),
                     this.commonPorts, this.relationType, this.commonEntityPorts,
-                    this.nodeTextClick) || {};
+                    this.nodeTextClick,
+                    mode) || {};
                 if (size) {
                     // 需要取消撤销重做的记录
                     c.setProp('data', rest.data, { ignoreHistory : true});
                     c.setProp('size', size, { ignoreHistory : true});
                     c.setProp('ports', ports, { ignoreHistory : true});
+                    c.setProp('displayMode', mode, { ignoreHistory : true});
                 } else {
                     this.graph.removeCell(c, { ignoreHistory : true});
                 }
@@ -559,12 +603,14 @@ export default class ER {
     }
     addEntityData = (cell, type, dataSource, names, refNames) => {
         const cells = [].concat(cell);
+        const isConcept = names === 'conceptEntities';
+        const headers = names === 'entities' ? resetHeader(dataSource, {}) : getLogicHeaders();
         let initData = {};
         if (type === 'create') {
             initData = {
-                headers: names === 'entities' ? resetHeader(dataSource, {}) : getLogicHeaders(),
+                headers: isConcept ? [] : headers,
                 fields: names === 'entities' ? this.getEntityInitFields(dataSource) : [],
-                properties: this.getEntityInitProperties(dataSource),
+                ...(isConcept ? {defName: '', comment: ''} : {properties: this.getEntityInitProperties(dataSource)}),
                 type: names === 'entities' ? 'P' : 'L',
             };
         }
@@ -577,6 +623,7 @@ export default class ER {
                     ...source,
                     ...initData,
                     ..._.pick(c.data, ['id', 'defKey', 'defName', 'comment']),
+                    ...(isConcept ? {type: 'C', fields: [], headers: []} : {}),
                 };
             })),
             viewGroups: (dataSource.viewGroups || []).map((g) => {
@@ -592,6 +639,10 @@ export default class ER {
     };
     paste = (e, dataSource) => {
         const jsonCells = getCache('x6.clipboard.cells', true) || [];
+        if (jsonCells.some(c => c.shape === 'table' && !this.acceptsType(c.type))) {
+            this.levelMismatch();
+            return;
+        }
         const copyCells = this.filterErCell(jsonCells.map((c) => {
             if (c.position) {
                 return this.graph.createNode(c);
@@ -624,7 +675,7 @@ export default class ER {
                         }, { ignoreHistory : true});
                     }
                 });
-                const copied = {logicEntities: [], entities: []};
+                const copied = {conceptEntities: [], logicEntities: [], entities: []};
                 cells
                     .filter(c => c.shape === 'table').forEach((c) => {
                         const entityType = this.getEntityType(c.getProp('type'));
@@ -649,7 +700,7 @@ export default class ER {
                         };
                         copied[names].push(data);
                     });
-                const tempDataSource = ['L', 'P'].reduce((source, type) => {
+                const tempDataSource = ['C', 'L', 'P'].reduce((source, type) => {
                     const entityType = this.getEntityType(type);
                     return this.addEntityData(copied[entityType.names], 'copy', source, entityType.names, entityType.refNames);
                 }, dataSource);
@@ -706,7 +757,7 @@ export default class ER {
                         this.openDict && this.openDict(...args);
                         drawer.close();
                     };
-                    const Com = entityType.type === 'L' ? LogicEntity : Entity;
+                    const Com = {C: ConceptEntity, P: Entity, L: LogicEntity}[entityType.type];
                     drawer = openDrawer(<Com
                       changeTab={this.changeTab}
                       openTab={this.openTab}
@@ -779,7 +830,8 @@ export default class ER {
         if (this.isErCell(edge) && !this.isView) {
             const labelObj = typeof edge.getLabelAt === 'function' ? edge.getLabelAt(0) : null;
             let value = labelObj?.attrs?.text?.text || labelObj?.attrs?.label?.text || '';
-            const isLogic = edge.getSourceCell()?.getProp('type') === 'L'
+            const isLogic = this.modelLevel === 'logical'
+                || edge.getSourceCell()?.getProp('type') === 'L'
                 || edge.getTargetCell()?.getProp('type') === 'L';
             const initialLineStyle = edge.attr('line/strokeDasharray') === '5 5' ? 'dotted-large' : 'solid';
             let currentLineStyle = initialLineStyle;
@@ -832,7 +884,7 @@ export default class ER {
                     onLineStyleChange={onLineStyleChange}
                 />,
                 {
-                    title: FormatMessage.string({id: isLogic ? 'logicalModel.logicalDiagram' : 'canvas.edge.relationLabel'}),
+                    title: FormatMessage.string({id: isLogic ? 'modelCatalog.logicalDiagram' : 'canvas.edge.relationLabel'}),
                     buttons: [
                         <Button key='onOK' onClick={onOK} type='primary'>
                             <FormatMessage id='button.ok'/>
@@ -1076,8 +1128,9 @@ export default class ER {
                         }
                     }
                 } else {
-                    const isLogic = node?.getProp('type') === 'L' || sourceNode?.getProp('type') === 'L';
-                    const defaultFillColor = isLogic ? '#389e0d' : this.currentColor.fillColor;
+                    const isConcept = node?.getProp('type') === 'C' || sourceNode?.getProp('type') === 'C' || this.modelLevel === 'conceptual';
+                    const isLogic = node?.getProp('type') === 'L' || sourceNode?.getProp('type') === 'L' || this.modelLevel === 'logical';
+                    const defaultFillColor = isConcept ? '#722ed1' : (isLogic ? '#389e0d' : this.currentColor.fillColor);
                     const fillColor = sourceNode.getProp('fillColor') || defaultFillColor;
                     const newEdge = edge.clone();
                     newEdge.setProp('isTemp', false);
@@ -1120,11 +1173,11 @@ export default class ER {
                         });
                     }
                 };
-                if (node.shape === 'edit-node' || (node.shape === 'table' && this.relationType === 'entity')) {
+                if (node.shape === 'edit-node' || (node.shape === 'table' && (this.relationType === 'entity' || node.getProp('type') === 'C'))) {
                     // 判断输入锚点是否已经用完
                     calcPorts(edge.target.port, node);
                 }
-                if (sourceNode.shape === 'edit-node' || (sourceNode.shape === 'table' && this.relationType === 'entity')) {
+                if (sourceNode.shape === 'edit-node' || (sourceNode.shape === 'table' && (this.relationType === 'entity' || sourceNode.getProp('type') === 'C'))) {
                     // 判断输出锚点是否已经用完
                     calcPorts(edge.source.port, sourceNode);
                 }
@@ -1259,7 +1312,9 @@ export default class ER {
         }
     };
     createEdge = () => {
-        const defaultColor = this.currentColor.fillColor;
+        const isConcept = this.modelLevel === 'conceptual';
+        const isLogic = this.modelLevel === 'logical';
+        const defaultColor = isConcept ? '#722ed1' : (isLogic ? '#389e0d' : this.currentColor.fillColor);
         return new Shape.Edge({
             shape: 'erdRelation',
             isTemp: true, // 临时创建文件 无需在历史中存在
@@ -1482,7 +1537,7 @@ export default class ER {
                     calcNodeData({type: node.getProp('type'), data: node.data, size, needTransform: false},
                         node.data, this.getDataSource(), this.getTableGroup());
                 node.setData({maxWidth});
-                if (this.relationType !== 'entity') {
+                if (this.relationType !== 'entity' && node.getProp('type') !== 'C') {
                     const sliceCount = Math.floor((size.height - 31) / 23) * 2;
                     const edges = this.filterErCell(this.graph.getEdges())
                         .filter(e => e.target.cell === node.id || e.source.cell === node.id);

@@ -1,6 +1,6 @@
 {
   "name": "cs-m-app",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "CS-M - 开源数据建模工具（应用运行时包）",
   "main": "./build/main.js",
   "repository": {

@@ -30,6 +30,7 @@ const Table = forwardRef(({node}, ref) => {
         ? node.getProp('fillColor') : '#389e0d')
     : node.getProp('fillColor');
   const renderBody = () => {
+      if (node.getProp('type') === 'C') return null;
       if(isLogic && data?.sysProps?.lePropOrient === 'H') {
           const primaryKeyFields = data.fields.filter(f => f.primaryKey);
           const lineClamp = Math.floor((size.height - 29 - primaryKeyFields.length * 23) / 18);
@@ -153,6 +154,80 @@ const Table = forwardRef(({node}, ref) => {
           >...</div>}
       </div>;
   };
+  const isConcept = node.getProp('type') === 'C';
+  if (isConcept) {
+    const isCompact = displayMode === 'compact';
+    const rawFill = node.getProp('fillColor');
+    const conceptFillColor = (rawFill && rawFill !== '#ACDAFC' && rawFill !== '#DDE5FF') ? rawFill : '#722ed1';
+    const commentText = data?.comment ? data.comment.trim() : '';
+    const conceptTitle = data?.defName
+      ? `${data.defName}${data.defKey ? ` (${data.defKey})` : ''}`
+      : (data?.defKey || getTitle(data, displayMode));
+    const countSuffix = store?.data.count > 0 ? `:${store?.data.count}` : '';
+    return (
+      <div
+        ref={ref}
+        style={{
+          background: '#FFFFFF',
+          color: node.getProp('fontColor') || '#262626',
+          borderRadius: '5px',
+          height: '100%',
+          boxSizing: 'border-box',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          border: '1px solid #d3adf7',
+        }}
+      >
+        <div
+          style={{
+            background: conceptFillColor,
+            color: '#FFFFFF',
+            fontWeight: 'bold',
+            fontSize: '12px',
+            padding: '5px 8px',
+            height: '32px',
+            boxSizing: 'border-box',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
+          <span style={{
+            background: 'rgba(255,255,255,0.25)',
+            color: '#fff',
+            fontSize: '10px',
+            padding: '1px 4px',
+            borderRadius: '3px',
+            marginRight: '6px',
+          }}>概念</span>
+          <span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
+            {conceptTitle}{countSuffix}
+          </span>
+        </div>
+        {!isCompact && (
+          <div
+            style={{
+              flex: 1,
+              padding: '8px 10px',
+              background: '#fafafa',
+              boxSizing: 'border-box',
+              overflow: 'hidden',
+              fontSize: '11px',
+              color: commentText ? '#595959' : '#bfbfbf',
+              lineHeight: '1.5',
+              fontStyle: commentText ? 'normal' : 'italic',
+            }}
+          >
+            {commentText || '暂无业务定义'}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return <div
     ref={ref}
     style={{

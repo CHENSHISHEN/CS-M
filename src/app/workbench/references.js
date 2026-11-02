@@ -31,6 +31,7 @@ export default calcEntityReferences;
 // 2) 对象数据优先读该对象页签的未保存草稿（有效数据），回退已保存 dataSource；
 // 3) 清空选择 / 非属性型页签（关系图等）→ 回退页签对象或空态。
 const TAB_COLLECTIONS = {
+  conceptEntity: 'conceptEntities',
   entity: 'entities',
   logicEntity: 'logicEntities',
   view: 'views',

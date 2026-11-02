@@ -1,7 +1,8 @@
 """构建产物审查：应用身份、macOS图标与Windows PE图标资源（仅标准库）。"""
 from pathlib import Path
-import sys, struct, hashlib, plistlib
+import sys, struct, hashlib, plistlib, json
 root = Path(__file__).resolve().parents[1]
+version = json.loads((root / 'package.json').read_text())['version']
 dist = Path(sys.argv[1]) if len(sys.argv) > 1 else root / 'dist'
 sha = lambda b: hashlib.sha256(b).hexdigest()
 ico = (root / 'assets/branding/app.ico').read_bytes()
@@ -17,7 +18,7 @@ for arch in ['arm64', 'x64']:
     info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
     assert info['CFBundleName'] == 'CS-M'
     assert info['CFBundleIdentifier'] == 'io.github.chenshishen.csm'
-    assert info['CFBundleShortVersionString'] == '0.1.0'
+    assert info['CFBundleShortVersionString'] == version
     icon = app / 'Contents/Resources' / info['CFBundleIconFile']
     assert sha(icon.read_bytes()) == sha((root / 'assets/branding/app.icns').read_bytes())
     print('PASS macOS', arch, '应用身份、版本、图标')

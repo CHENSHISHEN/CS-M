@@ -7,6 +7,7 @@ import doT from 'dot';
 import {separator} from '../../profile';
 import {firstUp} from './string';
 import './Math';
+import {getCatalogCategories} from './model_catalog';
 
 export const demoGroup = [{defKey: "DEFAULT_GROUP", defName: "默认分组"}];
 export const demoTable = {
@@ -964,6 +965,103 @@ export const _getFieldBaseType = (f, domains, mappings, currentDb) => {
     return f.baseType;
 }
 
+// Catalog references follow the object ID replacements used by import/merge.
+export const _remapModelCatalog = (catalog, collections, type = 'old') => {
+    if (!catalog) return catalog;
+    const remap = (kind, id) => (collections[kind] || []).find(item => item[type] === id)?.id || id;
+    const remapDbCategory = (id) => {
+        const mapped = remap('category', id);
+        return mapped !== id ? mapped : remap('legacyGroup', id);
+    };
+    return {...catalog,
+        layers: (catalog.layers || []).map(layer => ({...layer, id: remap('layer', layer.id)})),
+        categories: (catalog.categories || []).map(category => ({...category,
+            id: remap('category', category.id),
+            layerId: remap('layer', category.layerId),
+            ...(category.legacyGroupId ? {legacyGroupId: remap('legacyGroup', category.legacyGroupId)} : {}),
+            members: Object.keys(category.members || {}).reduce((members, kind) => ({...members,
+                [kind]: [...new Set((category.members[kind] || []).map(id => remap(kind, id)))],
+            }), {}),
+        })),
+        ...(catalog.physicalDatabases ? {physicalDatabases: catalog.physicalDatabases.map(db => ({
+            ...db,
+            id: remap('database', db.id),
+            categoryId: remapDbCategory(db.categoryId),
+            dbTypeId: remap('dataTypeSupport', db.dbTypeId),
+        }))} : {}),
+    };
+};
+
+const mergeModelCatalog = (oldCatalog, newCatalog, collections, typeOldNew, importedCollections) => {
+    if (!oldCatalog && !newCatalog) return undefined;
+    const layers = (oldCatalog?.layers || []).slice();
+    const layerMap = (newCatalog?.layers || []).map(layer => {
+        const match = layers.find(item => item.id === layer.id || (layer.defKey && item.defKey === layer.defKey));
+        if (!match) layers.push(layer);
+        return {...layer, old: layer.id, id: match?.id || layer.id};
+    });
+    const mapped = _remapModelCatalog(newCatalog, {...collections, layer: layerMap});
+    const categories = (oldCatalog?.categories || []).slice();
+    const categoryMap = [];
+    (mapped?.categories || []).forEach(category => {
+        const index = categories.findIndex(item => item.id === category.id
+            || (category.legacyGroupId && item.legacyGroupId === category.legacyGroupId)
+            || (category.defKey && item.defKey === category.defKey
+                && item.layerId === category.layerId && item.kind === category.kind
+                && !item.legacyGroupId && !category.legacyGroupId));
+        if (index < 0) {
+            categories.push(category);
+            categoryMap.push({old: category.id, id: category.id});
+        } else {
+            const current = categories[index];
+            const members = {...current.members};
+            Object.keys(category.members || {}).forEach(kind => {
+                members[kind] = [...new Set((members[kind] || []).concat(category.members[kind] || []))];
+            });
+            categories[index] = {...current, members};
+            categoryMap.push({old: category.id, id: current.id});
+        }
+    });
+    const remapType = (id) => (typeOldNew || []).filter(t => t.old === id)[0]?.id;
+    const remapCategory = (id) => {
+        if (id == null) return null;
+        const direct = categoryMap.filter(m => m.old === id)[0]?.id;
+        if (direct) return direct;
+        const legacyId = (collections.legacyGroup || []).filter(t => t.old === id)[0]?.id;
+        if (legacyId) {
+            return categoryMap.filter(m => m.old === legacyId)[0]?.id
+                || categories.filter(c => c.legacyGroupId === legacyId)[0]?.id
+                || legacyId;
+        }
+        return id;
+    };
+    const databases = (oldCatalog?.physicalDatabases || []).slice();
+    const databaseMap = (newCatalog?.physicalDatabases || []).map((db) => {
+        const categoryId = remapCategory(db.categoryId);
+        const dbTypeId = remapType(db.dbTypeId) || db.dbTypeId;
+        const defKey = String(db.defKey || '').toLowerCase();
+        const match = databases.find(item => String(item.defKey || '').toLowerCase() === defKey
+            && (item.categoryId == null ? null : item.categoryId)
+                === (categoryId == null ? null : categoryId)
+            && item.dbTypeId === dbTypeId);
+        let id = db.id;
+        if (match) {
+            id = match.id;
+        } else if (databases.some(item => item.id === db.id)) {
+            id = Math.uuid();
+        }
+        if (!match) {
+            databases.push({...db, categoryId, dbTypeId, id});
+        }
+        return {old: db.id, id};
+    });
+    const catalog = {...oldCatalog, version: 1, layers, categories};
+    if (databases.length > 0 || oldCatalog?.physicalDatabases) {
+        catalog.physicalDatabases = databases;
+    }
+    return {catalog, databaseMap};
+};
+
 export const _mergeDataSource = (oldDataSource, newDataSource, selectEntity, ignoreProps) => {
     // 合并项目
     // 合并数据类型/代码模板/数据类型匹配
@@ -1068,6 +1166,8 @@ export const _mergeDataSource = (oldDataSource, newDataSource, selectEntity, ign
         }
         return item;
     });
+    const tempConceptEntities = _mergeData(oldDataSource.conceptEntities || [],
+        protectConceptLogicIdCollision(oldDataSource.conceptEntities, newDataSource.conceptEntities), true, true);
     const tempLogicEntities = _mergeData(oldDataSource.logicEntities || [],
         protectConceptLogicIdCollision(oldDataSource.logicEntities, newDataSource.logicEntities), true, true);
     // 合并视图(直接追加，不合并)
@@ -1148,13 +1248,13 @@ export const _mergeDataSource = (oldDataSource, newDataSource, selectEntity, ign
                     if (c.shape === 'table') {
                         return {
                             ...c,
-                            originKey: (c.type === 'L' ? tempLogicEntities
-                                : tempEntities.concat(tempViews)).find(r => r.old === c.originKey)?.id || c.originKey,
+                            originKey: (c.type === 'C' ? tempConceptEntities : (c.type === 'L' ? tempLogicEntities
+                                : tempEntities.concat(tempViews))).find(r => r.old === c.originKey)?.id || c.originKey,
                         };
                     } else if(c.shape === 'erdRelation') {
                         const getPort = ({cell, port} = {}) => {
                             const sourceOriginKey = (d.canvasData?.cells || []).filter(c => c.id === cell)[0];
-                            if (!sourceOriginKey || sourceOriginKey.type === 'L' || !port?.includes(separator)) return null;
+                            if (!sourceOriginKey || sourceOriginKey.type === 'C' || sourceOriginKey.type === 'L' || !port?.includes(separator)) return null;
                             const mapped = getCurrentEntity(sourceOriginKey.originKey, port.split(separator)[0], 'entity');
                             return mapped.refField !== port.split(separator)[0] ? mapped : null;
                         }
@@ -1289,6 +1389,15 @@ export const _mergeDataSource = (oldDataSource, newDataSource, selectEntity, ign
         }
         return _.omit(tempD, ['old', 'group', 'isNew']);
     }
+    const catalogMerge = (oldDataSource.profile?.modelCatalog || newDataSource.profile?.modelCatalog)
+        ? mergeModelCatalog(oldDataSource.profile?.modelCatalog,
+            newDataSource.profile?.modelCatalog, {conceptEntity: tempConceptEntities,
+                logicEntity: tempLogicEntities, entity: tempEntities, view: tempViews,
+                diagram: tempDiagrams, dict: tempDicts, legacyGroup: tempViewGroups},
+            tempDataTypeSupports,
+            {conceptEntities: newDataSource.conceptEntities || [],
+                logicEntities: newDataSource.logicEntities || []})
+        : null;
     return {
         ...oldDataSource,
         domains: tempDomains.map(d => {
@@ -1325,7 +1434,9 @@ export const _mergeDataSource = (oldDataSource, newDataSource, selectEntity, ign
             codeTemplates: tempCodeTemplates,
             dataTypeSupports: tempDataTypeSupports.map(t => _.omit(t, 'old')),
             uiHint: tempUiHint.map(t => _.omit(t, 'old')),
+            ...(catalogMerge ? {modelCatalog: catalogMerge.catalog} : {}),
         },
+        conceptEntities: tempConceptEntities.map(e => ({..._.omit(e, 'old'), type: 'C', fields: [], headers: []})),
         logicEntities: tempLogicEntities.map(e => _.omit(e, 'old')),
         entities: tempEntities.map(e => refactor(e, 'entity')),
         views: tempViews.map(e => refactor(e, 'view')),
@@ -1346,13 +1457,19 @@ export const _mergeDataSource = (oldDataSource, newDataSource, selectEntity, ign
 
 export const getAllData = (params) => {
     const data = params.dataSource;
-    const getGroup = (type, d) => (data.viewGroups || [])
-        .filter(g => (g[type] || []).includes(d.id))
-        .map(g => ({
-            name: g.defName || g.defKey || '',
-            defKey: g.defKey,
-            id: g.id,
-        }));
+    const memberTypes = {
+        refConceptEntities: 'conceptEntity', refLogicEntities: 'logicEntity',
+        refEntities: 'entity', refViews: 'view', refDiagrams: 'diagram', refDicts: 'dict',
+    };
+    const categories = getCatalogCategories(data);
+    const getGroup = (type, d) => categories.filter(category => {
+        const group = category.legacyGroupId
+            ? (data.viewGroups || []).find(g => g.id === category.legacyGroupId) : null;
+        const members = category.legacyGroupId ? group?.[type] : category.members?.[memberTypes[type]];
+        return (members || []).includes(d.id);
+    }).map(category => ({
+        name: category.defName || category.defKey || '', defKey: category.defKey, id: category.id,
+    }));
     const entityData = (data.entities || [])
         .map(e => ({...e, type: 'refEntities'}))
         .concat((data.views || []).map(v => ({...v, type: 'refViews'})))
@@ -1370,6 +1487,9 @@ export const getAllData = (params) => {
                 groups: getGroup('refLogicEntities', b),
             };
         });
+    const conceptEntityData = (data.conceptEntities || []).map(b => ({
+        ...b, type: 'refConceptEntities', groups: getGroup('refConceptEntities', b),
+    }));
     const diagramData = (data.diagrams || [])
         .map((b) => {
             return {
@@ -1419,6 +1539,14 @@ export const getAllData = (params) => {
                     diagramRefs: getDiagramRefs(e.id),
                     suggest: `${e.defKey}-${e.defName}${groups ? `@${groups}` : ''}`,
                 };
+            }),
+        },
+        {
+            key: 'conceptEntities',
+            data: conceptEntityData.map(e => {
+                const groups = e.groups.map(g => g.name).join('|');
+                return {...e, diagramRefs: getDiagramRefs(e.id),
+                    suggest: `${e.defKey}-${e.defName}${groups ? `@${groups}` : ''}`};
             }),
         },
         {

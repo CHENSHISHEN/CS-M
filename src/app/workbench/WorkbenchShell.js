@@ -515,34 +515,36 @@ const WB_SIDEBAR_TITLES = {
 export const WorkbenchSidebar = React.memo(({currentPrefix, menuType, filterText, onFilterChange,
                                               showLocation, onLocation,
                                               versionType, onVersionTypeChange,
-                                              standardStats, onOpenStandardEdit, filterOpen, onToggleFilter, onCreate, readOnly, onCreateType}) => {
+                                              standardStats, onOpenStandardEdit, filterOpen, onToggleFilter, onCreate, readOnly, catalogView, onToggleCatalogView, onCreateType}) => {
   const titleId = WB_SIDEBAR_TITLES[menuType] || 'workbench.sidebarModel';
   const filterable = menuType === '1' || menuType === '2';
   return <div className={`${currentPrefix}-wb-sidebar`}>
     <div className={`${currentPrefix}-wb-sidebar-title`}>
       <span><FormatMessage id={titleId}/></span>
       <span className={`${currentPrefix}-wb-sidebar-title-opt`}>
-        {menuType === '1' && showLocation && <button
-          type='button'
-          className={`${currentPrefix}-wb-iconbtn`}
-          onClick={onLocation}
-          title={FormatMessage.string({id: 'location'})}
-          aria-label={FormatMessage.string({id: 'location'})}
-        >
-          <WbIcon name='crosshair'/>
-        </button>}
+        {menuType === '1' && <>
+          {showLocation && <button
+            type='button'
+            className={`${currentPrefix}-wb-iconbtn`}
+            onClick={onLocation}
+            title={FormatMessage.string({id: 'location'})}
+            aria-label={FormatMessage.string({id: 'location'})}
+          >
+            <WbIcon name='crosshair'/>
+          </button>}
+          <button type='button' className={`${currentPrefix}-wb-iconbtn`}
+            onClick={onToggleCatalogView} title={FormatMessage.string({id: `modelCatalog.${catalogView === 'directory' ? 'objectsView' : 'directoryView'}`})}
+            aria-label={FormatMessage.string({id: 'modelCatalog.toggleView'})}><WbIcon name='columns'/></button>
+        </>}
         {filterable && <button type='button' className={`${currentPrefix}-wb-iconbtn`}
-          onClick={onToggleFilter} aria-expanded={!!filterOpen} title={FormatMessage.string({id: 'toolbar.search'})}
-          aria-label={FormatMessage.string({id: 'toolbar.search'})}><WbIcon name='search'/></button>}
+          onClick={onToggleFilter} aria-expanded={!!filterOpen} title={FormatMessage.string({id: 'modelCatalog.filter'})}
+          aria-label={FormatMessage.string({id: 'modelCatalog.filter'})}><WbIcon name='search'/></button>}
         {menuType === '1' && <button type='button' className={`${currentPrefix}-wb-iconbtn`}
-          disabled={readOnly} onClick={onCreate} title={FormatMessage.string({id: 'toolbar.create'})}
-          aria-label={FormatMessage.string({id: 'toolbar.create'})}><WbIcon name='plus'/></button>}
+          disabled={readOnly} onClick={onCreate} title={FormatMessage.string({id: 'modelCatalog.create'})}
+          aria-label={FormatMessage.string({id: 'modelCatalog.create'})}><WbIcon name='plus'/></button>}
         {(menuType === '2' || menuType === '3') && <WbMenuButton currentPrefix={currentPrefix}
           title={FormatMessage.string({id: 'toolbar.create'})} icon='plus' disabled={readOnly}
-          menus={[{key: 'domains', name: FormatMessage.string({id: 'menus.add.newDomain'})},
-            {key: 'dataTypeMapping', name: FormatMessage.string({id: 'menus.add.newDataType'})},
-            {key: 'dataTypeSupport', name: FormatMessage.string({id: 'menus.add.newDataTypeSupport'})},
-            {key: 'appCode', name: FormatMessage.string({id: 'menus.add.newAppCode'})}]}
+          menus={['domains', 'dataTypeMapping', 'dataTypeSupport', 'appCode'].map(key => ({key, name: FormatMessage.string({id: `modelCatalog.${key}`})}))}
           menuClick={m => onCreateType && onCreateType(m.key)}/>}
       </span>
     </div>
