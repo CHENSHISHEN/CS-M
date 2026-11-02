@@ -19,29 +19,29 @@ CS-M 是一款开源的桌面端数据建模工具，面向数据平台建设中
 - **版本管理与导入导出**：工程版本管理、工程/模块导入导出，与 PDManer 工程文件格式保持导入兼容
 - **新工作台 UI**：重构后的工作台界面（本版本新增，替代旧版经典布局）
 
-明确**不包含**的能力（本基线已移除或从未纳入，请注意甄别）：
-
-- 独立概念模型设计、数仓分层目录
-- 企业总览、业务建模
-- 独立画图平台
-- AI 辅助能力（含外部大模型接入）
-- 指标管理
-
 ## 平台支持
 
 | 平台 | 架构 | 安装包格式 | 说明 |
 | --- | --- | --- | --- |
-| Windows | x64 | NSIS 安装包（.exe） | 本版本默认且仅提供 x64 |
-| macOS | arm64（Apple Silicon） | DMG | 可单独构建 |
-| macOS | x64（Intel） | DMG | 可单独构建 |
-| Linux | — | — | 保留了构建配置，但本版本未做验证，不在支持范围内 |
+| Windows | x64 | NSIS 安装包（.exe） | 本版本默认提供 x64 |
+| macOS | arm64（Apple Silicon） | DMG | 支持 Apple M 系列芯片 |
+| macOS | x64（Intel） | DMG | 支持 Intel 芯片 |
+| Linux | — | — | 保留了构建配置，本版本暂未提供预编译安装包 |
 
 > Windows arm64 安装包未经实际验证，本版本不提供、不宣称支持。
 
-## 下载
+## 下载与安装
 
-- **当前状态**：v0.1.0 为首发候选版本，**尚未发布任何安装包**。官方发布入口为 GitHub Releases：<https://github.com/CHENSHISHEN/CS-M/releases>。在正式发布前，该页面没有任何资产，请勿相信任何第三方提供的"CS-M 安装包"下载源。
-- 本地候选包已构建，文件名和验证范围见 [验收记录](docs/ACCEPTANCE.md)。在正式发布前，也可以通过源码构建获取候选安装包，步骤见下文"从源码构建安装包"。
+官方发布入口为 GitHub Releases：<https://github.com/CHENSHISHEN/CS-M/releases>。
+
+请在 Release 页面下载对应操作系统的安装包：
+- **Windows (x64)**：`CS-M-win_x64_v0.1.0.exe`
+- **macOS Apple Silicon (arm64)**：`CS-M-mac_arm64_v0.1.0.dmg`
+- **macOS Intel (x64)**：`CS-M-mac_x64_v0.1.0.dmg`
+
+校验文件（SHA-256）可同步在 Release 页面下载 `SHA256SUMS.txt` 进行比对。
+
+> 说明：本项目未配置商业代码签名证书，产物为未签名安装包；macOS 首次打开需在“系统设置 - 隐私与安全性”中允许，Windows SmartScreen 可能提示未知发布者。也可以通过源码自行构建获取安装包。
 
 ## 环境要求与源码开发
 

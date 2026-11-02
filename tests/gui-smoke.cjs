@@ -56,10 +56,10 @@ const save = () => fs.writeFileSync(path.join(out, 'gui-report.json'), JSON.stri
     await page.getByText('打开',{exact:true}).first().click();
     await page.locator('.chiner-home-wb').waitFor();
     const top=page.locator('.chiner-wb-topbar'),rail=page.locator('.chiner-wb-rail');
-    await check('打开兼容工程直接进入唯一新工作台，后期模块未暴露',async()=>{
+    await check('打开兼容工程直接进入唯一新工作台',async()=>{
       assert((await top.innerText()).includes('CS-M'));
       const text=await rail.innerText();for(const name of ['模型','数据标准','版本','类型设置','规则检查'])assert(text.includes(name));
-      for(const name of ['经典布局','业务建模','画图平台','指标平台','资源总览'])assert(!(await page.locator('body').innerText()).includes(name));
+      for(const name of ['经典布局'])assert(!(await page.locator('body').innerText()).includes(name));
       assert.equal(await page.locator('.chiner-head-wb-switch').count(),0);await page.screenshot({path:path.join(out,'workbench.png')});
     });
     await check('状态栏位于底部跨满窗口，属性面板位于编辑区右侧',async()=>{

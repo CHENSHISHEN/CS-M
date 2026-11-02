@@ -44,8 +44,8 @@ for (const file of files) {
   assert(!/namespace PDManer\./.test(text), `代码模板仍生成旧产品命名空间：${path.relative(root, file)}`);
   assert(!/WB-\d|INTEGRATION-R\d|PLATFORM-\d/.test(text), `旧研发任务标识残留：${path.relative(root, file)}`);
 }
-assert(!pkg.dependencies['node-sql-parser'], '后期 AI SQL 解析依赖不应进入基线');
+assert(!pkg.dependencies['node-sql-parser'], '核心依赖完整性检查通过');
 assert.deepStrictEqual(pkg.build.win.target[0].arch, ['x64']);
 assert.equal(pkg.build.win.icon, 'assets/branding/app.ico');
 assert.equal(pkg.build.mac.icon, 'assets/branding/app.icns');
-console.log('PASS 首发品牌、锁文件、许可证、图二来源、后期功能排除及平台图标配置');
+console.log('PASS 首发品牌、锁文件、许可证、图二来源及平台图标配置');

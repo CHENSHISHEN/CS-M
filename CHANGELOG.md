@@ -1,6 +1,6 @@
 # 变更记录
 
-## 0.1.0 — 首发候选（待 UAT）
+## 0.1.0 (2026-11-02)
 
 - 基于 PDManer 4.9.4 建立 CS-M 独立源码基线，沿用 MulanPubL-2.0 许可证并保留上游归属。
 - 新工作台作为唯一布局，包含资源栏、文档页签、属性引用、主题和可调宽度。
@@ -10,4 +10,4 @@
 - 提供 Windows x64 NSIS、macOS arm64/x64 DMG 的源码构建脚本及 CI。
 - 修复基线提取中的布局错位和保存成功后脏标记不清除问题，保留保存期间的新编辑。
 
-本候选尚未公开发布。实际构建与验证范围见 `docs/ACCEPTANCE.md`，UAT 步骤见 `docs/UAT.md`。
+安装包发布见 GitHub Releases，实际构建与验证范围见 `docs/ACCEPTANCE.md`，使用与操作指引见 `docs/UAT.md`。
