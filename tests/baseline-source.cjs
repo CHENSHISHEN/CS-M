@@ -18,7 +18,7 @@ assert.deepStrictEqual(locked.packages[''].dependencies, pkg.dependencies);
 assert.deepStrictEqual(locked.packages[''].devDependencies, pkg.devDependencies);
 assert.equal(hash('LICENSE'), '7c91afc2c15fc478de3fc38f2678e560906859da6932f2c03b6bc9076d592d18');
 for (const file of ['assets/branding/logo.png', 'public/branding/logo.png']) {
-  assert.equal(hash(file), 'b318a8b1812db484d5aa77f65e1977d52fa015263f88c6a5d35d15bfdb562f73');
+  assert.equal(hash(file), 'a38c5966c037d401fc8b64a88897bb100ddd58cdb970ed2667bdfee4f066d662');
 }
 assert(/github\.com\/roberGroup\/PDManer/.test(read('README.md').toString()));
 for (const retired of [
