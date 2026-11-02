@@ -79,6 +79,9 @@ import {compareVersion} from '../../lib/update';
 import {notify} from '../../lib/subscribe';
 import {READING} from '../../lib/variable';
 import LogicEntity from '../container/logicentity';
+import ConceptEntity from '../container/conceptentity';
+import ModelCatalog from '../workbench/ModelCatalog';
+import { physicalMetadataPatches, applyPhysicalMetadataPatch } from '../../lib/model_catalog';
 import {
   WorkbenchDocumentTabs,
   WorkbenchEditorToolbar,
@@ -129,7 +132,8 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
   const [activeKey, updateActiveKey] = useState('');
   const tabInstanceRef = useRef({});
   const pendingDiagramLocationRef = useRef(null);
-  const menuModelRef = useRef(null);
+  const catalogRef = useRef(null);
+  const [catalogView, setCatalogView] = useState('directory');
   const [wbFilterOpen, setWbFilterOpen] = useState(false);
   const standardFieldRef = useRef(null);
   const openStandardLibrary = useCallback(() => standardFieldRef.current?.openLibrary(), []);
@@ -318,7 +322,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
   const onLocation = (e) => {
     e.stopPropagation();
     const activeArray = activeKeyRef.current?.split(separator) || [];
-    menuModelRef.current?.jumpSimplePosition(activeArray[0], activeArray[1]);
+    catalogRef.current?.jumpSimplePosition(activeArray[0], activeArray[1]);
   };
   const getCurrentCav = () => {
     return cavRefArray.current.filter(cav => activeKeyRef.current === cav.key)[0]?.cav;
@@ -441,12 +445,12 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
     const base = dataSourceRef.current;
     const drafts = Object.values(getAllTabData()).filter(t => t.data && !t.isInit);
     const tables = {};
-    ['entities', 'logicEntities', 'views'].forEach((name) => {
+    ['entities', 'logicEntities', 'conceptEntities', 'views'].forEach((name) => {
       (base[name] || []).forEach((e) => {
         tables[e.id] = e;
       });
     });
-    drafts.filter(t => t.type === 'entity' || t.type === 'logicEntity' || t.type === 'view')
+    drafts.filter(t => t.type === 'entity' || t.type === 'logicEntity' || t.type === 'conceptEntity' || t.type === 'view')
       .forEach((t) => {
         tables[t.data.id] = t.data;
       });
@@ -1513,6 +1517,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
   // 上下文面板“编辑表/字典”：复用唯一打开入口（已打开则仅激活）
   const _wbOpenInspectorTarget = (id, type) => {
     const icons = {
+      conceptEntity: 'fa-cube',
       entity: 'entity.svg',
       logicEntity: 'fa-columns',
       view: 'view.svg',
@@ -1769,7 +1774,22 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
       const groupRefKey = [`ref${firstUp(tempType)}`];
       group = restProps?.dataSource?.viewGroups?.filter(v => v[groupRefKey]?.includes(key)) || [];
     }
-    if (type === 'entity') {
+    if (type === 'conceptEntity') {
+      return (
+        <ConceptEntity
+          entity={key}
+          dataSource={restProps.dataSource}
+          tabKey={t.tabKey}
+          readOnly={mode === READING}
+          updateDataSource={restProps?.update}
+          getDataSource={getDataSource}
+          jumpDetail={_jumpDetail}
+          hasRender={instance => hasRender(t.tabKey, instance)}
+          hasDestory={() => hasDestroy(t.tabKey)}
+          tabDataChange={data => tabDataChange(data, t)}
+        />
+      );
+    } else if (type === 'entity') {
       return (
         <Entity
           openConfig={() => _openModal('config', 'EntityInit.3')}
@@ -1924,6 +1944,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
       case 'dict': exportSql('dict'); break;
       case 'empty': createEmptyTable(e, null, 'entity');break;
       case 'logic': createEmptyTable(e, null, 'logicEntity');break;
+      case 'concept': createEmptyTable(e, null, 'conceptEntity');break;
       case 'round': createNode(e, 'round');break;
       case 'circle': createCircleNode(e);break;
       case 'rect': createNode(e, 'rect');break;
@@ -2022,7 +2043,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
   const _jumpPosition = (d, key) => {
     setMenuType('1');
     setWbTreeFilter('');
-    menuModelRef.current?.jumpPosition(d, key === 'entities' && d.type === 'refViews' ? 'views' : key);
+    catalogRef.current?.jumpPosition(d, key === 'entities' && d.type === 'refViews' ? 'views' : key);
   };
   const backProjectConfirm = () => confirmBackProjects(dataSourceRef.current, restProps.close);
   useEffect(() => {
@@ -2263,9 +2284,11 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
           filterText={wbTreeFilter}
           filterOpen={wbFilterOpen}
           onToggleFilter={() => { setWbFilterOpen(pre => !pre); setWbTreeFilter(''); }}
-          onCreate={_wbCreateObject}
+          onCreate={e => catalogRef.current?.create(e.currentTarget)}
           onCreateType={_wbCreateObject}
           readOnly={mode === READING}
+          catalogView={catalogView}
+          onToggleCatalogView={() => setCatalogView(pre => pre === 'directory' ? 'objects' : 'directory')}
           onFilterChange={setWbTreeFilter}
           showLocation={menuType === '1' && !!activeKey}
           onLocation={onLocation}
@@ -2277,38 +2300,30 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
         <Tab activeKey={menuType} onChange={_menuTypeChange} showHeader={false}>
           <TabItem key='1' title={FormatMessage.string({id: 'modelTab'})} icon='model.svg'>
             <div className={`${currentPrefix}-home-menu-container`}>
-              <Menu
-                mode={mode}
-                ref={menuModelRef}
-                prefix={prefix}
-                {...restProps}
-                menus={wbTreeFilter ? filterTreeMenus(tempMenu, wbTreeFilter) : tempMenu}
-                doubleMenuClick={_onMenuClick}
-                onContextMenu={_onContextMenu}
-                contextMenus={contextMenus}
-                contextMenuClick={_contextMenuClick}
-                draggable={draggable}
-                getName={getName}
-                dragTable={createEmptyTable}
-                groupType={groupType}
-                header={<span
-                  onContextMenu={e => e.stopPropagation()}
-                  onClick={openHome}
-                  className={`${currentPrefix}-home-cover`}
-                >
-                  <Icon type='fa-home'/>
-                  <span>{FormatMessage.string({id: 'project.homeCover'})}</span>
-                </span>}
-                emptyData={<div
-                  className={`${currentPrefix}-home-menu-empty`}
-                  >
-                  <div>
-                    <FormatMessage id='emptyGroup'/>
-                  </div>
-                  <div>
-                    <FormatMessage id='click'/>[<a onClick={() => _contextMenuClick(null, createGroupMenu)}><FormatMessage id='createGroup'/></a>]
-                  </div>
-                </div>}
+              <ModelCatalog
+                ref={catalogRef}
+                source={getSearchDataSource()}
+                getSource={getDataSource}
+                onUpdate={next => {
+                  physicalMetadataPatches(dataSourceRef.current, next).forEach((patch) => {
+                    const tabKey = `${patch.id}${separator}entity`;
+                    const tabData = getDataByTabId(tabKey);
+                    if (tabData && tabData.data && tabData.data.id === patch.id) {
+                      const merged = applyPhysicalMetadataPatch(tabData.data, patch);
+                      replaceDataByTabId(tabKey, {...tabData, data: merged});
+                      notify('tabDataChange', {id: patch.id, d: merged});
+                    }
+                  });
+                  dataSourceRef.current = next;
+                  restProps.update(next);
+                }}
+                onOpen={_onMenuClick}
+                onCloseObject={(id, type) => _tabClose(id + separator + type, true)}
+                onDrag={createEmptyTable}
+                filter={wbTreeFilter}
+                viewMode={catalogView}
+                readOnly={mode === READING}
+                onHome={openHome}
               />
             </div>
           </TabItem>

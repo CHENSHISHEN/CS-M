@@ -15,12 +15,14 @@ const Table = forwardRef(({node}, ref) => {
   const size = node.size();
   const linkData = JSON.parse(node.getProp('link') || '{}');
   const isLogic = node.getProp('type') === 'L';
+  const isConcept = node.getProp('type') === 'C';
   const allFk = node?._model?.getIncomingEdges(id)?.map(t => t.getTargetPortId()
       ?.split(separator)[0]) || [];
   const onDragOver = (e) => {
     e.preventDefault();
   };
   const onDrop = (e) => {
+    if (isConcept) return;
     store?.data?.updateFields(store.data.originKey, JSON.parse(e.dataTransfer.getData('fields')), isLogic);
   };
   const nodeClickText = () => {
@@ -92,6 +94,7 @@ const Table = forwardRef(({node}, ref) => {
     });
   };
   const body = useMemo(() => {
+    if (isConcept) return null;
     if(isLogic && data?.sysProps?.lePropOrient === 'H') {
       const primaryKeyFields = data.fields.filter(f => f.primaryKey);
       const lineClamp = Math.floor((size.height - 29 - primaryKeyFields.length * 23) / 18);
@@ -162,9 +165,85 @@ const Table = forwardRef(({node}, ref) => {
           </Tooltip>
         </div>}
     </div>;
-  }, [data.maxWidth, store.data.targetPort, store.data.sourcePort]);
+  }, [data.maxWidth, store.data.targetPort, store.data.sourcePort, isConcept]);
   const displayMode = node.getProp('displayMode') || data?.displayMode;
   const title = `${getTitle(data, displayMode)}${store?.data.count > 0 ? `:${store?.data.count}` : ''}`;
+
+  if (isConcept) {
+    const isCompact = displayMode === 'compact';
+    const rawFill = node.getProp('fillColor');
+    const conceptFillColor = (rawFill && rawFill !== '#ACDAFC' && rawFill !== '#DDE5FF') ? rawFill : '#722ed1';
+    const commentText = data?.comment ? data.comment.trim() : '';
+    const conceptTitle = data?.defName
+      ? `${data.defName}${data.defKey ? ` (${data.defKey})` : ''}`
+      : (data?.defKey || title);
+    const countSuffix = store?.data.count > 0 ? `:${store?.data.count}` : '';
+    const fullConceptTitle = `${conceptTitle}${countSuffix}`;
+
+    return (
+      <div
+        ref={ref}
+        className='chiner-er-table chiner-er-concept-card'
+        onDragOver={onDragOver}
+        onDrop={onDrop}
+        style={{
+          color: node.getProp('fontColor') || '#262626',
+          borderRadius: isCompact ? '4px' : undefined,
+        }}
+      >
+        <Tooltip title={fullConceptTitle}>
+          <div
+            className='chiner-er-concept-header'
+            style={{
+              background: conceptFillColor,
+              borderRadius: isCompact ? '4px' : '4px 4px 0 0',
+            }}
+          >
+            <div className='chiner-er-concept-header-left'>
+              <span className='chiner-er-concept-header-tag'>
+                <FormatMessage id='modelCatalog.concept' defaultMessage='概念'/>
+              </span>
+              <span className='chiner-er-concept-header-title'>
+                {linkData.type ? (
+                  <a style={{textDecoration: 'underline', color: '#fff'}} onClick={nodeClickText}>
+                    {data?.defName || data?.defKey}
+                  </a>
+                ) : (
+                  data?.defName || data?.defKey
+                )}
+                {data?.defName && data?.defKey && (
+                  <span className='chiner-er-concept-header-code'>({data.defKey})</span>
+                )}
+                {countSuffix}
+              </span>
+            </div>
+            {data?.comment ? (
+              <Tooltip title={data.comment} force conversion={1} placement='top'>
+                <div className='chiner-er-concept-header-icon'>
+                  <i className='fa fa-info-circle' style={{color: '#fff', fontSize: '13px'}}/>
+                </div>
+              </Tooltip>
+            ) : null}
+          </div>
+        </Tooltip>
+        {!isCompact && (
+          <div
+            className='chiner-er-concept-body'
+            onDoubleClick={nodeClickText}
+            title={commentText || FormatMessage.string({id: 'modelCatalog.conceptNoDefinition', defaultMessage: '双击编辑业务定义'})}
+          >
+            {commentText ? (
+              <div className='chiner-er-concept-desc'>{commentText}</div>
+            ) : (
+              <div className='chiner-er-concept-empty'>
+                <FormatMessage id='modelCatalog.conceptNoDefinition' defaultMessage='双击编辑业务定义'/>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return <div
     ref={ref}
@@ -183,7 +262,7 @@ const Table = forwardRef(({node}, ref) => {
       >
         {isLogic && (
           <span className='chiner-er-logic-tag'>
-            <FormatMessage id='logicalModel.logic' defaultMessage='逻辑'/>
+            <FormatMessage id='modelCatalog.logic' defaultMessage='逻辑'/>
           </span>
         )}
         {

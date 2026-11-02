@@ -5,14 +5,17 @@ import {getPrefix} from '../../lib/prefixUtil';
 import { addBodyEvent, removeBodyEvent } from '../../lib/listener';
 
 export default React.memo(forwardRef(({prefix, redo, undo, setSelection,
-                                          sliderChange, setMinimap}, ref) => {
+                                          sliderChange, setMinimap, modelLevel, displayMode, onDisplayModeChange}, ref) => {
     const sliderIconRef = useRef(null);
     const sliderRef = useRef(null);
+    const displayIconRef = useRef(null);
+    const displayMenuRef = useRef(null);
     const [historyStatus, setHistoryStatus] = useState([true, true]);
     const [enableSelection, setEnableSelection] = useState(true);
     const [scaleNumber, setScaleNumber] = useState(1);
     const [mapOpen, setMapOpen] = useState(false);
     const [sliderOpen, setSliderOpen] = useState(false);
+    const [displayMenuOpen, setDisplayMenuOpen] = useState(false);
     const _setEnableSelection = (v) => {
         setEnableSelection(v);
         setSelection(v);
@@ -24,6 +27,27 @@ export default React.memo(forwardRef(({prefix, redo, undo, setSelection,
     const _setSliderOpen = () => {
         setSliderOpen(pre => !pre);
     };
+    const getDisplayOptions = () => {
+        if (modelLevel === 'conceptual') {
+            return [
+                { key: 'detailed', label: FormatMessage.string({id: 'workbench.displayModeConceptDetailed', defaultMessage: '完整业务卡片 (含定义)'}) },
+                { key: 'compact', label: FormatMessage.string({id: 'workbench.displayModeConceptCompact', defaultMessage: '紧凑卡片 (仅名称)'}) },
+            ];
+        }
+        if (modelLevel === 'logical') {
+            return [
+                { key: 'all', label: FormatMessage.string({id: 'workbench.displayModeLogicalAll', defaultMessage: '完整逻辑属性'}) },
+                { key: 'name', label: FormatMessage.string({id: 'workbench.displayModeLogicalName', defaultMessage: '仅逻辑名称'}) },
+                { key: 'pk', label: FormatMessage.string({id: 'workbench.displayModeLogicalPk', defaultMessage: '仅主标识符 (PK)'}) },
+            ];
+        }
+        return [
+            { key: 'all', label: FormatMessage.string({id: 'workbench.displayModeAll', defaultMessage: '代码[名称] (完整)'}) },
+            { key: 'key', label: FormatMessage.string({id: 'workbench.displayModeKey', defaultMessage: '仅物理代码 (Code)'}) },
+            { key: 'name', label: FormatMessage.string({id: 'workbench.displayModeName', defaultMessage: '仅逻辑名称 (Name)'}) },
+            { key: 'pk', label: FormatMessage.string({id: 'workbench.displayModePk', defaultMessage: '主键摘要 (仅PK)'}) },
+        ];
+    };
     useEffect(() => {
         const eventId = Math.uuid();
         const eventName = 'onclick';
@@ -31,6 +55,10 @@ export default React.memo(forwardRef(({prefix, redo, undo, setSelection,
             if ((e.target !== sliderIconRef.current) && (e.target !== sliderRef.current)
                 && (!sliderRef.current?.contains(e.target))) {
                 setSliderOpen(false);
+            }
+            if ((e.target !== displayIconRef.current) && (e.target !== displayMenuRef.current)
+                && (!displayMenuRef.current?.contains(e.target))) {
+                setDisplayMenuOpen(false);
             }
         });
         return () => {
@@ -100,9 +128,38 @@ export default React.memo(forwardRef(({prefix, redo, undo, setSelection,
             onClick={() => _setMapOpen(!mapOpen)}
             type='fa-map-o'/>
         </Tooltip>
+        <div className={`${currentPrefix}-relation-toolbar-line`}/>
+        <Tooltip
+          offsetTop={2}
+          title={FormatMessage.string({id: 'workbench.displayMode', defaultMessage: '显示模式'})}
+          force
+          placement='top'>
+          <Icon
+            ref={displayIconRef}
+            className={`${currentPrefix}-relation-toolbar-displaymode ${displayMenuOpen ? 'open' : ''}`}
+            onClick={() => setDisplayMenuOpen(pre => !pre)}
+            type='fa-eye'/>
+        </Tooltip>
       </div>
       {sliderOpen && <div ref={sliderRef} className={`${currentPrefix}-relation-toolbar-slider`}>
         <Slider onChange={sliderChange} value={numeral(scaleNumber).multiply(50).value()}/>
+      </div>}
+      {displayMenuOpen && <div ref={displayMenuRef} className={`${currentPrefix}-relation-toolbar-displaymenu`}>
+        <div className={`${currentPrefix}-relation-toolbar-displaymenu-title`}>
+          <FormatMessage id='workbench.displayMode' defaultMessage='显示模式'/>
+        </div>
+        {getDisplayOptions().map(opt => (
+          <div
+            key={opt.key}
+            className={`${currentPrefix}-relation-toolbar-displaymenu-item ${opt.key === (displayMode || 'all') ? 'active' : ''}`}
+            onClick={() => {
+              onDisplayModeChange && onDisplayModeChange(opt.key);
+              setDisplayMenuOpen(false);
+            }}
+          >
+            {opt.label}
+          </div>
+        ))}
       </div>}
     </div>;
 }));

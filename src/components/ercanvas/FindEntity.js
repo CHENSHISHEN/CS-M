@@ -37,6 +37,7 @@ export default React.memo(forwardRef(({prefix, getGraph, dataSource}, ref) => {
           if (c.originKey) {
             const entity = (dataSource?.entities || [])
                 .concat(dataSource?.logicEntities || [])
+                .concat(dataSource?.conceptEntities || [])
                 .filter(e => e.id === c.originKey)[0];
             if (entity) {
               const tempDisplayMode = entity.nameTemplate || '{defKey}[{defName}]';
@@ -67,7 +68,7 @@ export default React.memo(forwardRef(({prefix, getGraph, dataSource}, ref) => {
     } else {
       setCells([]);
     }
-  }, [searchValue, dataSource.entities, dataSource.logicEntities]);
+  }, [searchValue, dataSource.entities, dataSource.logicEntities, dataSource.conceptEntities]);
   const onChange = (e) => {
     setSearchValue(e.target.value);
   };

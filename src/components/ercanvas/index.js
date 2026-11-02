@@ -1,5 +1,5 @@
 import moment from 'moment';
-import React, {useEffect, useRef, useMemo} from 'react';
+import React, {useEffect, useRef, useMemo, useState} from 'react';
 import { Graph, Addon, DataUri } from '@antv/x6';
 import {Download, FormatMessage} from 'components';
 import './components';
@@ -37,6 +37,12 @@ export default ({data, dataSource, renderReady, updateDataSource, validateTableS
   const id = useMemo(() => `er-${Math.uuid()}`, []);
   const isScroll = useRef(false);
   const scrollTimer = useRef(null);
+  const [currentDisplayMode, setCurrentDisplayMode] = useState(data?.displayMode || 'all');
+  const handleDisplayModeChange = (mode) => {
+    setCurrentDisplayMode(mode);
+    erRef.current?.setDisplayMode(mode, dataSourceRef.current);
+    dataChange && dataChange({ displayMode: mode });
+  };
   const render = () => {
     if (!isInit.current) {
       graphRef.current.fromJSON({
@@ -45,7 +51,7 @@ export default ({data, dataSource, renderReady, updateDataSource, validateTableS
       });
       isInit.current = true;
     } else {
-      erRef.current.update(dataSourceRef.current);
+      erRef.current.update(dataSourceRef.current, currentDisplayMode);
     }
   };
   const undo = () => {
@@ -242,7 +248,7 @@ export default ({data, dataSource, renderReady, updateDataSource, validateTableS
     const eR = new ER(
         {
           // eslint-disable-next-line max-len
-      validateTableStatus, updateDataSource, tabKey, relationType, graph, changeTab, dnd, dataChange, tabDataChange, isView, save, openDict, jumpEntity, openTab, closeTab, container, getDataSource, common, changes, currentPrefix,
+      validateTableStatus, updateDataSource, tabKey, modelLevel: data.modelLevel, relationType, graph, changeTab, dnd, dataChange, tabDataChange, isView, save, openDict, jumpEntity, openTab, closeTab, container, getDataSource, common, changes, currentPrefix,
     });
     const mind = new Mind({
       graph,
@@ -583,6 +589,8 @@ export default ({data, dataSource, renderReady, updateDataSource, validateTableS
     };
     renderReady && renderReady({
       update,
+      setDisplayMode: handleDisplayModeChange,
+      getDisplayMode: () => currentDisplayMode,
       locateCell,
       startDrag,
       startRemarkDrag,
@@ -631,6 +639,7 @@ export default ({data, dataSource, renderReady, updateDataSource, validateTableS
     dataSource.entities,
     dataSource.views,
     dataSource.logicEntities,
+    dataSource.conceptEntities,
     dataSource?.profile?.default?.db,
   ]);
   useEffect(() => {
@@ -678,6 +687,9 @@ export default ({data, dataSource, renderReady, updateDataSource, validateTableS
       sliderChange={sliderChange}
       setSelection={setSelection}
       setMinimap={setMinimap}
+      modelLevel={data?.modelLevel}
+      displayMode={currentDisplayMode}
+      onDisplayModeChange={handleDisplayModeChange}
     />
   </>;
 };

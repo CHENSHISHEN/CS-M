@@ -23,8 +23,8 @@ for (const file of ['assets/branding/logo.png', 'public/branding/logo.png']) {
 assert(/github\.com\/roberGroup\/PDManer/.test(read('README.md').toString()));
 for (const retired of [
   'src/app/main/HeaderTool.js', 'src/app/ai', 'src/app/business', 'src/app/drawing', 'src/app/metrics', 'src/host',
-  'src/app/container/conceptentity', 'src/lib/ai', 'src/lib/metrics',
-  'src/lib/model_catalog.js', 'src/lib/drawing_platform.js', 'src/lib/enterprise_home.js',
+  'src/lib/ai', 'src/lib/metrics',
+  'src/lib/drawing_platform.js', 'src/lib/enterprise_home.js',
   'src/lib/concept_logical_links.js', 'src/lib/model_resource_overview.js',
 ]) {
   assert(!fs.existsSync(path.join(root, retired)), `基线外源码残留：${retired}`);
