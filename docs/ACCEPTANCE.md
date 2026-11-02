@@ -18,7 +18,7 @@
 
 - 新工作台为唯一布局，经典头部和布局切换已从源码剥离。
 - 产品界面、元数据、Logo、安装包、外置 Excel 模板表头与动态 Excel 产品表头已采用 CS-M；代码模板生成的 C# 命名空间为合法标识符 `CSM.Application`。
-- 图二原图（透明背景）SHA-256：`0a999e98e0a5fd4d3811f8481f8949038202b25c0ca6f3b06b149c42f9ce4d94`。README 与图标均由该原图提供，未重新绘制 Logo。
+- 图二原图（透明背景）SHA-256：`b318a8b1812db484d5aa77f65e1977d52fa015263f88c6a5d35d15bfdb562f73`。README 与图标均由该原图提供，未重新绘制 Logo。
 - macOS 的两个 App 内 `.icns` 与项目图标一致；Windows PE 的图标资源包含 `.ico` 中的全部尺寸。
 - 上游 LICENSE 字节保持不变，SHA-256 为 `7c91afc2c15fc478de3fc38f2678e560906859da6932f2c03b6bc9076d592d18`。三个候选包均包含相同的 LICENSE、NOTICE、第三方声明与本项目源码入口。
 - 必须保留的上游归属和兼容技术字符串见 [BASELINE.md](./BASELINE.md) 白名单；未将这些必要信息伪装成自己的原创。
