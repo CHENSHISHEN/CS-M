@@ -30,6 +30,9 @@ jobs:
 
       - name: Build & package (NSIS x64, unsigned)
         run: npm run package-win
+        env:
+          ELECTRON_MIRROR: ""
+          ELECTRON_BUILDER_BINARIES_MIRROR: ""
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4

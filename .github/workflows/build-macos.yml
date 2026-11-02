@@ -34,6 +34,9 @@ jobs:
 
       - name: Build & package (DMG ${{ matrix.arch }}, unsigned)
         run: npm run package-mac-${{ matrix.arch }}
+        env:
+          ELECTRON_MIRROR: ""
+          ELECTRON_BUILDER_BINARIES_MIRROR: ""
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4

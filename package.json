@@ -104,6 +104,9 @@
     "appId": "io.github.chenshishen.csm",
     "productName": "CS-M",
     "artifactName": "${productName}-${os}_${arch}_v${version}.${ext}",
+    "electronDownload": {
+      "customDir": "v13.1.7"
+    },
     "directories": {
       "buildResources": "app/build",
       "output": "dist"
