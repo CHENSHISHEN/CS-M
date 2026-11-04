@@ -1,0 +1,2286 @@
+.platform-v3 {
+  --pv-accent: var(--wb-blue, #5265d9);
+  --pv-accent-bg: #eff6ff;
+  --pv-surface: #ffffff;
+  --pv-surface-glass: rgba(255, 255, 255, 0.94);
+  --pv-bg: #f8fafc;
+  --pv-line: #e2e8f0;
+  --pv-text: #1e293b;
+  --pv-muted: #64748b;
+  --pv-shadow-sm: 0 4px 12px -2px rgba(15, 23, 42, 0.05);
+  --pv-shadow-md: 0 10px 28px -4px rgba(15, 23, 42, 0.09), 0 4px 10px -2px rgba(15, 23, 42, 0.03);
+  --pv-shadow-lg: 0 18px 42px -6px rgba(15, 23, 42, 0.14), 0 8px 18px -4px rgba(15, 23, 42, 0.06);
+
+  --er-ui-bg: #F5F6FA;
+  --er-ui-canvas: #F8F9FC;
+  --er-ui-surface: #FFFFFF;
+  --er-ui-text: #252B3C;
+  --er-ui-muted: #71798D;
+  --er-ui-line: #E7EAF1;
+  --er-ui-accent: #5265D9;
+  --er-ui-accent-soft: #EDF0FF;
+  --er-ui-success: #258170;
+  --er-ui-overlay-shadow: 0 12px 36px rgba(36, 46, 77, 0.14), 0 2px 6px rgba(36, 46, 77, 0.05);
+
+  .pv-studio-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #2563eb, #4f46e5);
+    color: #fff;
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    font-size: 15px;
+    font-weight: 700;
+    flex: none;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+  }
+  .pv-platform-header strong {line-height:1.2;small {display:block;font-size:9px;letter-spacing:1.5px;color:var(--pv-muted);margin-top:5px;}}
+  .pv-type-icon {width:64px;height:40px;color:var(--type-color,var(--pv-accent));display:block;flex:none;}
+  .pv-category .pv-type-icon {width:24px;height:20px;}
+  .pv-type-card {padding:22px;min-height:164px;display:flex;flex-direction:column;justify-content:space-between;box-sizing:border-box;
+    .pv-type-heading {display:flex;gap:18px;align-items:flex-start;}.pv-type-icon {padding:10px;background:var(--pv-bg);border-radius:6px;width:64px;height:40px;box-sizing:content-box;}h2 {font-size:17px;margin-bottom:8px;}p {margin:0;min-height:36px;}footer {margin-top:20px;}}
+  .pv-card-grid {grid-template-columns:repeat(auto-fill,minmax(290px,1fr));}
+  .pv-template-card>.pv-real-preview {height:190px;border:0;border-bottom:1px solid var(--pv-line);border-radius:0;display:block;}
+  .pv-template-card>.pv-type-icon {height:190px;width:100%;padding:40px;box-sizing:border-box;background:var(--pv-bg);}
+  .pv-backdrop .pv-dialog.pv-template-picker-dialog {width:1180px;max-width:94vw;}
+  .pv-template-picker {display:grid;grid-template-columns:minmax(0,1.5fr) minmax(260px,1fr);gap:24px;padding:24px;min-height:440px;}
+  .pv-template-options {min-width:0;>input {width:100%;height:34px;margin-bottom:18px;}}
+  .pv-template-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;max-height:60vh;overflow:auto;padding:3px;>button {border:1px solid var(--pv-line);border-radius:7px;background:var(--pv-surface);padding:10px;text-align:left;min-width:0;>.pv-real-preview {height:140px;border:0;}strong,small {display:block;margin-top:10px;}small {color:var(--pv-muted);font-size:11px;}&.selected {border:2px solid var(--pv-accent);padding:9px;}}}
+  .pv-template-detail {border-left:1px solid var(--pv-line);padding-left:24px;min-width:0;>.pv-real-preview {height:250px;margin-bottom:20px;}}
+
+  // ==========================================================
+  // OPTION B: CANVAS-CENTRIC WHITEBOARD FLOATING LAYOUT
+  // ==========================================================
+
+  // Document Shell: Flex column container
+  .pv-document-shell {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--pv-bg);
+    position: relative;
+  }
+
+  // 1. Top Modern Header Bar
+  .pv-document-header {
+    height: 48px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 14px;
+    background: var(--pv-surface-glass);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--pv-line);
+    z-index: 35;
+    flex: none;
+    pointer-events: auto;
+
+    .pv-header-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: none;
+    }
+    .pv-back-btn {
+      width: 28px;
+      height: 28px;
+      min-height: 28px;
+      border-radius: 8px;
+      padding: 0;
+      font-size: 16px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--pv-line);
+      background: var(--pv-bg);
+      color: var(--pv-text);
+      transition: all .15s ease;
+      &:hover {
+        border-color: var(--pv-accent);
+        color: var(--pv-accent);
+        background: var(--pv-surface);
+      }
+    }
+    .pv-title-meta {
+      display: flex;
+      flex-direction: column;
+      strong {
+        max-width: 200px;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--pv-text);
+        letter-spacing: -0.2px;
+      }
+      small {
+        font-size: 10px;
+        color: var(--pv-muted);
+        margin-top: 1px;
+      }
+    }
+
+    .pv-header-nav {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      background: transparent;
+      padding: 0;
+      border: 0;
+      margin-left: 12px;
+    }
+    .pv-menu-trigger {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      border: 0;
+      background: transparent;
+      white-space: nowrap;
+      padding: 5px 9px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--er-ui-text, #252b3c);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all .12s ease;
+
+      &:hover {
+        background: var(--er-ui-accent-soft, #edf0ff);
+        color: var(--er-ui-accent, #5265d9);
+      }
+      &.active {
+        background: var(--er-ui-accent-soft, #edf0ff);
+        color: var(--er-ui-accent, #5265d9);
+        font-weight: 600;
+      }
+      .pv-trigger-caret {
+        font-size: 9px;
+        opacity: 0.6;
+        transition: transform .12s ease;
+      }
+      &.active .pv-trigger-caret {
+        transform: rotate(180deg);
+      }
+    }
+  }
+
+  // Save Indicator with Live Green Dot
+  .pv-save-indicator {
+    border: 1px solid #a7f3d0;
+    background: #ecfdf5;
+    font-size: 11px;
+    font-weight: 600;
+    color: #047857;
+    border-radius: 20px;
+    padding: 3px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: all .15s ease;
+    .pv-save-dot, &::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #10b981;
+      display: inline-block;
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
+    }
+    &.pending {
+      border-color: var(--pv-line);
+      background: var(--pv-bg);
+      color: var(--pv-muted);
+      .pv-save-dot, &::before {
+        background: var(--pv-muted);
+        box-shadow: none;
+      }
+    }
+    &.error, &.conflict, &.damaged {
+      border-color: #fed7aa;
+      background: #fff7ed;
+      color: #c2410c;
+      .pv-save-dot, &::before {
+        background: #ea580c;
+        box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.25);
+      }
+    }
+    &:hover {
+      filter: brightness(0.97);
+    }
+  }
+
+  // Right Drawer Toggles inside Header
+  .pv-document-tabs-right {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    margin-left: auto;
+    .pv-tab-btn, .pv-button {
+      border: 1px solid var(--pv-line);
+      background: var(--pv-bg);
+      border-radius: 8px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--pv-text);
+      transition: all .15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      &:hover {
+        border-color: var(--pv-accent);
+        color: var(--pv-accent);
+        background: var(--pv-surface);
+      }
+      &.active {
+        background: var(--pv-accent);
+        color: #fff;
+        border-color: var(--pv-accent);
+        box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+      }
+    }
+  }
+
+  // Command Menu Popover with Shortcuts
+  .pv-menu-anchor {position:relative;}
+  .pv-command-menu {
+    position: absolute;
+    z-index: 200;
+    top: 34px;
+    left: 0;
+    min-width: 200px;
+    max-width: 260px;
+    max-height: 72vh;
+    overflow-y: auto;
+    padding: 6px;
+    background: #ffffff;
+    border: 1px solid var(--er-ui-line, #e7eaf1);
+    border-radius: 8px;
+    box-shadow: 0 12px 36px rgba(36, 46, 77, 0.14), 0 2px 6px rgba(36, 46, 77, 0.05);
+    .pv-menu-divider {
+      height: 1px;
+      background: var(--er-ui-line, #e7eaf1);
+      margin: 4px 6px;
+    }
+    button, [role=menuitem] {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      height: 32px;
+      min-height: 32px;
+      line-height: 32px;
+      border: 0;
+      border-radius: 6px;
+      padding: 0 10px !important;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--er-ui-text, #252b3c);
+      background: transparent;
+      box-shadow: none;
+      cursor: pointer;
+      transition: all .12s ease;
+      &:hover:not(:disabled), &:focus:not(:disabled) {
+        background: var(--er-ui-accent-soft, #edf0ff);
+        color: var(--er-ui-accent, #5265d9);
+        outline: none;
+      }
+      &.pv-danger-item:hover:not(:disabled) {
+        background: #fef2f2;
+        color: #dc2626;
+      }
+      &:disabled {
+        opacity: .35;
+        cursor: not-allowed;
+      }
+      .pv-menu-item-text {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .pv-menu-shortcut {
+        font-family: inherit;
+        font-size: 10px;
+        font-weight: 500;
+        color: var(--er-ui-muted, #71798d);
+        background: transparent;
+        border: 0;
+        border-radius: 4px;
+        padding: 0 4px;
+        margin-left: 12px;
+        letter-spacing: 0.5px;
+      }
+    }
+  }
+
+  // 2. Full-Screen Canvas & Docked Graph Editor
+  .pv-graph-editor {
+    display: flex;
+    flex-direction: row;
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+  .pv-editor-main {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .pv-graph-wrap {
+    flex: 1;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    background-color: var(--pv-bg);
+    background-size: 26px 26px;
+    background-image: radial-gradient(circle, #cbd5e1 1.4px, transparent 1.4px);
+    overflow: hidden;
+  }
+  .pv-graph-host {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+  }
+
+  // Space-panning cursor
+  .pv-space-panning, .pv-space-panning * {
+    cursor: grab !important;
+    &:active {
+      cursor: grabbing !important;
+    }
+  }
+
+  // X6 Clean Transform & Selection styling (Figma-style)
+  .x6-widget-selection-box {
+    display: none !important;
+    border: none !important;
+    outline: none !important;
+    background: transparent !important;
+  }
+  .x6-widget-selection-rubberband {
+    background-color: rgba(82, 101, 217, 0.12) !important;
+    border: 1px dashed #5265d9 !important;
+    border-radius: 4px !important;
+  }
+  .x6-widget-transform {
+    border: 1.5px solid #5265d9 !important;
+    border-radius: 4px;
+    background: transparent !important;
+    box-sizing: border-box;
+
+    .x6-widget-transform-resize {
+      border-radius: 2px !important;
+      background: #ffffff !important;
+      border: 1.5px solid #5265d9 !important;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15) !important;
+      width: 7px !important;
+      height: 7px !important;
+
+      &[data-position="top"],
+      &[data-position="bottom"],
+      &[data-position="left"],
+      &[data-position="right"] {
+        display: none !important;
+      }
+      &[data-position="top-left"] {
+        margin: -4px 0 0 -4px !important;
+      }
+      &[data-position="top-right"] {
+        margin: -4px 0 0 -3px !important;
+      }
+      &[data-position="bottom-left"] {
+        margin: -3px 0 0 -4px !important;
+      }
+      &[data-position="bottom-right"] {
+        margin: -3px 0 0 -3px !important;
+      }
+    }
+  }
+
+  // Hide SVG text, ports and transform handles while cell is actively being edited inline
+  .pv-cell-editing text,
+  .x6-node.pv-cell-editing text,
+  .pv-cell-editing .x6-port {
+    visibility: hidden !important;
+    opacity: 0 !important;
+  }
+  .pv-graph-host[data-inline-editing] .x6-widget-transform,
+  .pv-graph-host.is-inline-editing .x6-widget-transform {
+    display: none !important;
+  }
+
+  // 3. Layout Flow Format Bar (Fixed Docked Toolbar)
+  .pv-formatbar {
+    position: static;
+    transform: none;
+    width: 100%;
+    max-width: 100%;
+    height: 48px;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px;
+    background: #ffffff;
+    border: 0;
+    border-bottom: 1px solid var(--er-ui-line, #e7eaf1);
+    border-radius: 0;
+    box-shadow: none;
+    z-index: 10;
+    overflow-x: auto;
+    box-sizing: border-box;
+    flex: none;
+
+    .pv-format-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .pv-format-divider {
+      width: 1px;
+      height: 20px;
+      background: var(--pv-line);
+      margin: 0 4px;
+      flex: none;
+    }
+
+    .pv-font-select, .pv-align-select, .pv-conn-select {
+      height: 28px;
+      border-radius: 8px;
+      border: 1px solid var(--pv-line);
+      background: var(--pv-bg);
+      font-size: 12px;
+      padding: 0 8px;
+      font-weight: 500;
+      color: var(--pv-text);
+      &:focus-visible {
+        border-color: var(--pv-accent);
+      }
+    }
+    .pv-font-select { max-width: 110px; }
+    .pv-align-select { max-width: 80px; }
+    .pv-conn-select { max-width: 110px; }
+
+    .pv-number-pill {
+      display: inline-flex;
+      align-items: center;
+      height: 28px;
+      background: var(--pv-bg);
+      border: 1px solid var(--pv-line);
+      border-radius: 8px;
+      padding: 0 3px;
+      transition: all .12s ease;
+      &:focus-within {
+        border-color: var(--pv-accent);
+        background: var(--pv-surface);
+      }
+      .pv-step-btn {
+        width: 18px;
+        height: 22px;
+        min-height: 22px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: var(--pv-muted);
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+        transition: all .1s ease;
+        &:hover:not(:disabled) {
+          background: var(--pv-surface);
+          color: var(--pv-accent);
+        }
+      }
+      input[type=number] {
+        width: 32px;
+        height: 100%;
+        border: 0;
+        background: transparent;
+        text-align: center;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 0;
+        outline: none;
+        -moz-appearance: textfield;
+        &::-webkit-inner-spin-button, &::-webkit-outer-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+      }
+      .pv-unit {
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--pv-muted);
+        user-select: none;
+        margin: 0 3px 0 1px;
+      }
+    }
+
+    // Segmented toggle button group (B, I, U, S)
+    .pv-group-segmented {
+      display: inline-flex;
+      border: 1px solid var(--pv-line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--pv-bg);
+      .pv-btn-toggle, .pv-button {
+        border: 0;
+        border-right: 1px solid var(--pv-line);
+        border-radius: 0;
+        min-width: 28px;
+        height: 28px;
+        min-height: 28px;
+        background: transparent;
+        font-weight: 700;
+        font-size: 12px;
+        padding: 0 7px;
+        color: var(--pv-text);
+        transition: all .12s ease;
+        &:last-child {
+          border-right: 0;
+        }
+        &:hover:enabled {
+          background: var(--pv-surface);
+          color: var(--pv-accent);
+        }
+        &.active, &[aria-pressed=true] {
+          background: var(--pv-accent);
+          color: #fff;
+        }
+      }
+    }
+
+    // Color Pickers
+    .pv-color-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      height: 28px;
+      padding: 0 8px;
+      border: 1px solid var(--pv-line);
+      border-radius: 8px;
+      background: var(--pv-bg);
+      cursor: pointer;
+      position: relative;
+      transition: all .12s ease;
+      &:hover {
+        border-color: var(--pv-accent);
+        background: var(--pv-surface);
+      }
+      .pv-color-text-icon {
+        font-weight: 800;
+        font-size: 13px;
+        line-height: 1;
+      }
+      .pv-color-swatch-bar {
+        width: 14px;
+        height: 3px;
+        border-radius: 2px;
+      }
+      .pv-color-tag {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--pv-text);
+      }
+      .pv-color-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 1px solid rgba(0,0,0,0.15);
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4);
+      }
+      input[type=color] {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+        pointer-events: none;
+      }
+    }
+
+    .pv-ranges-btn {
+      height: 28px;
+      min-height: 28px;
+      padding: 0 8px;
+      border-radius: 8px;
+      border: 1px solid var(--pv-line);
+      background: var(--pv-bg);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--pv-text);
+      &:hover:enabled {
+        border-color: var(--pv-accent);
+        color: var(--pv-accent);
+      }
+    }
+
+    .pv-format-scope {
+      font-size: 11px;
+      color: var(--pv-muted);
+      font-weight: 500;
+      padding: 2px 8px;
+      background: var(--pv-bg);
+      border: 1px solid var(--pv-line);
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+  }
+
+  // 4. Clean Left Shape Palette Panel
+  .pv-sidebar {
+    position: relative;
+    flex: none;
+    width: 240px;
+    height: 100%;
+    background: var(--pv-surface);
+    border-right: 1px solid var(--pv-line);
+    z-index: 20;
+    padding: 0 12px 16px;
+    overflow-y: auto;
+    box-sizing: border-box;
+
+    >header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 48px;
+      border-bottom: 1px solid var(--pv-line);
+      margin-bottom: 12px;
+      strong {font-size: 13px; font-weight: 700; color: var(--pv-text);}
+      .pv-button {border-radius: 7px; width: 26px; height: 26px; min-height: 26px; padding: 0;}
+    }
+    >h3 {margin: 16px 0 10px; font-size: 12px; font-weight: 700; color: var(--pv-muted); text-transform: uppercase; letter-spacing: 0.5px;}
+    >.pv-button {margin: 4px 3px 4px 0;}
+  }
+  .pv-splitter {
+    width: 4px;
+    flex: none;
+    background: transparent;
+    cursor: col-resize;
+    z-index: 25;
+    transition: background .15s ease;
+    &:hover {
+      background: var(--pv-accent);
+    }
+  }
+
+  // 5. Floating Right Property Inspector & Aux Drawers
+  .pv-inspector, .pv-document-aux {
+    position: absolute;
+    top: 70px;
+    bottom: 60px;
+    right: 16px;
+    width: 300px;
+    background: var(--pv-surface-glass);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--pv-line);
+    border-radius: 18px;
+    box-shadow: var(--pv-shadow-lg);
+    z-index: 30;
+    padding: 14px 16px 20px;
+    overflow-y: auto;
+    box-sizing: border-box;
+
+    >header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 44px;
+      border-bottom: 1px solid var(--pv-line);
+      margin-bottom: 14px;
+      strong {font-size: 13px; font-weight: 700; color: var(--pv-text);}
+      .pv-button {border-radius: 7px; width: 24px; height: 24px; min-height: 24px; padding: 0;}
+    }
+    h3 {
+      border-left: 3px solid var(--pv-accent);
+      padding: 4px 8px;
+      background: var(--pv-bg);
+      border-radius: 0 7px 7px 0;
+      margin: 14px 0 10px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--pv-text);
+    }
+    textarea {width:100%; border-radius: 8px;}
+    .pv-button {margin:5px 3px 5px 0;}
+  }
+
+  // 6. Floating Bottom-Left Multi-Canvas Tabs
+  .pv-pages {
+    position: absolute;
+    bottom: 14px;
+    left: 16px;
+    height: 40px;
+    width: auto;
+    max-width: 50vw;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    background: var(--pv-surface-glass);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--pv-line);
+    border-radius: 14px;
+    box-shadow: var(--pv-shadow-md);
+    z-index: 30;
+    overflow-x: auto;
+
+    >button {
+      flex: none;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      min-height: 28px;
+      background: transparent;
+      padding: 3px 12px;
+      max-width: 190px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--pv-text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: all .12s ease;
+      &[aria-selected=true] {
+        background: var(--pv-accent-bg);
+        border-color: var(--pv-line);
+        color: var(--pv-accent);
+        font-weight: 700;
+        box-shadow: 0 1px 3px rgba(37, 99, 235, 0.1);
+      }
+      &:hover:not([aria-selected=true]) {
+        background: var(--pv-bg);
+      }
+    }
+    .pv-button {
+      width: 26px;
+      height: 26px;
+      min-height: 26px;
+      padding: 0;
+      border-radius: 7px;
+      font-weight: 700;
+    }
+    span {
+      margin-left: 8px;
+      white-space: nowrap;
+      color: var(--pv-muted);
+      font-size: 11px;
+      font-weight: 500;
+    }
+  }
+
+  // 7. Floating Bottom-Right Status & Zoom Dock
+  .pv-editor-status {
+    position: absolute;
+    bottom: 14px;
+    right: 16px;
+    height: 40px;
+    width: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 14px;
+    background: var(--pv-surface-glass);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--pv-line);
+    border-radius: 14px;
+    box-shadow: var(--pv-shadow-md);
+    z-index: 30;
+    font-size: 11px;
+    color: var(--pv-muted);
+    font-weight: 500;
+
+    .pv-button {
+      height: 24px;
+      min-height: 24px;
+      padding: 0 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+  }
+
+  // 8. Minimap
+  .pv-minimap {
+    position: absolute;
+    right: 16px;
+    bottom: 62px;
+    width: 160px;
+    height: 105px;
+    border: 1px solid var(--pv-line);
+    border-radius: 14px;
+    background: var(--pv-surface);
+    z-index: 25;
+    box-shadow: var(--pv-shadow-md);
+    overflow: hidden;
+  }
+
+  .pv-role, .pv-layer-card {
+    padding: 12px;
+    border: 1px solid var(--pv-line);
+    border-radius: 10px;
+    background: var(--pv-bg);
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    .pv-field {margin-bottom:8px;}
+    p {overflow-wrap:anywhere;}
+  }
+  .pv-layer-card {
+    display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+    >input {width:100%; border-radius: 6px;}
+    label {font-size:12px;}
+  }
+  .pv-chen-properties h3 {color:var(--pv-accent); font-size: 12px; font-weight: 700;}
+  .pv-chen-properties .pv-role {font-size:12px;}
+  .pv-chen-editor .pv-sidebar>.pv-layer,.pv-chen-editor .pv-sidebar>h3 {display:none;}
+  // CHEN-UI-008: the library footer already carries the single usage hint.
+  .pv-chen-editor .pv-sidebar>p.pv-note {display:none;}
+  .pv-chen-preview {color:#303746;}
+}
+
+// Full Focus: A drawing document owns its header and the complete work area
+.chiner-home.chiner-home-wb.chiner-home-drawing-focus {
+  grid-template-rows:0 minmax(0,1fr) 0;
+  >.chiner-wb-topbar,>.chiner-wb-statusbar {display:none;}
+  >.chiner-wb-rail {display:none;}
+  >.chiner-home-drawing-area {grid-row:2;grid-column:~"1 / -1";}
+}
+.chiner-home:not(.chiner-home-wb).chiner-home-drawing-focus {
+  display: flex;
+  flex-direction: column;
+  >.chiner-home-drawing-area {flex: 1; min-height: 0;}
+}
+
+// Shapes & Palette
+.platform-v3 {
+  .pv-shape-glyph {width:48px;height:32px;color:var(--pv-accent);display:block;pointer-events:none;}
+  .pv-shape-tile {
+    position:relative;
+    >button:first-child {
+      width:100%;
+      min-height:56px;
+      border: 1px solid var(--pv-line);
+      border-radius: 10px;
+      background: var(--pv-surface);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 4px;
+      transition: all .15s ease;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+      &:hover {
+        border-color: var(--pv-accent);
+        background: var(--er-ui-accent-soft, #edf0ff);
+        box-shadow: none;
+      }
+    }
+    >button.pv-favorite-shape {
+      position:absolute;right:2px;top:2px;padding:1px 3px;font-size:12px;min-height:18px;border:0;background:transparent;
+    }
+  }
+  .pv-library-tabs {
+    display:flex;
+    margin-bottom:12px;
+    gap:3px;
+    padding: 3px;
+    background: var(--pv-bg);
+    border-radius: 8px;
+    border: 1px solid var(--pv-line);
+    button {
+      flex: 1;
+      border:0;
+      background:transparent;
+      padding:4px 6px;
+      font-size:11px;
+      font-weight: 600;
+      border-radius: 6px;
+      color: var(--pv-muted);
+      transition: all .15s ease;
+      &[aria-pressed=true] {
+        background: var(--pv-surface);
+        color: var(--pv-accent);
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      }
+    }
+  }
+  .pv-palette-row {
+    display:flex;gap:8px;align-items:center;margin:10px 0 15px;
+    >button:not(.pv-button) {height:18px;width:18px;min-height:18px;border:0;border-radius:50%;padding:0;}
+  }
+}
+
+.platform-v3 {
+  .pv-tree-editor,.pv-sequence-editor {position:relative;padding-top:42px;box-sizing:border-box;}
+  .pv-tree-svg text,.pv-sequence-preview svg text {font-family:var(--drawing-font);font-size:var(--drawing-font-size);fill:var(--drawing-text-color);font-weight:var(--drawing-text-weight);font-style:var(--drawing-text-style);text-decoration:var(--drawing-text-decoration);}
+}
+
+.platform-v3 .pv-document-shell .pv-graph-editor .pv-tools {display:none;}
+.platform-v3 {
+  .pv-rendered-thumbnail {object-fit:contain;display:block;padding:10px;box-sizing:border-box;background:#ffffff;}
+  .pv-thumbnail-loading,.pv-thumbnail-error {display:flex;align-items:center;justify-content:center;color:var(--pv-muted);font-size:18px;}
+  .pv-thumbnail-error {font-size:12px;flex-direction:column;gap:12px;overflow-wrap:anywhere;}
+}
+.platform-v3 .pv-upgrade-mapping {max-height:50vh;overflow:auto;margin-bottom:18px;table {width:100%;border-collapse:collapse;}td,th {padding:8px;border-bottom:1px solid var(--pv-line);text-align:left;font-size:12px;}select {max-width:220px;}}
+
+.platform-v3 .pv-document-shell .pv-sidebar>.pv-layer,.platform-v3 .pv-document-shell .pv-sidebar>h3 {display:none;}
+
+// CHEN-ER-006: compact Chen library, transparent inline editing and drop affordances.
+.platform-v3 {
+  .pv-chen-library {
+    .pv-shape-search {
+      width: 100%;
+      height: 32px;
+      margin: 0 0 10px;
+      border-radius: 8px;
+      border: 1px solid var(--pv-line);
+      background: var(--pv-bg);
+      padding: 0 10px;
+      font-size: 12px;
+    }
+  }
+  .pv-chen-look {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 10px;
+    width: 100%;
+    box-sizing: border-box;
+    position: relative;
+
+    // V5-R3 Result 2: single 36px row — text first, color dots after; the
+    // trigger spans the same column width as the search box below it.
+    .pv-chen-look-trigger {
+      flex: 1;
+      min-width: 0;
+      height: 36px;
+      padding: 0 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--pv-surface);
+      border: 1px solid var(--pv-line);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all .15s ease;
+
+      &:hover, &.active {
+        border-color: var(--pv-accent);
+        background: var(--pv-bg);
+      }
+      &:focus-visible {outline: 2px solid var(--pv-accent);outline-offset: 1px;}
+      .pv-look-label {
+        display: flex;
+        align-items: center;
+        min-width: 0;
+        flex: 1;
+        overflow: hidden;
+        strong {
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--pv-text);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          line-height: 1.2;
+        }
+      }
+      .pv-theme-dots {
+        display: inline-flex;
+        gap: 3px;
+        flex: none;
+        i {
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          border: 1px solid rgba(0,0,0,0.15);
+          display: inline-block;
+          box-sizing: border-box;
+        }
+      }
+      .pv-look-arrow {
+        font-size: 10px;
+        color: var(--pv-muted);
+        flex: none;
+      }
+    }
+    .pv-button {
+      height: 36px;
+      min-height: 36px;
+      padding: 0 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      flex: none;
+    }
+  }
+
+  // Visual Style & Theme Flyout Popover
+  .pv-chen-look-popover {
+    width: 290px;
+    padding: 14px;
+    background: var(--pv-surface-glass);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--pv-line);
+    border-radius: 16px;
+    box-shadow: var(--pv-shadow-lg);
+    box-sizing: border-box;
+
+    .pv-popover-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      strong {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--pv-text);
+      }
+      .pv-button {
+        width: 24px;
+        height: 24px;
+        min-height: 24px;
+        padding: 0;
+        border-radius: 6px;
+        font-size: 14px;
+      }
+    }
+
+    .pv-popover-section {
+      margin-bottom: 14px;
+      .pv-popover-label {
+        display: block;
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--pv-muted);
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+    }
+
+    .pv-look-style-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+
+      .pv-style-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 8px 4px;
+        background: var(--pv-surface);
+        border: 1px solid var(--pv-line);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all .12s ease;
+        span:not(.pv-card-check) {
+          font-size: 11px;
+          font-weight: 600;
+          color: var(--pv-text);
+        }
+        // v3: the real preview is a ShapeGlyph svg (class pv-shape-glyph); the old
+        // fake-geometry border/gradient rule for that class was removed here because
+        // it overlaid the real glyph inside the style cards.
+        &:hover {
+          border-color: var(--pv-accent);
+          background: var(--pv-bg);
+          transform: translateY(-1px);
+        }
+        &.selected {
+          border-color: var(--pv-accent);
+          background: var(--pv-accent-bg);
+          box-shadow: 0 0 0 2px rgba(37,99,235,0.25);
+          span:not(.pv-card-check) {
+            color: var(--pv-accent);
+          }
+        }
+      }
+    }
+
+    .pv-look-theme-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+
+      .pv-theme-card {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+        padding: 8px 10px;
+        background: var(--pv-surface);
+        border: 1px solid var(--pv-line);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all .12s ease;
+        span:not(.pv-card-check) {
+          font-size: 11px;
+          font-weight: 600;
+          color: var(--pv-text);
+        }
+        .pv-theme-swatch-bar {
+          display: flex;
+          gap: 4px;
+          i {
+            width: 14px;
+            height: 9px;
+            border-radius: 3px;
+            border: 1px solid rgba(0,0,0,.12);
+            display: inline-block;
+            box-sizing: border-box;
+          }
+        }
+        &:hover {
+          border-color: var(--pv-accent);
+          background: var(--pv-bg);
+        }
+        &.selected {
+          border-color: var(--pv-accent);
+          background: var(--pv-accent-bg);
+          box-shadow: 0 0 0 2px rgba(37,99,235,0.25);
+          span:not(.pv-card-check) {
+            color: var(--pv-accent);
+          }
+        }
+      }
+    }
+
+    .pv-popover-footer {
+      margin-top: 10px;
+      .pv-button {
+        width: 100%;
+        height: 30px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+    }
+  }
+
+  .pv-chen-shapes {
+    display: grid;
+    gap: 6px;
+    &.cols-3 {grid-template-columns: repeat(3, 1fr);}
+    &.cols-2 {grid-template-columns: repeat(2, 1fr);}
+    .pv-shape-tile {
+      min-width: 0;
+      >button {
+        width: 100%;
+        min-height: 52px;
+        min-width: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px 2px;
+        background: var(--pv-surface);
+        border: 1px solid var(--pv-line);
+        border-radius: 10px;
+        transition: all .15s ease;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+        .pv-shape-glyph {width: 46px; height: 30px;}
+        &:hover {
+          background: var(--er-ui-accent-soft, #edf0ff);
+          border-color: var(--er-ui-accent, #5265d9);
+          box-shadow: none;
+        }
+        &:focus-visible {
+          background: var(--er-ui-accent-soft, #edf0ff);
+          border-color: var(--er-ui-accent, #5265d9);
+          outline: 2px solid var(--er-ui-accent, #5265d9);
+          outline-offset: 1px;
+          box-shadow: none;
+        }
+      }
+      position: relative;
+    }
+  }
+  .pv-chen-mine-row {display:flex;align-items:center;gap:4px;margin-bottom:6px;.pv-button {flex:1;justify-content:flex-start;overflow:hidden;text-overflow:ellipsis;border-radius:6px;}}
+  .pv-menu-backdrop {position:fixed;inset:0;z-index:80;}
+  .pv-chen-context {
+    position: fixed;
+    z-index: 1000;
+    min-width: 170px;
+    padding: 6px;
+    background: var(--pv-surface-glass);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--pv-line);
+    border-radius: 12px;
+    box-shadow: var(--pv-shadow-lg);
+    button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      border: 0;
+      background: transparent;
+      padding: 7px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--pv-text);
+      transition: all .12s ease;
+      &:hover {background: var(--pv-accent-bg); color: var(--pv-accent);}
+    }
+    small {display:block;padding:4px 8px 2px;color:var(--pv-muted);font-size:10px;}
+  }
+
+  .pv-chen-workarea {
+    // V5-R3 Result 3: content bbox + 160 world-unit margin indicator. Geometry
+    // (left/top/width/height) is written imperatively by updateWorkarea() —
+    // never a fixed inset, never a paper border.
+    position: absolute;
+    border: 1px dashed #b9c4da;
+    border-radius: 0;
+    pointer-events: none;
+    z-index: 3;
+    >span {
+      position: absolute;
+      left: 14px;
+      top: 8px;
+      background: var(--pv-surface);
+      color: var(--pv-muted);
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--pv-line);
+      white-space: nowrap;
+    }
+  }
+  // V5-R3 Result 3: grid toggle for Chen turns the CSS workspace dots off.
+  .pv-chen-editor .pv-graph-wrap.pv-chen-dots-off {background-image: none;}
+  // V5-R3 Result 4: while panning, library + inspector (and their splitters,
+  // and the collapsed-library strip) are hidden via CSS only — every state
+  // (open/closed, widths, selection, tool) survives and is restored on release.
+  .pv-chen-editor.pv-pan-collapse {
+    > .pv-sidebar, > .pv-chen-libstrip, > .pv-chen-inspector, > .pv-splitter {display: none !important;}
+  }
+  .pv-document-shell .pv-main-editor {flex:1;min-height:0;display:flex;flex-direction:column;position:relative;overflow:hidden;}
+  .pv-drop-ghost {display:none;position:fixed;z-index:90;width:26px;height:18px;border:1.5px dashed var(--pv-accent);border-radius:6px;pointer-events:none;background:rgba(37, 99, 235, 0.12);}
+  .pv-drop-owner {outline:2px solid #10b981;outline-offset:2px;}
+  textarea.pv-inline-chen {background:transparent;border:1px dashed #7d90ab;box-shadow:none;padding:2px 4px;line-height:1.25;overflow:auto;outline:none;min-height:0;min-width:0;resize:none;}
+
+  .pv-chen-look-dialog .pv-chen-look-body {
+    min-width: 300px;
+    h4 {margin:12px 0 8px;font-size:13px;font-weight:700;}
+    .pv-chen-style-tiles {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      button {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        padding: 10px 6px;
+        border: 1px solid var(--pv-line);
+        border-radius: 8px;
+        background: var(--pv-surface);
+        transition: all .15s ease;
+        &.selected {border: 2px solid var(--pv-accent); background: var(--pv-accent-bg);}
+      }
+      .pv-chen-style-preview {
+        width: 56px;
+        height: 30px;
+        border: 1.5px solid var(--pv-accent);
+        border-radius: 4px;
+        background: #fff;
+        &.style-sketch {border-radius: 14px 5px 12px 6px / 8px 13px 6px 11px;}
+        &.style-oil {background: repeating-linear-gradient(45deg,#fff 0 4px,#f6e3c8 4px 8px);}
+      }
+    }
+    .pv-chen-theme-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      button {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        border: 1px solid var(--pv-line);
+        border-radius: 8px;
+        background: var(--pv-surface);
+        &.selected {border-color: var(--pv-accent); background: var(--pv-accent-bg);}
+      }
+      .pv-chen-swatches {display:inline-flex;gap:3px;i {width:14px;height:14px;border-radius:50%;border:1px solid #ffffff88;}}
+    }
+    .pv-chen-look-actions {display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;}
+  }
+}
+
+// Light & Dark Theme Tokens
+.platform-v3.pv-theme-light {
+  --pv-surface: #ffffff;
+  --pv-surface-glass: rgba(255, 255, 255, 0.94);
+  --pv-bg: #f8fafc;
+  --pv-line: #e2e8f0;
+  --pv-text: #1e293b;
+  --pv-muted: #64748b;
+  --pv-accent: #2563eb;
+  --pv-accent-bg: #eff6ff;
+  --pv-shadow-sm: 0 4px 12px -2px rgba(15, 23, 42, 0.05);
+  --pv-shadow-md: 0 10px 28px -4px rgba(15, 23, 42, 0.09), 0 4px 10px -2px rgba(15, 23, 42, 0.03);
+  --pv-shadow-lg: 0 18px 42px -6px rgba(15, 23, 42, 0.14), 0 8px 18px -4px rgba(15, 23, 42, 0.06);
+}
+.platform-v3.pv-theme-dark {
+  --pv-surface: #1e293b;
+  --pv-surface-glass: rgba(30, 41, 59, 0.94);
+  --pv-bg: #0f172a;
+  --pv-line: #334155;
+  --pv-text: #f1f5f9;
+  --pv-muted: #94a3b8;
+  --pv-accent: #3b82f6;
+  --pv-accent-bg: #1e3a8a;
+  --pv-shadow-sm: 0 4px 12px -2px rgba(0, 0, 0, 0.3);
+  --pv-shadow-md: 0 10px 28px -4px rgba(0, 0, 0, 0.45);
+  --pv-shadow-lg: 0 18px 42px -6px rgba(0, 0, 0, 0.6);
+  .pv-graph-wrap {
+    background-image: radial-gradient(circle, #334155 1.4px, transparent 1.4px);
+  }
+}
+
+body .platform-v3.pv-theme-light .pv-button.primary {color: #fff; background: var(--pv-accent); border-color: var(--pv-accent);}
+body .platform-v3.pv-theme-dark .pv-button.primary {color: #fff; background: var(--pv-accent); border-color: var(--pv-accent);}
+
+// Dedicated Portal Overlay Styles
+.er-overlay-root {
+  --er-ui-bg: #F5F6FA;
+  --er-ui-canvas: #F8F9FC;
+  --er-ui-surface: #FFFFFF;
+  --er-ui-text: #252B3C;
+  --er-ui-muted: #71798D;
+  --er-ui-line: #E7EAF1;
+  --er-ui-accent: #5265D9;
+  --er-ui-accent-soft: #EDF0FF;
+  --er-ui-success: #258170;
+  --er-ui-overlay-shadow: 0 12px 36px rgba(36, 46, 77, 0.14), 0 2px 6px rgba(36, 46, 77, 0.05);
+
+
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+  // POLISH-v3 #1: the portal must not be light-only — pair the light constants
+  // above with a dark palette so popovers/menus keep their skin in dark themes.
+  &.pv-theme-dark {
+    --er-ui-bg: #0f172a;
+    --er-ui-canvas: #0f172a;
+    --er-ui-surface: #1e293b;
+    --er-ui-text: #f1f5f9;
+    --er-ui-muted: #94a3b8;
+    --er-ui-line: #334155;
+    --er-ui-accent: #3b82f6;
+    --er-ui-accent-soft: #1e3a8a;
+    --er-ui-success: #34d399;
+    --er-ui-overlay-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.35);
+  }
+  color: var(--er-ui-text);
+
+  .er-tooltip.lighttip {
+    background: var(--er-ui-surface) !important;
+    color: var(--er-ui-text) !important;
+    border: 1px solid var(--er-ui-line) !important;
+    border-radius: 6px !important;
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    box-shadow: 0 4px 12px rgba(36, 46, 77, 0.08), 0 1px 3px rgba(36, 46, 77, 0.04) !important;
+    white-space: nowrap !important;
+    pointer-events: none !important;
+    // z-index intentionally NOT forced: popover-card name tips carry a higher
+    // inline z (300) so they layer above the open look popover (200).
+  }
+
+  .pv-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    background: transparent;
+  }
+
+  .pv-chen-context.er-context {
+    background: var(--er-ui-surface) !important;
+    border: 1px solid var(--er-ui-line) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 12px 36px rgba(36, 46, 77, 0.14), 0 2px 6px rgba(36, 46, 77, 0.05) !important;
+    padding: 6px !important;
+    min-width: 176px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 2px !important;
+
+    button {
+      display: flex !important;
+      align-items: center !important;
+      width: 100% !important;
+      height: 32px !important;
+      line-height: 32px !important;
+      padding: 0 10px !important;
+      border: 0 !important;
+      background: transparent !important;
+      border-radius: 6px !important;
+      font-size: 12px !important;
+      font-weight: 500 !important;
+      color: var(--er-ui-text) !important;
+      cursor: pointer !important;
+      text-align: left !important;
+      transition: background 0.12s ease, color 0.12s ease !important;
+      &:hover, &:focus {
+        background: var(--er-ui-accent-soft) !important;
+        color: var(--er-ui-accent) !important;
+        outline: none !important;
+      }
+    }
+    .pv-menu-divider {
+      height: 1px !important;
+      background: var(--er-ui-line) !important;
+      margin: 4px 6px !important;
+    }
+  }
+
+  .pv-chen-look-popover {
+    width: 366px !important;
+    max-width: calc(100vw - 24px) !important;
+    background: var(--er-ui-surface) !important;
+    border: 1px solid var(--er-ui-line) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 12px 36px rgba(36, 46, 77, 0.14), 0 2px 6px rgba(36, 46, 77, 0.05) !important;
+    padding: 16px !important;
+    box-sizing: border-box !important;
+
+    .pv-popover-header {
+      display: flex !important;
+      align-items: center !important;
+      justify-content: space-between !important;
+      margin-bottom: 12px !important;
+      strong {
+        font-size: 13px !important;
+        font-weight: 700 !important;
+        color: var(--er-ui-text) !important;
+      }
+      .pv-button {
+        width: 24px !important;
+        height: 24px !important;
+        min-height: 24px !important;
+        padding: 0 !important;
+        border: 0 !important;
+        background: transparent !important;
+        border-radius: 6px !important;
+        font-size: 16px !important;
+        color: var(--er-ui-muted) !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        &:hover {
+          background: var(--er-ui-accent-soft) !important;
+          color: var(--er-ui-accent) !important;
+        }
+      }
+    }
+
+    .pv-popover-section {
+      margin-bottom: 16px !important;
+      .pv-popover-label {
+        display: block !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        color: var(--er-ui-muted) !important;
+        margin-bottom: 8px !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+      }
+    }
+
+    .pv-look-style-grid {
+      display: grid !important;
+      grid-template-columns: repeat(3, 1fr) !important;
+      gap: 8px !important;
+
+      .pv-style-card {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 6px !important;
+        padding: 8px 4px !important;
+        background: var(--er-ui-surface) !important;
+        border: 1px solid var(--er-ui-line) !important;
+        border-radius: 8px !important;
+        cursor: pointer !important;
+        transition: all 0.12s ease !important;
+        span:not(.pv-card-check) {
+          font-size: 11px !important;
+          font-weight: 500 !important;
+          color: var(--er-ui-text) !important;
+        }
+        .pv-style-glyph-preview {
+          width: 52px !important;
+          height: 32px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          svg { width: 100% !important; height: 100% !important; }
+        }
+        &:hover {
+          border-color: var(--er-ui-accent) !important;
+          background: var(--er-ui-canvas) !important;
+        }
+        &.active, &.selected {
+          border-color: var(--er-ui-accent) !important;
+          background: var(--er-ui-accent-soft) !important;
+          box-shadow: 0 0 0 2px rgba(82, 101, 217, 0.35) !important;
+          span:not(.pv-card-check) {
+            color: var(--er-ui-accent) !important;
+            font-weight: 600 !important;
+          }
+        }
+      }
+    }
+
+    .pv-look-theme-grid {
+      display: grid !important;
+      grid-template-columns: repeat(2, 1fr) !important;
+      gap: 8px !important;
+
+      .pv-theme-card {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 6px !important;
+        padding: 8px 6px !important;
+        background: var(--er-ui-surface) !important;
+        border: 1px solid var(--er-ui-line) !important;
+        border-radius: 8px !important;
+        cursor: pointer !important;
+        transition: all 0.12s ease !important;
+        span:not(.pv-card-check) {
+          font-size: 11px !important;
+          font-weight: 500 !important;
+          color: var(--er-ui-text) !important;
+        }
+        .pv-theme-mini {display: block !important;width: 100% !important;height: 38px !important;}
+        .pv-theme-swatch-bar {
+          display: inline-flex !important;
+          gap: 4px !important;
+          justify-content: center !important;
+          i {
+            width: 14px !important;
+            height: 9px !important;
+            border-radius: 3px !important;
+            border: 1px solid rgba(0,0,0,.12) !important;
+            display: inline-block !important;
+            box-sizing: border-box !important;
+          }
+        }
+        &:hover {
+          border-color: var(--er-ui-accent) !important;
+          background: var(--er-ui-canvas) !important;
+        }
+        &.active, &.selected {
+          border-color: var(--er-ui-accent) !important;
+          background: var(--er-ui-accent-soft) !important;
+          box-shadow: 0 0 0 2px rgba(82, 101, 217, 0.35) !important;
+          span:not(.pv-card-check) {
+            color: var(--er-ui-accent) !important;
+            font-weight: 600 !important;
+          }
+        }
+      }
+    }
+
+    .pv-popover-footer {
+      display: flex !important;
+      align-items: center !important;
+      justify-content: space-between !important;
+      gap: 8px !important;
+      margin-top: 14px !important;
+      padding-top: 12px !important;
+      border-top: 1px solid var(--er-ui-line) !important;
+      .pv-button {
+        height: 30px !important;
+        padding: 0 10px !important;
+        border-radius: 6px !important;
+        font-size: 12px !important;
+        cursor: pointer !important;
+        border: 1px solid var(--er-ui-line) !important;
+        background: var(--er-ui-surface) !important;
+        color: var(--er-ui-text) !important;
+        &:hover {
+          background: var(--er-ui-canvas) !important;
+        }
+        &.primary {
+          background: var(--er-ui-accent) !important;
+          border-color: var(--er-ui-accent) !important;
+          color: var(--er-ui-surface) !important;
+          &:hover {
+            background: var(--er-ui-accent) !important;
+          }
+        }
+      }
+    }
+  }
+}
+
+// =====================================================================
+// CHEN-UI-008 v3 rework: docked 64/48/38 frame, borderless library,
+// real style/theme previews, compact format bar + color popover,
+// icon menus with submenus, right tool rail, resize/编辑 states.
+// All scoped under .pv-chen-shell / .pv-chen-editor — other diagram
+// types keep the legacy layout above.
+// =====================================================================
+.platform-v3 {
+  // ---- V5-R3 Result 1: blue skin tokens, scoped to the Chen shell and the
+  // Chen-owned portal popovers (design 样式基线: text #26324A, secondary
+  // #68768D, line #E0E6F0, workspace #F1F4FA, primary #3868BD, selected
+  // #EAF0FC). Non-Chen canvases keep the legacy palette above. ----
+  .pv-chen-shell,
+  .pv-chen-look-popover,
+  .pv-color-popover,
+  .pv-chen-context {
+    --pv-accent: #3868bd;
+    --pv-accent-bg: #eaf0fc;
+    --pv-bg: #f1f4fa;
+    --pv-line: #e0e6f0;
+    --pv-text: #26324a;
+    --pv-muted: #68768d;
+    --er-ui-accent: #3868bd;
+    --er-ui-accent-soft: #eaf0fc;
+    --er-ui-line: #e0e6f0;
+    --er-ui-text: #26324a;
+    --er-ui-muted: #68768d;
+  }
+  // ---- Docked shell frame ----
+  .pv-chen-shell .pv-document-header.pv-chen-header {
+    height: 64px;
+    padding: 0 20px;
+    align-items: center;
+    background: var(--pv-surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .pv-chen-header-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+    .pv-header-icon-btn {
+      width: 30px;height: 30px;min-height: 30px;padding: 0;
+      display: inline-flex;align-items: center;justify-content: center;
+      border: 1px solid var(--pv-line);border-radius: 8px;
+      background: var(--pv-surface);color: var(--pv-text);cursor: pointer;
+      transition: all .12s ease;
+      &:hover, &.active {border-color: var(--er-ui-accent);color: var(--er-ui-accent);background: var(--er-ui-accent-soft);}
+    }
+    .pv-chen-export-btn {
+      display: inline-flex;align-items: center;gap: 5px;
+      height: 30px;padding: 0 12px;
+      border: 0;border-radius: 8px;cursor: pointer;
+      // V5-R3: brand/export blue (#4F70B0, design 样式基线)
+      background: #4f70b0;color: #fff;font-size: 12px;font-weight: 600;
+      transition: background .12s ease;
+      &:hover, &.active {background: #43619d;}
+      svg {opacity: .9;}
+    }
+    .pv-command-menu.pv-anchored-right {left: auto;right: 0;}
+  }
+  // Menu: group heads, icons, submenu
+  .pv-menu-grouphead {
+    padding: 6px 10px 3px;
+    font-size: 10px;font-weight: 600;letter-spacing: .5px;
+    color: var(--er-ui-muted);text-transform: uppercase;
+    cursor: default;user-select: none;
+  }
+  .pv-command-menu button[role=menuitem] .pv-menu-item-icon {
+    display: inline-flex;align-items: center;justify-content: center;
+    width: 18px;flex: none;margin-right: 8px;color: var(--er-ui-muted);
+  }
+  .pv-command-menu button[role=menuitem]:hover:not(:disabled) .pv-menu-item-icon,
+  .pv-command-menu button[role=menuitem]:focus:not(:disabled) .pv-menu-item-icon {color: var(--er-ui-accent);}
+  .pv-menu-subwrap {position: relative;}
+  .pv-menu-sub-arrow {margin-left: auto;font-size: 13px;color: var(--er-ui-muted);line-height: 1;padding-left: 10px;}
+  .pv-menu-subwrap > button[role=menuitem] {width: 100%;display: flex;align-items: center;}
+  .pv-submenu {
+    position: absolute;left: calc(100% + 2px);top: -6px;
+    min-width: 176px;padding: 6px;z-index: 210;
+    background: #ffffff;border: 1px solid var(--er-ui-line);border-radius: 8px;
+    box-shadow: var(--er-ui-overlay-shadow);
+    button[role=menuitem] {
+      display: flex;align-items: center;width: 100%;height: 32px;
+      padding: 0 10px;border: 0;background: transparent;border-radius: 6px;
+      font-size: 12px;color: var(--er-ui-text);cursor: pointer;
+      &:hover:not(:disabled), &:focus:not(:disabled) {background: var(--er-ui-accent-soft);color: var(--er-ui-accent);outline: none;}
+    }
+  }
+  // ---- Docked bottom page bar (38px) ----
+  .pv-chen-shell .pv-pages.pv-chen-pages {
+    position: static;bottom: auto;left: auto;
+    height: 38px;min-height: 38px;width: 100%;max-width: none;
+    display: flex;align-items: center;gap: 4px;
+    padding: 0 12px;margin: 0;
+    background: var(--pv-surface);
+    backdrop-filter: none;-webkit-backdrop-filter: none;
+    border-top: 1px solid var(--pv-line);
+    border-radius: 0;box-shadow: none;
+    z-index: 20;flex: none;box-sizing: border-box;
+    .pv-pages-icon {display: inline-flex;color: var(--pv-muted);margin-right: 2px;}
+    > button {
+      min-height: 26px;padding: 2px 10px;border-radius: 6px;font-size: 12px;
+      &[aria-selected=true] {
+        background: var(--er-ui-accent-soft);border-color: transparent;
+        color: var(--er-ui-accent);box-shadow: none;font-weight: 600;
+      }
+    }
+    .pv-pages-stats {
+      margin-left: auto;display: inline-flex;align-items: center;gap: 8px;
+      color: var(--pv-muted);font-size: 11px;white-space: nowrap;
+      .pv-button {height: 20px;min-height: 20px;padding: 0 6px;font-size: 11px;border-radius: 5px;}
+    }
+  }
+  // ---- Chen editor: bottom tool dock, library strip, cursors, states ----
+  // V5-R3 R3 rectification: the dock is a floating centered card over the
+  // workspace bottom (feedback-r3/01) — content width, 54px tall, 12–14px
+  // radius, thin border and a restrained shadow. It no longer occupies a
+  // full-width row in the flow, never touches the page tab bar below the
+  // workspace, and stays clear of the bottom-right zoom dock. Absolute +
+  // left 50% inside .pv-editor-main keeps it centered in the CURRENT viewport,
+  // so it re-centers itself when the pan-temporary collapse widens the
+  // workspace. Blue accents unchanged.
+  .pv-chen-editor .pv-chen-dock {
+    position: absolute;left: 50%;bottom: 12px;
+    transform: translateX(-50%);
+    height: 54px;min-height: 54px;width: auto;max-width: calc(100% - 24px);
+    display: flex;align-items: center;gap: 4px;
+    padding: 0 14px;box-sizing: border-box;
+    background: var(--pv-surface);
+    border: 1px solid var(--pv-line);
+    border-radius: 13px;
+    box-shadow: 0 6px 18px -6px rgba(36,46,77,.14), 0 2px 6px -2px rgba(36,46,77,.06);
+    z-index: 24;
+    .pv-dock-btn {
+      width: 34px;height: 34px;min-height: 34px;padding: 0;
+      display: inline-flex;align-items: center;justify-content: center;
+      border: 0;background: transparent;border-radius: 8px;
+      color: var(--pv-text);cursor: pointer;transition: all .12s ease;
+      &:hover:not(:disabled) {background: var(--pv-bg);color: var(--pv-accent);}
+      &:disabled {opacity: .35;cursor: not-allowed;}
+      &.active, &[aria-pressed=true] {background: var(--pv-accent-bg);color: var(--pv-accent);}
+      &:focus-visible {outline: 2px solid var(--pv-accent);outline-offset: 1px;}
+    }
+    .pv-dock-sep {width: 1px;height: 22px;background: var(--pv-line);margin: 0 8px;flex: none;}
+  }
+  // Tool cursors for the placement/pan tools (data-tool on the editor root)
+  .pv-chen-editor[data-tool=hand] .pv-graph-wrap {cursor: grab;&:active {cursor: grabbing;}}
+  .pv-chen-editor[data-tool=text] .pv-graph-wrap,
+  .pv-chen-editor[data-tool=note] .pv-graph-wrap {cursor: crosshair;}
+  // V5-R3 Result 4: re-expand strip for a permanently collapsed library
+  .pv-chen-editor .pv-chen-libstrip {
+    flex: none;width: 26px;height: 100%;box-sizing: border-box;
+    display: flex;flex-direction: column;align-items: center;
+    padding-top: 10px;background: var(--pv-surface);
+    border-right: 1px solid var(--pv-line);
+    button {
+      width: 20px;height: 26px;min-height: 26px;padding: 0;
+      display: inline-flex;align-items: center;justify-content: center;
+      border: 0;background: transparent;border-radius: 6px;
+      color: var(--pv-muted);font-size: 13px;cursor: pointer;
+      &:hover {background: var(--pv-accent-bg);color: var(--pv-accent);}
+      &:focus-visible {outline: 2px solid var(--pv-accent);outline-offset: 1px;}
+    }
+  }
+  // V5-R3 Result 1: zoom dock at the workspace bottom-right, vertically
+  // aligned with the floating tool dock (bottom 12px + 54px/2 ≈ center 39px).
+  .pv-chen-zoomdock {
+    position: absolute;right: 12px;left: auto;transform: none;
+    bottom: 24px;z-index: 26;
+    display: inline-flex;align-items: center;gap: 2px;
+    height: 30px;padding: 0 4px;
+    background: var(--pv-surface-glass);
+    backdrop-filter: blur(14px);-webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--pv-line);border-radius: 9px;
+    box-shadow: var(--pv-shadow-md);
+    button {
+      min-width: 26px;height: 24px;min-height: 24px;padding: 0 6px;
+      display: inline-flex;align-items: center;justify-content: center;
+      border: 0;background: transparent;border-radius: 6px;
+      color: var(--pv-text);font-size: 13px;cursor: pointer;
+      &:hover {background: var(--pv-bg);color: var(--pv-accent);}
+      &.active, &[aria-pressed=true] {background: var(--er-ui-accent-soft);color: var(--er-ui-accent);}
+    }
+    span {font-size: 11px;font-weight: 600;color: var(--pv-muted);min-width: 44px;text-align: center;}
+  }
+  // V5-R3 R3 rectification 4: the compact Chen format bar embedded in the
+  // on-demand inspector (multi-selection mixed values + new-shape defaults).
+  // Its horizontal layout was designed for the removed full-width top bar —
+  // inside the 244–360px panel it wraps into rows, drops the bar chrome and
+  // keeps every control reachable (low-frequency items stay in the 排版 menu).
+  .pv-chen-inspector .pv-insp-formatwrap .pv-formatbar.pv-chen-formatbar {
+    width: 100%;height: auto;min-height: 0;
+    flex-wrap: wrap;row-gap: 8px;
+    padding: 2px 0 4px;
+    background: transparent;border: 0;border-radius: 0;box-shadow: none;overflow-x: visible;
+    .pv-group-end {margin-left: 0;width: 100%;}
+    .pv-format-scope {flex: 1 1 100%;max-width: none;text-align: left;}
+  }
+  // V5-R3 R3 rectification 4: on-demand inspector toggle at the workspace
+  // top-right (design feedback-r3/01). With nothing selected it opens the
+  // panel straight onto the new-shape defaults section.
+  .pv-chen-insp-toggle {
+    position: absolute;top: 12px;right: 12px;z-index: 26;
+    height: 28px;padding: 0 12px;box-sizing: border-box;
+    display: inline-flex;align-items: center;gap: 5px;
+    background: var(--pv-surface);
+    border: 1px solid var(--pv-line);border-radius: 8px;
+    font-size: 12px;font-weight: 600;color: var(--pv-text);cursor: pointer;
+    transition: all .12s ease;
+    &:hover {border-color: var(--pv-accent);color: var(--pv-accent);}
+    &.active, &[aria-pressed=true] {background: var(--pv-accent-bg);border-color: var(--pv-accent);color: var(--pv-accent);}
+    &:focus-visible {outline: 2px solid var(--pv-accent);outline-offset: 1px;}
+  }
+  .pv-resize-badge {
+    display: none;position: fixed;transform: translateX(-50%);
+    z-index: 60;padding: 2px 8px;border-radius: 6px;
+    background: #2f3b66;color: #fff;font-size: 11px;font-weight: 600;
+    box-shadow: 0 4px 12px rgba(36,46,77,.2);pointer-events: none;
+  }
+  // Eight resize handles visible only while resizing (PNG 07 #04)
+  .pv-graph-host.pv-resizing .x6-widget-transform .x6-widget-transform-resize {
+    &[data-position="top"], &[data-position="bottom"],
+    &[data-position="left"], &[data-position="right"] {display: block !important;}
+  }
+  // Inline editor: white box, solid light border, no dashed clutter (PNG 07 #03)
+  textarea.pv-inline-chen {
+    background: #ffffff;
+    border: 1px solid rgba(82, 101, 217, .55);
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(36,46,77,.12);
+    padding: 2px 5px;line-height: 1.25;outline: none;
+    min-height: 0;min-width: 0;resize: none;white-space: pre;
+    // UAT-009 multi-line: the box grows with its content; if it outgrows the
+    // viewport it scrolls instead of hiding the tail (clientHeight<scrollHeight).
+    overflow: auto;max-height: 60vh;
+  }
+  // Work area boundary: subtle, opt-in only (no permanent blue frame)
+  .pv-chen-workarea {
+    border: 1px dashed #b9c4da;
+    > span {color: var(--pv-muted);}
+  }
+  // ---- Docked Chen inspector ----
+  .pv-graph-editor .pv-chen-inspector {
+    position: static;top: auto;right: auto;bottom: auto;
+    flex: none;height: 100%;
+    width: 268px;
+    background: var(--pv-surface);
+    border-left: 1px solid var(--pv-line);
+    border-radius: 0;box-shadow: none;
+    z-index: 21;padding: 12px 14px 18px;
+    overflow-y: auto;
+    header.pv-insp-tabs {margin-bottom: 4px;display: flex;align-items: center;gap: 4px;
+      // V5-R3: explicit close button (Result 1 — 记住用户选择)
+      .pv-insp-close {width: 22px;height: 22px;min-height: 22px;padding: 0;flex: none;
+        display: inline-flex;align-items: center;justify-content: center;
+        border: 0;background: transparent;border-radius: 5px;
+        font-size: 14px;color: var(--pv-muted);cursor: pointer;
+        &:hover {background: var(--pv-accent-bg);color: var(--pv-accent);}
+        &:focus-visible {outline: 2px solid var(--pv-accent);outline-offset: 1px;}}
+    }
+    .pv-insp-tabbar {
+      display: flex;gap: 2px;flex: 1;min-width: 0;border-bottom: 1px solid var(--pv-line);
+      button {
+        border: 0;background: transparent;cursor: pointer;
+        padding: 6px 12px 7px;font-size: 12px;font-weight: 600;
+        color: var(--pv-muted);border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+        &.active {color: var(--er-ui-accent);border-bottom-color: var(--er-ui-accent);}
+        &:hover {color: var(--er-ui-accent);}
+      }
+    }
+    .pv-insp-head {
+      display: flex;align-items: center;gap: 10px;
+      padding: 10px 2px 8px;
+      .pv-insp-glyph {width: 40px;height: 26px;flex: none;display: flex;align-items: center;justify-content: center;
+        svg {width: 38px;height: 24px;}}
+      strong {display: block;font-size: 13px;color: var(--pv-text);max-width: 180px;
+        white-space: nowrap;overflow: hidden;text-overflow: ellipsis;}
+      small {display: block;font-size: 11px;color: var(--pv-muted);margin-top: 1px;}
+    }
+    .pv-insp-section {
+      margin: 10px 0 14px;
+      h4 {
+        font-size: 11px;font-weight: 700;color: var(--pv-muted);
+        text-transform: uppercase;letter-spacing: .4px;
+        margin: 0 0 8px;
+      }
+      .pv-note {margin-top: 8px;font-size: 11px;color: var(--pv-muted);
+        background: var(--pv-bg);border: 1px solid var(--pv-line);
+        border-radius: 6px;padding: 6px 8px;}
+    }
+    .pv-insp-semantics {border-top: 1px solid var(--pv-line);padding-top: 8px;}
+    .pv-insp-label {display: block;font-size: 11px;color: var(--pv-muted);margin-bottom: 4px;}
+    .pv-insp-field {display: block;margin-bottom: 10px;
+      textarea, input, select {width: 100%;box-sizing: border-box;border-radius: 6px;}
+      textarea {resize: none;line-height: 1.4;padding: 5px 8px;font-size: 12px;}
+    }
+    .pv-insp-grid2 {display: grid;grid-template-columns: 1fr 1fr;gap: 8px;}
+    .pv-insp-num {display: block;
+      .pv-insp-numbox {
+        display: flex;align-items: center;gap: 4px;
+        input {
+          width: 100%;box-sizing: border-box;height: 26px;
+          border: 1px solid var(--pv-line);border-radius: 6px;
+          background: var(--pv-bg);color: var(--pv-text);
+          font-size: 12px;text-align: left;padding: 0 8px;outline: none;
+          &:focus-visible {border-color: var(--pv-accent);}
+          &::-webkit-inner-spin-button, &::-webkit-outer-spin-button {-webkit-appearance: none;}
+        }
+        small {font-size: 10px;color: var(--pv-muted);}
+      }
+    }
+    .pv-insp-color {margin-bottom: 10px;
+      .pv-insp-swatch-btn {
+        display: inline-flex;align-items: center;gap: 8px;
+        height: 26px;padding: 0 8px;width: 100%;box-sizing: border-box;
+        border: 1px solid var(--pv-line);border-radius: 6px;
+        background: var(--pv-bg);cursor: pointer;
+        code {font-size: 11px;color: var(--pv-text);font-family: ui-monospace, Menlo, monospace;}
+        &:hover {border-color: var(--pv-accent);}
+      }
+    }
+    .pv-insp-seg {display: inline-flex;border: 1px solid var(--pv-line);border-radius: 7px;overflow: hidden;margin-bottom: 10px;
+      button {border: 0;background: transparent;padding: 4px 10px;font-size: 11px;font-weight: 600;color: var(--pv-muted);cursor: pointer;
+        &.active {background: var(--er-ui-accent-soft);color: var(--er-ui-accent);}}
+    }
+    .pv-insp-alignrow {display: flex;gap: 4px;flex-wrap: wrap;margin-bottom: 8px;
+      button {width: 28px;height: 26px;min-height: 26px;display: inline-flex;align-items: center;justify-content: center;
+        border: 1px solid var(--pv-line);border-radius: 6px;background: var(--pv-bg);color: var(--pv-text);cursor: pointer;
+        &:hover {border-color: var(--pv-accent);color: var(--pv-accent);}
+        &.active {background: var(--er-ui-accent-soft);border-color: var(--er-ui-accent);color: var(--er-ui-accent);}}
+    }
+    .pv-insp-actions {display: flex;gap: 6px;flex-wrap: wrap;
+      .pv-button {flex: none;font-size: 11px;height: 26px;min-height: 26px;padding: 0 10px;border-radius: 6px;}}
+    .pv-insp-editnote {margin-top: 4px;}
+  }
+  // ---- Chen aux drawer docked under header (rail removed in V5-R3) ----
+  .pv-chen-shell .pv-document-aux.pv-chen-aux {
+    top: 64px;bottom: 38px;right: 12px;
+    border-radius: 10px;
+    width: 300px;
+  }
+  // ---- Format bar (chen compact) ----
+  .pv-formatbar.pv-chen-formatbar {
+    gap: 10px;
+    // Responsive bar, never a horizontal scrollbar (POLISH-v3 #4): the scope chip
+    // truncates and low-frequency controls collapse into "more" at narrow widths.
+    overflow-x: visible;
+    .pv-icon-btn {width: 24px;height: 24px;min-height: 24px;padding: 0;border: 0;background: transparent;border-radius: 6px;
+      font-size: 14px;color: var(--pv-muted);display: inline-flex;align-items: center;justify-content: center;cursor: pointer;
+      &:hover:enabled {background: var(--er-ui-accent-soft);color: var(--er-ui-accent);}}
+    .pv-color-pill {flex: none;white-space: nowrap;}
+    // POLISH-v3 #4 re-fix: every chen-bar group keeps its size — the segmented
+    // B/I/U group is the only shrinkable item otherwise, and a long scope chip
+    // collapsed it (overflow:hidden clipped all but the first button).
+    .pv-format-group {flex: none;}
+    .pv-group-tools {gap: 2px;}
+    .pv-tool-btn {
+      width: 28px;height: 28px;min-height: 28px;padding: 0;
+      display: inline-flex;align-items: center;justify-content: center;
+      border: 0;background: transparent;border-radius: 6px;
+      color: var(--pv-text);cursor: pointer;transition: all .12s ease;
+      &:hover:not(:disabled) {background: var(--pv-bg);color: var(--pv-accent);}
+      &:disabled {opacity: .35;cursor: not-allowed;}
+      &.active, &[aria-pressed=true] {background: var(--er-ui-accent-soft);color: var(--er-ui-accent);}
+      &:focus-visible {outline: 2px solid var(--er-ui-accent);outline-offset: 1px;}
+    }
+    .pv-tool-seg {border: 1px solid var(--pv-line);border-radius: 8px;background: var(--pv-bg);padding: 1px;gap: 0;
+      .pv-tool-btn + .pv-tool-btn {border-left: 1px solid var(--pv-line);border-radius: 0;}}
+    .pv-kind-chip {
+      flex: none;min-width: 44px;max-width: 90px;
+      display: inline-flex;align-items: center;justify-content: center;
+      height: 26px;padding: 0 10px;box-sizing: border-box;
+      background: var(--pv-bg);border: 1px solid var(--pv-line);border-radius: 6px;
+      font-size: 11px;font-weight: 600;color: var(--pv-text);
+      white-space: nowrap;overflow: hidden;text-overflow: ellipsis;
+    }
+    .pv-compact-input {
+      width: 44px;height: 28px;box-sizing: border-box;
+      border: 1px solid var(--pv-line);border-radius: 7px;
+      background: var(--pv-bg);color: var(--pv-text);
+      font-size: 12px;font-weight: 600;text-align: center;padding: 0 4px;outline: none;
+      &:focus-visible, &:focus {border-color: var(--pv-accent);background: var(--pv-surface);}
+      &::-webkit-inner-spin-button, &::-webkit-outer-spin-button {-webkit-appearance: none;margin: 0;}
+    }
+    .pv-width-input {width: 40px;}
+    .pv-text-color-btn {gap: 3px;}
+    .pv-more-anchor {position: relative;}
+    // UAT-009 explicit typography entry ("排版"): icon + short label, flexes with
+    // the bar but never clips — the scope chip remains the only shrinkable item.
+    .pv-typo-btn {width: auto;gap: 4px;padding: 0 9px;
+      .pv-typo-label {font-size: 12px;font-weight: 600;white-space: nowrap;}}
+    // .pv-more-menu itself renders through OverlayPortal (NOT a format-bar
+    // descendant), so its skin lives in the top-level .er-overlay-root block below.
+    .pv-group-end {margin-left: auto;}
+    // The scope chip is the ONLY flexible item: it fills leftover space and can
+    // shrink to nothing, so with every group flex:none the bar can never spill.
+    .pv-format-scope {flex: 1 1 auto;min-width: 0;max-width: 150px;text-align: center;overflow: hidden;text-overflow: ellipsis;white-space: nowrap;}
+  }
+  // Responsive folding (POLISH-v3 #4 + coordinator re-fix). The chen shell spends
+  // ~740px on sidebar/inspector/rail, so the bar is narrow far above the 1280
+  // viewport mark: at <=1700 the font select, kind chip and align group fold into
+  // the "more" menu; at <=1280 the bar also drops dividers and tightens gaps.
+  @media (max-width: 1700px) {
+    .pv-formatbar.pv-chen-formatbar {
+      .pv-group-font .pv-font-select {display: none;}
+      .pv-kind-chip {display: none;}
+      .pv-group-align {display: none;}
+    }
+  }
+  @media (max-width: 1280px) {
+    .pv-formatbar.pv-chen-formatbar {
+      gap: 6px;
+      .pv-format-divider {display: none;}
+      .pv-format-scope {max-width: 90px;}
+    }
+  }
+  // ---- Chen library: borderless tiles, group counts, single footer ----
+  .pv-chen-library {
+    .pv-shape-search-wrap {
+      display: flex;align-items: center;gap: 6px;
+      height: 30px;padding: 0 10px;margin: 0 0 10px;
+      border: 1px solid var(--pv-line);border-radius: 8px;
+      background: var(--pv-bg);box-sizing: border-box;
+      color: var(--pv-muted);
+      &:focus-within {border-color: var(--pv-accent);background: var(--pv-surface);}
+      .pv-shape-search {border: 0;background: transparent;margin: 0;padding: 0;height: 26px;flex: 1;min-width: 0;box-shadow: none;}
+    }
+    .pv-shape-pack.group .grouphead {
+      display: flex;align-items: baseline;gap: 8px;
+      padding: 6px 2px 6px;
+      font-size: 12px;font-weight: 700;color: var(--pv-text);
+      .groupcount {margin-left: auto;font-size: 11px;font-weight: 600;color: var(--pv-muted);}
+    }
+    .pv-chen-shapes .pv-shape-tile > button.shape {
+      border: 1px solid transparent;
+      background: transparent;
+      border-radius: 8px;
+      box-shadow: none;
+      min-height: 44px;min-width: 44px;
+      &:hover {
+        background: var(--er-ui-accent-soft);
+        border-color: transparent;
+        box-shadow: none;
+      }
+      &:focus-visible {
+        background: var(--er-ui-accent-soft);
+        outline: 2px solid var(--er-ui-accent);outline-offset: 1px;
+      }
+    }
+    .pv-chen-lib-bottom {
+      margin-top: 10px;padding: 8px 2px 0;
+      border-top: 1px solid var(--pv-line);
+      .pv-chen-lib-layers {
+        display: inline-flex;align-items: center;gap: 6px;
+        height: 28px;padding: 0 10px;
+        border: 1px solid var(--pv-line);border-radius: 7px;
+        background: var(--pv-bg);color: var(--pv-text);
+        font-size: 12px;font-weight: 600;cursor: pointer;
+        transition: all .12s ease;
+        &:hover {border-color: var(--pv-accent);color: var(--pv-accent);}
+        &:focus-visible {outline: 2px solid var(--pv-accent);outline-offset: 1px;}
+      }
+    }
+    .libraryfoot {
+      margin-top: 8px;padding: 6px 2px 0;
+      border-top: 1px solid var(--pv-line);
+      color: var(--pv-muted);font-size: 11px;line-height: 1.7;
+      p {margin: 0;}
+      .lib-foot-key {
+        display: inline-block;padding: 0 5px;
+        border: 1px solid var(--pv-line);border-radius: 4px;
+        font-size: 10px;line-height: 16px;background: var(--pv-bg);
+      }
+    }
+  }
+  .pv-chen-look .pv-chen-look-trigger {height: 36px;border-radius: 8px;box-shadow: none;}
+  // ---- Style/theme flyout cards ----
+  .pv-chen-look-popover {
+    .pv-popover-label-row {display: flex;align-items: baseline;justify-content: space-between;margin-bottom: 8px;
+      .pv-popover-label {margin-bottom: 0;}
+      small {font-size: 10px;color: var(--er-ui-muted);font-weight: 500;}}
+    .pv-look-note {margin: 0 0 4px;font-size: 11px;color: var(--er-ui-muted);line-height: 1.5;}
+    .pv-look-style-grid .pv-style-card, .pv-look-theme-grid .pv-theme-card {position: relative;}
+    .pv-card-check {
+      position: absolute;top: 5px;right: 5px;z-index: 2;
+      width: 16px;height: 16px;border-radius: 50%;
+      display: none;align-items: center;justify-content: center;
+      background: var(--er-ui-accent);color: #fff;
+    }
+    .pv-style-card.selected .pv-card-check, .pv-theme-card.selected .pv-card-check {display: inline-flex;}
+    .pv-style-card .pv-style-glyph-preview {width: 64px;height: 36px;display: flex;align-items: center;justify-content: center;
+      svg {width: 62px;height: 36px;}}
+    .pv-theme-card {
+      display: flex;flex-direction: column;align-items: stretch;gap: 6px;
+      .pv-theme-mini {width: 100%;height: 38px;display: block;}
+      .pv-theme-swatch-bar {display: inline-flex;gap: 4px;justify-content: center;
+        i {width: 14px;height: 9px;border-radius: 3px;border: 1px solid rgba(0,0,0,.12);}}
+    }
+    .pv-popover-footer {
+      .pv-apply-split {position: relative;display: inline-flex;}
+      .pv-apply-caret {padding: 0 6px;}
+      .pv-apply-menu {
+        position: absolute;right: 0;bottom: calc(100% + 4px);
+        min-width: 170px;padding: 5px;z-index: 2;
+        background: #ffffff;border: 1px solid var(--er-ui-line);border-radius: 8px;
+        box-shadow: var(--er-ui-overlay-shadow);
+        button {display: block;width: 100%;text-align: left;padding: 7px 10px;border: 0;background: transparent;
+          border-radius: 6px;font-size: 12px;color: var(--er-ui-text);cursor: pointer;
+          &:hover {background: var(--er-ui-accent-soft);color: var(--er-ui-accent);}}
+      }
+    }
+  }
+  // ---- Color popover (format bar + inspector) ----
+  .pv-color-popover {
+    position: fixed;z-index: 210;width: 244px;box-sizing: border-box;
+    padding: 12px;
+    background: var(--pv-surface);
+    border: 1px solid var(--er-ui-line);border-radius: 10px;
+    box-shadow: var(--er-ui-overlay-shadow);
+    header {display: flex;align-items: center;justify-content: space-between;margin-bottom: 10px;
+      strong {font-size: 12px;font-weight: 700;color: var(--pv-text);}
+      button {border: 0;background: transparent;font-size: 14px;color: var(--pv-muted);cursor: pointer;border-radius: 5px;width: 22px;height: 22px;
+        &:hover {background: var(--er-ui-accent-soft);color: var(--er-ui-accent);}}
+    }
+    section {margin-bottom: 10px;
+      > label {display: block;font-size: 10px;font-weight: 600;color: var(--pv-muted);margin-bottom: 6px;letter-spacing: .3px;}
+    }
+    .pv-swatch-grid {display: grid;grid-template-columns: repeat(8, 1fr);gap: 5px;
+      button {
+        width: 22px;height: 22px;border-radius: 5px;border: 1px solid rgba(0,0,0,.12);
+        cursor: pointer;display: inline-flex;align-items: center;justify-content: center;
+        color: #fff;padding: 0;
+        &:hover {transform: scale(1.06);}
+        &.current {outline: 2px solid var(--er-ui-accent);outline-offset: 1px;}
+        svg {filter: drop-shadow(0 0 1px rgba(0,0,0,.5));}
+      }
+    }
+    .pv-color-fields {
+      // POLISH-v3 #2: HEX and opacity are two independent grid columns — neither
+      // may squeeze the other, so no flex shrinking; each column keeps min-width:0.
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 10px;
+      align-items: start;
+      label {min-width: 0;box-sizing: border-box;font-size: 10px;font-weight: 600;color: var(--pv-muted);
+        display: flex;flex-direction: column;align-items: stretch;
+        input[type=text] {
+          display: block;width: 100%;min-width: 0;box-sizing: border-box;height: 26px;margin-top: 4px;
+          border: 1px solid var(--pv-line);border-radius: 6px;
+          background: var(--pv-bg);color: var(--pv-text);font-size: 11px;
+          font-family: ui-monospace, Menlo, monospace;padding: 0 8px;outline: none;
+          &:focus-visible {border-color: var(--pv-accent);}
+        }
+        input[type=range] {display: block;width: 100%;min-width: 0;margin-top: 6px;accent-color: var(--er-ui-accent);}
+        span {font-size: 10px;color: var(--pv-text);font-weight: 600;margin-left: 0;margin-top: 2px;text-align: right;}
+      }
+    }
+    .pv-none-row {margin-top: 8px;
+      .pv-none-btn {
+        display: inline-flex;align-items: center;gap: 8px;
+        height: 26px;padding: 0 8px;
+        border: 1px solid var(--pv-line);border-radius: 6px;
+        background: var(--pv-bg);color: var(--pv-text);font-size: 11px;cursor: pointer;
+        &.current {border-color: var(--er-ui-accent);color: var(--er-ui-accent);}
+      }
+      .pv-checker, .pv-checker-bg {
+        width: 16px;height: 12px;border-radius: 3px;
+        background:
+          linear-gradient(45deg, #c9ced9 25%, transparent 25%, transparent 75%, #c9ced9 75%),
+          linear-gradient(45deg, #c9ced9 25%, #ffffff 25%, #ffffff 75%, #c9ced9 75%);
+        background-size: 8px 8px;background-position: 0 0, 4px 4px;
+        border: 1px solid rgba(0,0,0,.15);
+      }
+    }
+  }
+}
+
+// CHEN-UI-008 overlay pieces: the portal root carries platform-v3 itself, so
+// these must be top-level (not nested under .platform-v3 as a descendant).
+.er-overlay-root {
+  // POLISH-v3 #2: the portal layer must sit above every canvas chrome layer
+  // (X6 transform/ports/selection widgets), while staying under app dialogs
+  // (.pv-backdrop is 2500) so modals still cover stray tooltips.
+  position: relative;
+  z-index: 2200;
+  .er-tooltip.lighttip {
+    display: flex;flex-direction: column;gap: 1px;align-items: flex-start;
+    strong {font-size: 11px;font-weight: 700;}
+    small {font-size: 10px;font-weight: 400;color: var(--er-ui-muted, #71798d);}
+  }
+  .pv-chen-context .pv-ctx-title {font-size: 11px;font-weight: 700;padding: 5px 10px 1px;color: var(--pv-text);}
+  .pv-chen-context .pv-ctx-desc {font-size: 10px;padding: 0 10px 3px;color: var(--pv-muted);}
+  .pv-color-popover, .pv-submenu, .pv-apply-menu {background: var(--pv-surface, #ffffff);}
+  // POLISH-v3 re-fix: the "more" menu renders through this portal, so its layout
+  // and skin must be scoped here — under .pv-formatbar they never matched the
+  // portaled DOM (position, rows, and the narrow-bar font/align rows all vanished).
+  .pv-more-menu {
+    position: fixed;z-index: 210;min-width: 230px;padding: 8px;box-sizing: border-box;
+    background: var(--pv-surface, #ffffff);border: 1px solid var(--er-ui-line, #e7eaf1);border-radius: 8px;
+    box-shadow: var(--er-ui-overlay-shadow);
+    .pv-more-row {
+      display: flex;align-items: center;justify-content: space-between;gap: 10px;
+      padding: 6px 8px;font-size: 12px;color: var(--er-ui-text);
+      select {height: 24px;border-radius: 6px;border: 1px solid var(--pv-line, #e2e8f0);
+        background: var(--pv-bg, #f8fafc);color: var(--pv-text, #1e293b);font-size: 12px;padding: 0 6px;max-width: 120px;}
+      .pv-btn-toggle {min-width: 26px;height: 24px;min-height: 24px;border: 1px solid var(--pv-line, #e2e8f0);
+        background: transparent;color: var(--pv-text, #1e293b);border-radius: 6px;font-weight: 700;font-size: 12px;
+        display: inline-flex;align-items: center;justify-content: center;cursor: pointer;
+        &.active, &[aria-checked=true] {background: var(--er-ui-accent, #5265d9);border-color: var(--er-ui-accent, #5265d9);color: #fff;}}
+      .pv-compact-input {width: 52px;height: 24px;}
+    }
+    .pv-align-seg {display: inline-flex;border: 1px solid var(--pv-line, #e2e8f0);border-radius: 7px;overflow: hidden;background: var(--pv-bg, #f8fafc);
+      .pv-btn-toggle {border-radius: 0;border-left-width: 0;
+        &:first-child {border-left-width: 1px;}}}
+    .pv-more-note {
+      margin: 2px 8px 4px;font-size: 11px;line-height: 1.5;
+      color: var(--er-ui-muted, #71798d);
+    }
+    .pv-more-action {
+      display: block;width: 100%;text-align: left;padding: 7px 8px;
+      border: 0;background: transparent;border-radius: 6px;
+      font-size: 12px;color: var(--er-ui-text);cursor: pointer;
+      &:hover:not(:disabled) {background: var(--er-ui-accent-soft);color: var(--er-ui-accent);}
+    }
+    // Narrow-bar alternates stay hidden by default; the bar carries them on wide
+    // screens and the 1280 media below swaps which side is visible.
+    .pv-more-row.pv-row-font, .pv-more-row.pv-row-align {display: none;}
+  }
+}
+@media (max-width: 1700px) {
+  .er-overlay-root .pv-more-menu .pv-more-row.pv-row-font,
+  .er-overlay-root .pv-more-menu .pv-more-row.pv-row-align {display: flex;}
+}

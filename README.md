@@ -4,11 +4,27 @@
 
 # CS-M
 
-CS-M 是一款开源的桌面端数据建模工具，面向数据平台建设中的表结构设计、管理与交付场景。本项目基于开源项目 [PDManer](https://github.com/roberGroup/PDManer) v4.9.4 进行二次开发，当前发布 **v0.2.0 版本**。
+CS-M 是一款开源的桌面端数据建模与业务画图设计工具，面向数据平台建设与业务系统架构中的结构设计、业务建模、图谱绘制与交付场景。本项目基于开源项目 [PDManer](https://github.com/roberGroup/PDManer) v4.9.4 进行二次开发，当前发布 **v0.3.0 版本**。
 
 ## 功能特性
 
-### v0.2.0 新增核心能力（数仓模型目录与概念建模）
+### v0.3.0 新增核心能力（业务建模与分类画图平台）
+
+- **多模块协同架构（Multi-Module Architecture）**：
+  - 在数据建模（Data Modeling）基础上，原生集成业务建模（Business Modeling）与画图平台（Drawing Platform）两大核心模块。
+  - 支持按项目需要灵活启用/切换模块，提供主工作台顶部导航切换、首页模块卡片与分类过滤。
+  - 内置工程文件读写守卫与只读安全保护，保障多模块共存下的数据持久化安全。
+- **业务建模工作台（Business Modeling）**：
+  - **业务对象（Business Objects）**：支持高阶业务领域实体定义与属性抽象，衔接业务语义与底层数据模型。
+  - **业务流程（Business Processes）**：提供可视化流程图编排设计，支持泳道、活动节点、判定分支与流转连线。
+  - **业务规则与职责（Rules & Roles）**：支持业务逻辑判定规则结构化表达，提供参与者角色定义与职责矩阵管理。
+- **分类画图平台（Drawing Platform）**：
+  - **9 大专业图种体系**：全面覆盖概念 ER（Chen ER）、思维导图（Tree）、时序图（Sequence）、系统架构图、业务流程图、网络拓扑图、UML 用例图、组织结构图及自由白板（Graph）。
+  - **24 个即开即用起始模板**：内置各图种典型场景模板（涵盖借阅、选课、电商、权限、部署拓扑等），支持一键初始化与自由修改。
+  - **专用可视化编辑器**：针对自由拓扑（Graph）、层级树（Tree）、交互时序（Sequence）提供专用编辑画布与属性检查器，支持样式主题、图层管理与语义检查。
+  - **纯 JSON 文档格式与多画布**：单文档多画布支持、矢量 SVG/PNG 高清导出、本机草稿自动保存与恢复机制。
+
+### v0.2.0 核心能力（数仓模型目录与概念建模）
 
 - **数仓分层模型目录（Model Catalog）**：支持多层数仓模型分层（如 ODS / DWD / DWS / ADS / DIM 等自定义分层）与数据域/主题域分类管理，统一纳管概念实体、逻辑实体与物理表，支持多重归属及旧主题域待归档投影。
 - **概念实体建模（Concept Entities）**：支持高阶业务概念抽象建模，提供独立概念实体编辑器、专属紫色卡片标识、实体级 12/18 端口连接，以及独立集合存储，不强制依赖底层物理字段。
@@ -44,9 +60,9 @@ CS-M 是一款开源的桌面端数据建模工具，面向数据平台建设中
 官方发布入口为 GitHub Releases：<https://github.com/CHENSHISHEN/CS-M/releases>。
 
 请在 Release 页面下载对应操作系统的安装包：
-- **Windows (x64)**：`CS-M-win_x64_v0.2.0.exe`
-- **macOS Apple Silicon (arm64)**：`CS-M-mac_arm64_v0.2.0.dmg`
-- **macOS Intel (x64)**：`CS-M-mac_x64_v0.2.0.dmg`
+- **Windows (x64)**：`CS-M-win_x64_v0.3.0.exe`
+- **macOS Apple Silicon (arm64)**：`CS-M-mac_arm64_v0.3.0.dmg`
+- **macOS Intel (x64)**：`CS-M-mac_x64_v0.3.0.dmg`
 
 校验文件（SHA-256）可同步在 Release 页面下载 `SHA256SUMS.txt` 进行比对。
 

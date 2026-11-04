@@ -1055,6 +1055,8 @@ export const WorkbenchInspector = React.memo(({currentPrefix, dataSource, active
 // 主域栏图标：沿用原型线性 SVG（按 nav.id 映射，不改 navigation 定义）
 const WB_RAIL_ICONS = {
   model: 'model',
+  business: 'briefcase',
+  drawing: 'flow',
   database: 'databaseIcon',
   standard: 'standard',
   delivery: 'delivery',
@@ -1065,7 +1067,7 @@ const WB_RAIL_ICONS = {
 };
 
 // 64px 主域栏：按 navigation.getWorkbenchPrimaryNavs 渲染
-export const WorkbenchRail = React.memo(({currentPrefix, mode, menuType, onNavChange}) => {
+export const WorkbenchRail = React.memo(({currentPrefix, mode, menuType, module, onNavChange}) => {
   const renderNav = (nav) => {
     const disabled = isWorkbenchNavDisabled(nav, mode, READING);
     const active = (nav.activeMenuTypes || []).includes(menuType);
@@ -1092,7 +1094,7 @@ export const WorkbenchRail = React.memo(({currentPrefix, mode, menuType, onNavCh
   >
     <span className={`${currentPrefix}-wb-rail-caption`}><FormatMessage id='workbench.modules'/></span>
     <div className={`${currentPrefix}-wb-rail-group`}>
-      {getWorkbenchPrimaryNavs().map(renderNav)}
+      {getWorkbenchPrimaryNavs(module).map(renderNav)}
     </div>
     <div className={`${currentPrefix}-wb-rail-group ${currentPrefix}-wb-rail-secondary`}>
       {getWorkbenchSecondaryNavs().map(renderNav)}

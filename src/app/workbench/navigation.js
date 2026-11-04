@@ -76,23 +76,26 @@ export const clampWorkbenchInspectorWidth = (width, windowInnerWidth) => {
   return Math.round(Math.max(WB_INSPECTOR_MIN, Math.min(width, WB_INSPECTOR_MAX, maxAllow)));
 };
 
-// 工作台属性面板的“实际可见性”派生。数据库工作区（menuType 9）无对象上下文，
-// 不渲染属性面板，根网格必须同步收起右侧空列。wbInspectorOpen 用户偏好不被重置：
-// 回到模型/类型文档即按原开合恢复。
-export const workbenchInspectorHidden = ({menuType, inspectorOpen}) =>
-  !inspectorOpen || menuType === '9';
+// 工作台属性面板的“实际可见性”派生。
+export const workbenchInspectorHidden = ({menuType, activeTabType, inspectorOpen}) =>
+  !inspectorOpen || ((activeTabType === 'home') && menuType !== '7' && menuType !== '8');
 
-// 主域导航（无平台模块门控）：类型设置(menuType 2)复用编辑Tab，仍归属模型主域
-const DATA_WORKBENCH_PRIMARY_NAVS = () => ([
+export const workbenchSidebarHidden = () => false;
+
+export const isDataWorkbenchModule = (module) => module !== 'drawing' && module !== 'business';
+
+// 主域导航：支持数据建模、业务建模、画图平台、数据标准、代码交付与版本管理
+const WORKBENCH_PRIMARY_NAVS = () => ([
   {id: 'model', menuType: '1', icon: 'fa-table', activeMenuTypes: ['1', '2']},
-  {id: 'database', menuType: '9', icon: 'fa-database', activeMenuTypes: ['9']},
+  {id: 'business', menuType: '8', icon: 'fa-briefcase', activeMenuTypes: ['8']},
+  {id: 'drawing', menuType: '7', icon: 'fa-sitemap', activeMenuTypes: ['7']},
   // 与旧布局一致：只读模式隐藏数据标准与版本入口（对应旧 TabItem key=6/4 的 hidden 语义）
   {id: 'standard', menuType: '6', icon: 'fa-book', activeMenuTypes: ['6'], readOnlyHidden: true},
   {id: 'delivery', menuType: '3', icon: 'fa-code', activeMenuTypes: ['3']},
   {id: 'versions', menuType: '4', icon: 'fa-history', activeMenuTypes: ['4'], readOnlyHidden: true},
 ]);
 
-export const getWorkbenchPrimaryNavs = () => DATA_WORKBENCH_PRIMARY_NAVS();
+export const getWorkbenchPrimaryNavs = (module) => WORKBENCH_PRIMARY_NAVS();
 
 // 次级导航：不占主域位，但保持清晰可达
 export const getWorkbenchSecondaryNavs = () => ([

@@ -81,6 +81,9 @@ import {READING} from '../../lib/variable';
 import LogicEntity from '../container/logicentity';
 import ConceptEntity from '../container/conceptentity';
 import ModelCatalog from '../workbench/ModelCatalog';
+import DrawingWorkbench from '../drawing/DrawingWorkbench';
+import BusinessWorkbench from '../business/BusinessWorkbench';
+import { drawingPersistence } from '../../lib/drawing_persistence';
 import { physicalMetadataPatches, applyPhysicalMetadataPatch } from '../../lib/model_catalog';
 import {
   WorkbenchDocumentTabs,
@@ -145,7 +148,22 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
   const { lang } = config;
   const cavRefArray = useRef([]);
   //const [menus, setMenus] = useState([]);
-  const [menuType, setMenuType] = useState('1');
+  const [menuType, setMenuType] = useState(() => (
+    restProps?.dataSource?.module === 'drawing' ? '7' : (
+      restProps?.dataSource?.module === 'business' ? '8' : '1'
+    )
+  ));
+  useEffect(() => {
+    if (restProps?.dataSource?.module === 'drawing') {
+      setMenuType('7');
+    } else if (restProps?.dataSource?.module === 'business') {
+      setMenuType('8');
+    }
+  }, [restProps?.dataSource?.module]);
+  const [drawingSession, setDrawingSession] = useState(null);
+  const [businessSession, setBusinessSession] = useState(null);
+  const [platformReturn, setPlatformReturn] = useState(null);
+  const [platformRequest, setPlatformRequest] = useState(null);
   // 经典布局已剥离，新工作台是唯一布局；不再读取本地布局偏好，
   // 旧 classic 偏好键不参与任何入口
   // 图内选中镜像（图工具栏对齐禁用判断）
@@ -440,6 +458,33 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
       }
     });
     return source;
+  };
+  const getPlatformSource = () => {
+    const source = getSearchDataSource();
+    Object.values(getAllTabData()).filter(t => t.type === 'diagram' && t.data && !t.isInit).forEach(t => {
+      source.diagrams = (source.diagrams || []).map(d => d.id === t.data.id ? {...d, canvasData: {cells: t.data.cells || []}} : d);
+    });
+    return source;
+  };
+  const navigatePlatform = request => {
+    if (request.module === 'drawing') {
+      setDrawingSession({view: 'documents', active: request.id, locate: request.cellId ? {id: request.cellId, nonce: Date.now()} : null});
+      setPlatformReturn(menuType);
+      setMenuType('7');
+      return;
+    }
+    if (request.module === 'business') {
+      setPlatformReturn(menuType);
+      setPlatformRequest({...request, nonce: Date.now()});
+      setMenuType('8');
+      return;
+    }
+    const key = request.collection || 'diagrams';
+    const asset = (getPlatformSource()[key === 'diagramRefs' ? 'diagrams' : key] || []).find(d => d.id === request.id);
+    if (!asset) return;
+    setPlatformReturn(menuType);
+    setMenuType('1');
+    _jumpDetail(key === 'diagramRefs' ? {...asset, cellId: request.cellId, originKey: asset.canvasData?.cells?.find(c => c.id === request.cellId)?.originKey} : asset, key);
   };
   const getDiagramEdgeSnapshot = () => {
     const base = dataSourceRef.current;
@@ -2256,7 +2301,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
       // 按属性面板实际可见性收起根网格右列（数据库工作区不渲染面板也不预留空列）；
       // wbInspectorOpen 偏好保留，返回模型文档按原开合恢复。
       // 派生规则见 navigation.workbenchInspectorHidden。
-      className={`${currentPrefix}-home ${currentPrefix}-home-wb${workbenchInspectorHidden({menuType, inspectorOpen: wbInspectorOpen}) ? ` ${currentPrefix}-home-wb-no-inspector` : ''}`}>
+      className={`${currentPrefix}-home ${currentPrefix}-home-wb${menuType === '7' && drawingSession?.active ? ` ${currentPrefix}-home-drawing-focus` : ''}${workbenchInspectorHidden({menuType, activeTabType: activeTab?.type, inspectorOpen: wbInspectorOpen}) ? ` ${currentPrefix}-home-wb-no-inspector` : ''}${menuType === '7' || menuType === '8' ? ` ${currentPrefix}-home-wb-no-sidebar` : ''}`}>
       <WorkbenchTopbar
         key='wb-topbar'
         currentPrefix={currentPrefix}
@@ -2273,9 +2318,41 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
         openModal={_openModal}
         onCreateObject={_wbCreateObject}
         hideModelCreate
+        onReturnPlatform={platformReturn && menuType !== platformReturn ? () => {setMenuType(platformReturn);setPlatformReturn(null);} : null}
         canvasExportable={!(activeTab?.type !== 'diagram' || (menuType !== '1' && menuType !== '2'))}
         compact={wbWindowWidth <= 1280}
       />
+      {menuType === '7' ? (
+        <div className={`${currentPrefix}-home-drawing-area`}>
+          <DrawingWorkbench
+            dataSource={restProps.dataSource}
+            projectInfo={projectInfoRef.current}
+            updateDataSource={next => {restProps.update(next);drawingPersistence.change(next.drawings || []).catch(() => {});}}
+            session={drawingSession}
+            onSessionChange={setDrawingSession}
+            referenceSource={getPlatformSource()}
+            onNavigate={navigatePlatform}
+            openRequest={platformRequest}
+            readOnly={mode === READING}
+            currentPrefix={currentPrefix}
+          />
+        </div>
+      ) : null}
+      {menuType === '8' ? (
+        <div className={`${currentPrefix}-home-business-area`}>
+          <BusinessWorkbench
+            dataSource={restProps.dataSource}
+            updateDataSource={restProps.update}
+            session={businessSession}
+            onSessionChange={setBusinessSession}
+            referenceSource={getPlatformSource()}
+            onNavigate={navigatePlatform}
+            openRequest={platformRequest}
+            readOnly={mode === READING}
+            currentPrefix={currentPrefix}
+          />
+        </div>
+      ) : null}
       <div
         className={`${currentPrefix}-home-resize-container`}>
         <WorkbenchSidebar
@@ -2446,6 +2523,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
         getTabData={getDataByTabId}
         getSearchDataSource={getSearchDataSource}
         getDiagramEdgeSnapshot={getDiagramEdgeSnapshot}
+        onOpenPlatformAsset={navigatePlatform}
         onLocateReference={(ref) => _jumpDetail(ref, 'diagramRefs')}
         onEditEntity={_wbOpenInspectorTarget}
         draftVersion={wbDraftTick}
@@ -2455,6 +2533,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
         currentPrefix={currentPrefix}
         mode={mode}
         menuType={menuType}
+        module={restProps.dataSource?.module}
         onNavChange={_menuTypeChange}
       />
       <WorkbenchStatusbar

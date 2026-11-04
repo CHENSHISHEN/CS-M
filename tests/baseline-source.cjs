@@ -22,9 +22,9 @@ for (const file of ['assets/branding/logo.png', 'public/branding/logo.png']) {
 }
 assert(/github\.com\/roberGroup\/PDManer/.test(read('README.md').toString()));
 for (const retired of [
-  'src/app/main/HeaderTool.js', 'src/app/ai', 'src/app/business', 'src/app/drawing', 'src/app/metrics', 'src/host',
+  'src/app/main/HeaderTool.js', 'src/app/ai', 'src/app/metrics', 'src/host',
   'src/lib/ai', 'src/lib/metrics',
-  'src/lib/drawing_platform.js', 'src/lib/enterprise_home.js',
+  'src/lib/enterprise_home.js',
   'src/lib/concept_logical_links.js', 'src/lib/model_resource_overview.js',
 ]) {
   assert(!fs.existsSync(path.join(root, retired)), `基线外源码残留：${retired}`);
@@ -43,6 +43,7 @@ for (const file of files) {
   assert(!/\/Users\/chencc\/|\/private\/tmp\//.test(text), `开发机路径残留：${path.relative(root, file)}`);
   assert(!/namespace PDManer\./.test(text), `代码模板仍生成旧产品命名空间：${path.relative(root, file)}`);
   assert(!/WB-\d|INTEGRATION-R\d|PLATFORM-\d/.test(text), `旧研发任务标识残留：${path.relative(root, file)}`);
+  assert(!/M5B-\d|aiCandidate|DrawingAiPanel|MODULE_IDS\.METRICS/.test(text), `未来版本功能泄露：${path.relative(root, file)}`);
 }
 assert(!pkg.dependencies['node-sql-parser'], '核心依赖完整性检查通过');
 assert.deepStrictEqual(pkg.build.win.target[0].arch, ['x64']);

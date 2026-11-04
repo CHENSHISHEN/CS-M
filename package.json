@@ -1,6 +1,6 @@
 {
   "name": "cs-m",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "CS-M - 开源数据建模工具",
   "scripts": {
     "electron": "electron ./src/main",
