@@ -727,9 +727,8 @@ codeKeepHint: 'Confirmed code unchanged: ',
         modules: 'Modules',
         domain: {
             model: 'Model',
-            
-            
-            
+            business: 'Business',
+            drawing: 'Drawing',
             database: 'Database',
             standard: 'Standards',
             delivery: 'Delivery',

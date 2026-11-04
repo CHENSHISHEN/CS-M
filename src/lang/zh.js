@@ -728,9 +728,8 @@ codeKeepHint: '已确认代码保持不变：',
         modules: '模块',
         domain: {
             model: '模型',
-            
-            
-            
+            business: '业务建模',
+            drawing: '画图平台',
             database: '数据库',
             standard: '数据标准',
             delivery: '交付',
