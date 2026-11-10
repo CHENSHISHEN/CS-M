@@ -220,7 +220,7 @@ export const readProject = (path, title, getState, type, isDemoProject, mode = E
     dispatch(openLoading(title)); // 开启全局loading
     const config = getState()?.config?.data[0];
     // 判断项目文件是否为只读权限
-    readJsonPromise(path)
+    readJsonPromise(path, true)
       .then((data) => {
         if (data.version) trackProjectVersion(path, data);
         if (!data.version) {
@@ -325,7 +325,7 @@ export const createProject = (data, path, title, type) => {
           createdTime: time,
           updatedTime: time,
         };
-        saveJsonPromise(realFilePath, newData, false, true).then(() => {
+        saveJsonPromise(realFilePath, newData, false, true, true).then(() => {
           trackProjectVersion(realFilePath, newData);
           addHistory({
             describe: newData.describe || '',

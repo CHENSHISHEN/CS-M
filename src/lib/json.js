@@ -1,6 +1,8 @@
 // 桌面版
 
 import fs from 'fs';
+import {drawingPersistence} from './drawing_persistence';
+import {shouldEnsureDrawingSession} from './drawing_session_policy';
 import {createProjectFileGuard} from './project_file_guard';
 import path from 'path';
 import moment from 'moment';
@@ -137,9 +139,23 @@ const parseJson = (data, closeSpace = false) => {
   });
 }
 
-// 同一路径的保存串行化：防止并发写同一项目文件交错损坏
 const jsonSaves = new Map();
-export const saveJsonPromise = (filePath, data, closeSpace = false, exclusive = false) => {
+// Strict path alignment for persistence-session binding (policy in
+// drawing_session_policy.js): only a save of the project on its own active path
+// (or the very first session) may open/recover the session. Backups, exports and
+// version snapshots to other paths never hijack it.
+// After a project is created or its file is (re)bound by an explicit lifecycle
+// step (create / rename / save-as), establish the persistence session for that
+// path so the first drawing edit cannot race ahead of open (SESSION_REQUIRED).
+// The save resolves only once the session is ready, and a failed activation
+// rejects the lifecycle save — it must never report success against the previous
+// project's session. The project file itself is written before this step.
+const ensureDrawingSession = async (tempFilePath, data) => {
+  if (!(drawingPersistence.available && data && typeof data === 'object' && data.version && (data.entities || data.drawings || data.business) && typeof tempFilePath === 'string' && tempFilePath.endsWith('.json'))) return;
+  if (!shouldEnsureDrawingSession(drawingPersistence.getState(), tempFilePath, true)) return;
+  await drawingPersistence.open(tempFilePath, data);
+};
+export const saveJsonPromise = (filePath, data, closeSpace = false, exclusive = false, projectLifecycle = false) => {
   const tempFilePath = filePath.endsWith('.json') ? filePath : `${filePath}.json`;
   const key = path.resolve(tempFilePath);
   const saving = (jsonSaves.get(key) || Promise.resolve()).catch(() => {}).then(async () => {
@@ -148,7 +164,7 @@ export const saveJsonPromise = (filePath, data, closeSpace = false, exclusive = 
       throw new Error('Invalid serialized project');
     }
     return saveNormalFile(tempFilePath, tempData, exclusive);
-  });
+  }).then(async result => {if (projectLifecycle) await ensureDrawingSession(tempFilePath, data);return result;});
   jsonSaves.set(key, saving);
   const clear = () => {
     if (jsonSaves.get(key) === saving) jsonSaves.delete(key);
@@ -161,15 +177,21 @@ const projectFileGuard = createProjectFileGuard({fs, path, hash: value => create
   save: saveJsonPromise, message: key => FormatMessage.string({id: `projectFiles.${key}`})});
 export const trackProjectVersion = projectFileGuard.track;
 export const saveProjectVersion = async (file, data, closeSpace) => {
-  await projectFileGuard.commit(file, data, closeSpace);
+  const saved = drawingPersistence.available ? await drawingPersistence.commit(file, data) : null;
+  if (saved) {data.drawings = saved.drawings;data.profile = saved.profile;projectFileGuard.track(file, saved);}
+  else await projectFileGuard.commit(file, data, closeSpace);
 };
 
-export const readJsonPromise = (filePath) => {
+export const readJsonPromise = (filePath, projectLifecycle = false) => {
   return new Promise((res, rej) => {
     const tempFilePath = filePath.endsWith('.json') ? filePath : `${filePath}.json`;
     readNormalFile(tempFilePath).then((data) => {
       postWorkerFuc('string2json', true, [data.toString()]).then((d) => {
-        res(d);
+        // Only an explicit project open may bind the persistence session; version
+        // snapshots, history previews and config reads never hijack the active one.
+        if (projectLifecycle && d?.version && (d.entities || d.drawings || d.business)) {
+          drawingPersistence.open(tempFilePath, d).then(res, rej);
+        } else res(d);
       }).catch((err) => {
         rej(err);
       })
@@ -179,7 +201,11 @@ export const readJsonPromise = (filePath) => {
   });
 };
 
-export const saveJsonPromiseAs = (data, refactor) => {
+export const saveJsonPromiseAs = async (data, refactor) => {
+  const isProject = data && typeof data === "object" && data.version && (data.entities || data.drawings || data.business);
+  if (isProject && drawingPersistence.available && drawingPersistence.getState().status !== "idle") {
+    const recovery = await drawingPersistence.recovery();data.drawings = recovery.drawings;
+  }
   const tempData = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
   const extensions = [`${projectSuffix}.json`];
   return new Promise((res, rej) => {
@@ -192,7 +218,13 @@ export const saveJsonPromiseAs = (data, refactor) => {
       return path;
     }, {
       defaultPath: typeof data === 'string' ? '' : data.name,
-    }, refactor).then(({filePath}) => res(filePath)).catch(err => rej(err));
+    }, refactor).then(async ({filePath}) => {
+      if (isProject && drawingPersistence.available) {
+        const saved = JSON.parse((await readNormalFile(filePath)).toString());
+        await drawingPersistence.open(filePath, saved, true);
+      }
+      res(filePath);
+    }).catch(err => rej(err));
   });
 };
 

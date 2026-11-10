@@ -1,5 +1,5 @@
 /* eslint-disable */
-const {app, BrowserWindow, Menu, nativeImage, ipcMain} = require('electron');
+const {app, BrowserWindow, Menu, nativeImage, ipcMain, dialog} = require('electron');
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
@@ -8,8 +8,66 @@ require('@electron/remote/main').initialize();
 // 保持一个对于 window 对象的全局引用，如果你不这样做，
 // 当 JavaScript 对象被垃圾回收， window 会被自动地关闭
 let win;
+const {DrawingPersistence} = require(process.env.CHINER_NODE_ENV === 'development' ? '../public/drawing-persistence' : './drawing-persistence');
+let drawingStore;
+let closeAllowed = false;
+let closePending = false;
+let quitRequested = false;
+const closeRequests = new Map();
+ipcMain.handle('drawing-persistence', async (event, request) => {
+  try {
+    if (!drawingStore || !win || event.sender !== win.webContents) throw Error('Invalid drawing session');
+    const owner = String(event.sender.id);
+    const {method, file} = request;
+    if (!['open','command','flush','repair','recovery','versions','version','saveVersion','deleteVersion'].includes(method)) throw Error('Unknown drawing operation');
+    let value;
+    if (method === 'open') value = await drawingStore.open(file, request.baseline, owner);
+    if (method === 'command') value = await drawingStore.command(file, request.command, owner);
+    if (method === 'flush') value = await drawingStore.flush(file, owner, request.candidate);
+    if (method === 'repair') value = await drawingStore.repair(file, request.snapshot, owner);
+    if (method === 'recovery') value = await drawingStore.recovery(file, owner);
+    if (method === 'versions') value = await drawingStore.versions(file, owner);
+    if (method === 'saveVersion') value = await drawingStore.saveVersion(file, request.name, owner);
+    if (method === 'deleteVersion') value = await drawingStore.deleteVersion(file, request.name, owner);
+    if (method === 'version') value = await drawingStore.version(file, request.name, owner);
+    return {ok:true, value};
+  } catch (error) {return {ok:false,error:error.message};}
+});
+ipcMain.on('drawing-close-ready', (event, response) => {
+  if (win && event.sender === win.webContents) closeRequests.get(response.requestId)?.(response);
+});
+const requestDrawingClose = async (transition='close') => {
+  if (closePending || !win) return;
+  closePending = true;
+  try {
+    const requestId = Date.now().toString();
+    const result = await new Promise(resolve => {
+      const timeout = setTimeout(() => {closeRequests.delete(requestId);resolve({ok:false,error:'The editor did not finish saving. Try again or export a recovery copy.'});}, 20000);
+      closeRequests.set(requestId, value => {clearTimeout(timeout);closeRequests.delete(requestId);resolve(value);});
+      win.webContents.send('drawing-before-close', requestId);
+    });
+    if (!result.ok) {
+      const choice = await dialog.showMessageBox(win, {type:'warning',message:result.recoveryAvailable ? '项目未写入，绘图已保存在本机恢复区。 / Drawing retained in local recovery.' : '绘图尚未落盘，放弃会丢失未保存操作。 / Unsaved drawing operations remain.',detail:result.error || '',buttons:['取消 / Cancel',result.recoveryAvailable ? '保留本机恢复副本并关闭 / Keep recovery and close' : '放弃未落盘操作并关闭 / Discard unsaved operations'],defaultId:0,cancelId:0});
+      if (choice.response !== 1) {quitRequested = false;return;}
+    }
+    if (result.legacyDirty) {
+      const decision = await dialog.showMessageBox(win, {type:'warning',message:'数据或业务模型仍有未保存的编辑。 / Unsaved model edits remain.',buttons:['取消 / Cancel','放弃模型编辑并关闭 / Discard model edits'],defaultId:0,cancelId:0});
+      if (decision.response !== 1) {quitRequested = false;return;}
+    }
+    if(transition==='reload'&&!quitRequested){win.webContents.reload();return;}
+    closeAllowed = true;
+    if (quitRequested) app.quit();else win.close();
+  } finally {closePending = false;}
+};
+app.on('before-quit', event => {
+  if (win && !closeAllowed) {event.preventDefault();quitRequested = true;requestDrawingClose();}
+});
 
 function createWindow() {
+  closeAllowed = false;
+  drawingStore = new DrawingPersistence(path.join(app.getPath('userData'), 'drawing-autosave'), {
+    notify: state => {if (win && !win.isDestroyed()) {const {drawings, ...summary} = state;win.webContents.send('drawing-save-state', summary);}},
+  });
   // 创建浏览器窗口。
   win = new BrowserWindow({
     width: 1220,
@@ -52,6 +110,8 @@ function createWindow() {
         )
     );
   }
+  win.webContents.on('before-input-event',(event,input)=>{if(input.type==='keyDown'&&(input.meta||input.control)&&input.key.toLowerCase()==='r'){event.preventDefault();requestDrawingClose('reload');}});
+  win.on('close', event => {if (!closeAllowed) {event.preventDefault();requestDrawingClose();}});
   win.on('ready-to-show', function () {
     win.show();
   });

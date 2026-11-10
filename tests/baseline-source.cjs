@@ -29,6 +29,12 @@ for (const retired of [
 ]) {
   assert(!fs.existsSync(path.join(root, retired)), `基线外源码残留：${retired}`);
 }
+for (const required of [
+  'public/drawing-document.js', 'public/drawing-persistence.js',
+  'src/lib/drawing_session_policy.js', 'src/lib/drawing_persistence.js',
+]) {
+  assert(fs.existsSync(path.join(root, required)), `v0.4.0 核心持久化与画板文件缺失：${required}`);
+}
 const files = [];
 function walk(dir) {
   for (const name of fs.readdirSync(dir)) {
