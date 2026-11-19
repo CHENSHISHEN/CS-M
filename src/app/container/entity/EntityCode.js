@@ -263,7 +263,7 @@ export default React.memo(({ dataSource, data, prefix, type, tabName, codeType, 
  /* // 过滤当前的实体变更信息
   const currentChanges = changes.filter(c => c.name.split(separator)[0] === data.defKey);*/
   const currentPrefix = getPrefix(prefix);
-  // 已定库物理实体的 dbDDL 面板默认打开目标数据库类型
+  // S2：已定库物理实体的 dbDDL 面板默认打开目标数据库类型
   // （appCode 与未定库实体保持原全局默认行为）
   const entityDb = codeType === 'dbDDL' && type === 'entity'
       && data?.physicalDbTypeId ? data.physicalDbTypeId : '';

@@ -1,0 +1,175 @@
+{
+  "protocolVersion": "1.0",
+  "planId": "synthetic-plan-modeling",
+  "scope": {
+    "platform": "modeling",
+    "projectSessionId": "synthetic-project-session"
+  },
+  "baseVersion": "synthetic-snapshot-1",
+  "contextDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+  "readSet": [
+    {
+      "resource": "synthetic-current-target",
+      "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ],
+  "expiresAt": "2026-11-26T00:00:00Z",
+  "summary": "合成示例：仅展示设计协议，不可直接执行到真实项目",
+  "assumptions": [
+    "所有existing引用均为合成，需运行时解析校验"
+  ],
+  "operations": [
+    {
+      "opId": "table-order",
+      "command": "model.table.create",
+      "dependsOn": [],
+      "args": {
+        "localKey": "order",
+        "defKey": "dwd_order",
+        "defName": "订单",
+        "dbType": {
+          "kind": "existing",
+          "collection": "dataTypeSupports",
+          "id": "synthetic-mysql"
+        },
+        "category": {
+          "kind": "existing",
+          "collection": "catalogCategories",
+          "id": "synthetic-trade"
+        },
+        "fields": [
+          {
+            "localKey": "order.order_id",
+            "defKey": "order_id",
+            "defName": "订单编号",
+            "type": "BIGINT",
+            "primaryKey": true,
+            "notNull": true
+          },
+          {
+            "localKey": "order.customer_id",
+            "defKey": "customer_id",
+            "defName": "客户编号",
+            "type": "BIGINT",
+            "primaryKey": false,
+            "notNull": true
+          }
+        ]
+      }
+    },
+    {
+      "opId": "diagram",
+      "command": "model.diagram.create",
+      "dependsOn": [
+        "table-order"
+      ],
+      "args": {
+        "localKey": "order-diagram",
+        "defKey": "ORDER_VIEW",
+        "defName": "订单模型图",
+        "tables": [
+          {
+            "kind": "local",
+            "key": "order"
+          }
+        ],
+        "level": "physical"
+      }
+    },
+    {
+      "opId": "root-order",
+      "command": "standard.root.create",
+      "dependsOn": [],
+      "args": {
+        "localKey": "root-order",
+        "defKey": "order",
+        "defName": "订单",
+        "fullName": "Order"
+      }
+    },
+    {
+      "opId": "root-id",
+      "command": "standard.root.create",
+      "dependsOn": [],
+      "args": {
+        "localKey": "root-id",
+        "defKey": "id",
+        "defName": "编号",
+        "fullName": "Identifier"
+      }
+    },
+    {
+      "opId": "standard-group",
+      "command": "standard.group.create",
+      "dependsOn": [],
+      "args": {
+        "localKey": "trade-standards",
+        "defKey": "TRADE",
+        "defName": "交易标准"
+      }
+    },
+    {
+      "opId": "standard-order-id",
+      "command": "standard.field.create",
+      "dependsOn": [
+        "root-order",
+        "root-id",
+        "standard-group"
+      ],
+      "args": {
+        "localKey": "standard-order-id",
+        "group": {
+          "kind": "local",
+          "key": "trade-standards"
+        },
+        "defKey": "order_id",
+        "defName": "订单编号",
+        "baseType": {
+          "kind": "existing",
+          "collection": "dataTypeMappings",
+          "id": "synthetic-integer"
+        },
+        "wordRoots": [
+          {
+            "kind": "local",
+            "key": "root-order"
+          },
+          {
+            "kind": "local",
+            "key": "root-id"
+          }
+        ]
+      }
+    },
+    {
+      "opId": "quality",
+      "command": "quality.modelRuleSet.create",
+      "dependsOn": [
+        "table-order"
+      ],
+      "args": {
+        "localKey": "order-quality",
+        "name": "订单建模规范",
+        "enabled": false,
+        "targets": [
+          {
+            "kind": "local",
+            "key": "order"
+          }
+        ],
+        "rules": [
+          {
+            "localKey": "order-has-pk",
+            "name": "物理表应有主键",
+            "severity": "error",
+            "target": "physicalTable",
+            "predicate": {
+              "op": "hasPrimaryKey"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "planHash": "88d4fd20c991d58b816baee9e4ecd4a18953a210617b85fe2b8edab415469a09"
+}

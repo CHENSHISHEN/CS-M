@@ -7,6 +7,7 @@ export const MODULE_IDS = {
   DATA: 'data-modeling',
   BUSINESS: 'business-modeling',
   DRAWING: 'drawing-platform',
+  METRICS: 'metric-platform',
 };
 
 const DEFAULT_MODULES = [
@@ -64,6 +65,27 @@ const DEFAULT_MODULES = [
     isReady: true,
     kind: 'drawing',
   },
+  {
+    // M2 指标平台：独立模块入口，但与数据建模共享同一项目（不是第二份指标项目）。
+    // sharedProject=true → 首页不创建独立项目，引导进入数据建模项目左轨“指标平台”。
+    id: MODULE_IDS.METRICS,
+    key: 'metrics',
+    nameKey: 'home.metricPlatform',
+    defaultName: '指标平台',
+    subKey: 'home.metricPlatformSubtitle',
+    defaultSub: '原子 · 派生 · 复合指标定义',
+    descKey: 'home.metricPlatformDesc',
+    defaultDesc: '与数据建模共享模型与元数据，统一定义、版本与部门口径，可追溯来源模型',
+    actionKey: 'home.enterMetrics',
+    defaultAction: '进入指标平台',
+    accentColor: '#4e6fb2',
+    tintColor: '#edf3fd',
+    borderColor: '#c4d4ee',
+    icon: 'fa-line-chart',
+    isReady: true,
+    kind: 'metrics',
+    sharedProject: true,
+  },
 ];
 
 class ModuleRegistry {
@@ -96,7 +118,7 @@ class ModuleRegistry {
 
   registerModule(moduleDef) {
     if (!moduleDef || !moduleDef.id) {
-      throw new Error('无效的模块注册定义：缺少 id');
+      throw new Error('Module definition must include an "id".');
     }
     this.modules.set(moduleDef.id, { ...moduleDef });
   }

@@ -272,7 +272,7 @@ export const moveCategoryMembers = (source, fromId, toId, type, ids) => {
   return removeCategoryMembers(added, fromId, type, moving);
 };
 
-// 新建对象写入对应集合；仅当给出有效分类 id 时才挂接分类成员。
+// S1 整改 F4：新建对象写入对应集合；仅当给出有效分类 id 时才挂接分类成员。
 // 未归类容器上下文（categoryId 为空）允许保持未归类并继承容器 id/类型，
 // 全项目没有任何分类时同样可提交（不自动创建域）
 export const appendObjectWithOptionalCategory = (source, type, object, categoryId) => {
@@ -285,7 +285,7 @@ export const appendObjectWithOptionalCategory = (source, type, object, categoryI
   return next;
 };
 
-// 目录提交（如删库撤归属）前后实体物理归属元数据差异（纯函数）。
+// S1 整改 F7：目录提交（如删库撤归属）前后实体物理归属元数据差异（纯函数）。
 // 仅提取 physicalDatabaseId / physicalDbTypeId 的变化（undefined=移除），
 // 供 tab 缓存与内部编辑 state 做元数据级同步；不携带其他字段，
 // 禁止用已保存对象整表回退草稿。图为 pickCell 保留 source 根元数据，无需同步。
@@ -309,7 +309,7 @@ export const physicalMetadataPatches = (previous, next) => {
   return patches;
 };
 
-// 把元数据补丁合并进实体草稿——仅动两键，移除即 delete，
+// S1 整改 F7：把元数据补丁合并进实体草稿——仅动两键，移除即 delete，
 // 名称/字段/notes 等草稿内容与调用方保管的 isInit 一概不动
 export const applyPhysicalMetadataPatch = (draft, patch) => {
   const merged = {...draft};
@@ -339,6 +339,20 @@ export const inferDiagramLevel = (diagram, source) => {
   return inferred.every(level => level && level === inferred[0]) ? inferred[0] : null;
 };
 
+// ---- DATA-WB-FEAT-001 阶段A：企业级元数据与物理库分组的纯函数层 ----
+// 均为可选兼容元数据：读取时回落，不改变任何既有集合/ID；写入由调用方通过
+// profile.enterpriseModeling / 对象级 physicalDbTypeId 显式进行，本层不自动迁移旧数据。
+
+// 企业级首页元数据（可选）。缺失时名称回落项目名、描述为空、概览图为空数组。
+export const getEnterpriseModeling = (source) => {
+  const meta = source?.profile?.enterpriseModeling || {};
+  return {
+    name: meta.name || source?.name || '',
+    description: meta.description || '',
+    overviewDiagramIds: unique(meta.overviewDiagramIds),
+  };
+};
+
 // 有效数据库类型 = dataTypeSupports 中存在 dbDDL 生成模板的项（与 DbConnect 的过滤一致）。
 export const physicalDbSupports = (source) => {
   const codeTemplates = source?.profile?.codeTemplates || [];
@@ -349,7 +363,7 @@ export const physicalDbSupports = (source) => {
 export const UNSPECIFIED_DB = null;
 export const UNKNOWN_DB = '__unknown_db__';
 
-// ---- 按需物理模型库：可选兼容元数据，读取回落、不自动迁移旧数据 ----
+// ---- 按需物理模型库（S1 R6）：可选兼容元数据，读取回落、不自动迁移旧数据 ----
 
 export const readPhysicalDatabases = (source) =>
   (source?.profile?.modelCatalog?.physicalDatabases || []);
@@ -363,6 +377,8 @@ const writePhysicalDatabases = (source, databases) => ({
 const normalizeDatabaseName = (defKey) => String(defKey || '').trim();
 
 // 库名唯一性口径：同一 categoryId（含未归类 null）内 defKey 忽略大小写唯一
+// S1 整改 F1：构建链 babel 未配 nullish 插件、webpack4(acorn6) 不识别 ??，
+// 新增代码一律用 ==null 三元，不用 ?? 操作符
 const nullableId = (id) => (id == null ? null : id);
 const findDatabaseDuplicate = (databases, categoryId, defKey, ignoreId) =>
   databases.some(db => db.id !== ignoreId
@@ -472,7 +488,7 @@ export const groupPhysicalObjects = (source, objects) => {
   };
 };
 
-// 当前分类上下文的模型库可见性划分：
+// 当前分类上下文的模型库可见性划分（S1 整改 F2，按协调者既定规则）：
 // - owner 上下文：归属本分类的容器始终显示（含空库，空库只在 owner 显示）；
 // - 引用上下文：有效容器被多个分类中的对象引用时，在引用对象所在的当前分类
 //   同样显示原库（保留库 id/defKey/defName，可在该库下新建对象，新增对象
@@ -500,6 +516,28 @@ export const partitionVisibleDatabases = (physical, categoryId, categoryIds) => 
 export const visibleDatabaseGroups = (physical, categoryId, categoryIds) =>
   partitionVisibleDatabases(physical, categoryId, categoryIds).visible;
 
-// 概念关系图 = 显式/推断为 conceptual 的关系图。
+// 概念关系图 = 显式/推断为 conceptual 的关系图（企业全局投影使用）。
 export const conceptDiagrams = (source) =>
   (source?.diagrams || []).filter(d => inferDiagramLevel(d, source) === 'conceptual');
+
+// 企业首页/全局概览节点卡片 = 全部概念关系图（自动展示，无需 pin）
+// 与显式 pin 的 overviewDiagramIds 的并集（按图实例去重）。
+// 旧项目无新元数据时概念图也完整可见，不会首页空白；
+// 失效 pin ID（图已删）跳过显示、数据保留，不自动清理。
+export const enterpriseOverviewDiagrams = (source) => {
+  const pinnedIds = unique(source?.profile?.enterpriseModeling?.overviewDiagramIds);
+  const diagramById = new Map((source?.diagrams || []).map(d => [d.id, d]));
+  const result = [];
+  const seen = new Set();
+  conceptDiagrams(source).forEach((d) => {
+    seen.add(d.id);
+    result.push({diagram: d, pinned: pinnedIds.includes(d.id)});
+  });
+  pinnedIds.forEach((id) => {
+    if (!seen.has(id) && diagramById.has(id)) {
+      seen.add(id);
+      result.push({diagram: diagramById.get(id), pinned: true});
+    }
+  });
+  return result;
+};

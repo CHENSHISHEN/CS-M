@@ -1,0 +1,242 @@
+// S3-LINKS 概念-逻辑关联面板独立样式（仅由 ConceptLogicalLinks.js 引入）
+.chiner-cll {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+
+  .chiner-cll-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .chiner-cll-title {
+    font-weight: 600;
+    color: #365a89;
+  }
+
+  .chiner-cll-toolbar {
+    display: flex;
+
+    input {
+      width: 220px;
+      max-width: 60%;
+    }
+  }
+
+  .chiner-cll-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .chiner-cll-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid #dce4ef;
+    border-radius: 4px;
+    background: #ffffff;
+
+    .chiner-cll-row-main {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .chiner-cll-row-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .chiner-cll-row-meta {
+      display: flex;
+      gap: 16px;
+      color: #667080;
+      font-size: 12px;
+      flex-wrap: wrap;
+    }
+
+    .chiner-cll-row-desc {
+      color: #303746;
+      font-size: 12px;
+      word-break: break-all;
+    }
+
+    .chiner-cll-row-desc-empty {
+      color: #929dad;
+      font-style: italic;
+    }
+
+    .chiner-cll-row-physical {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 12px;
+
+      .chiner-cll-row-physical-label {
+        color: #667080;
+      }
+
+      a {
+        color: #3566af;
+        cursor: pointer;
+
+        &:hover {
+          text-decoration: underline;
+        }
+      }
+    }
+
+    .chiner-cll-row-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .chiner-cll-object-key {
+      font-weight: 600;
+      color: #303746;
+    }
+
+    .chiner-cll-object-name {
+      color: #667080;
+    }
+  }
+
+  .chiner-cll-row-invalid {
+    border-color: #e5c07b;
+    background: #fdf8ec;
+  }
+
+  .chiner-cll-row-physical-item {
+    align-items: center;
+  }
+
+  .chiner-cll-tag {
+    display: inline-block;
+    padding: 0 6px;
+    border-radius: 3px;
+    font-size: 12px;
+    line-height: 18px;
+    background: #e2ecfc;
+    color: #3566af;
+  }
+
+  .chiner-cll-tag-invalid {
+    background: #fbedef;
+    color: #b23b4c;
+  }
+
+  .chiner-cll-empty {
+    color: #929dad;
+    padding: 8px 4px;
+  }
+
+  .chiner-cll-confirm {
+    p {
+      margin: 0 0 6px;
+    }
+
+    .chiner-cll-confirm-note {
+      color: #667080;
+      font-size: 12px;
+    }
+  }
+
+  .chiner-cll-physical {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed #dce4ef;
+  }
+}
+
+.chiner-cll-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 420px;
+
+  .chiner-cll-picker-toolbar {
+    display: flex;
+    gap: 8px;
+
+    input {
+      width: 220px;
+    }
+  }
+
+  .chiner-cll-picker-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 320px;
+    overflow: auto;
+    border: 1px solid #dce4ef;
+    border-radius: 4px;
+    padding: 4px;
+  }
+
+  .chiner-cll-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: 3px;
+
+    &:hover {
+      background: #f3f6fb;
+    }
+
+    .chiner-cll-object-key {
+      font-weight: 600;
+      color: #303746;
+    }
+
+    .chiner-cll-object-name {
+      color: #667080;
+    }
+
+    .chiner-cll-tag {
+      margin-left: auto;
+      padding: 0 6px;
+      border-radius: 3px;
+      font-size: 12px;
+      line-height: 18px;
+      background: #e2ecfc;
+      color: #3566af;
+    }
+  }
+
+  .chiner-cll-picker-row-linked {
+    color: #929dad;
+
+    .chiner-cll-object-key,
+    .chiner-cll-object-name {
+      color: #929dad;
+    }
+  }
+
+  .chiner-cll-empty {
+    color: #929dad;
+    padding: 8px 4px;
+  }
+}
+
+.chiner-cll-desc-edit {
+  input {
+    width: 100%;
+  }
+}

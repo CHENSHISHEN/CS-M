@@ -401,7 +401,7 @@
 
 
 /* ==========================================================================
-   项目中心样式
+   PLATFORM-001 现代化项目中心 Launcher 样式 (UI-P01, UI-P07, UI-P09)
    ========================================================================== */
 
 .@{prefix}-project-center-shell {
@@ -443,15 +443,6 @@
         align-items: center;
         justify-content: center;
         margin-right: 10px;
-        overflow: hidden;
-        flex-shrink: 0;
-        // logo 原图 1254x1254，必须受控在 28x28 容器内，否则撑破头部覆盖页面
-        & > img {
-          width: 100%;
-          height: 100%;
-          object-fit: contain;
-          display: block;
-        }
       }
 
       .brand-title {
@@ -1343,4 +1334,96 @@
   }
 }
 
-// 首页指标入口：项目选择弹层（最近数据项目 + 文件选择）
+// M5B 首页指标入口：项目选择弹层（最近数据项目 + 文件选择）
+.chiner-home-metrics-picker {
+  min-width: 420px;
+  max-width: 560px;
+  .chiner-home-metrics-picker-desc {
+    margin: 0 0 10px;
+    font-size: 12px;
+    color: #6b7280;
+    line-height: 1.6;
+  }
+  .chiner-home-metrics-picker-empty {
+    margin: 0 0 10px;
+    font-size: 12px;
+    color: #9ca3af;
+  }
+  .chiner-home-metrics-picker-list {
+    list-style: none;
+    margin: 0 0 10px;
+    padding: 0;
+    max-height: 260px;
+    overflow: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    li + li {
+      border-top: 1px solid #f0f0f0;
+    }
+    .chiner-home-metrics-picker-item {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 8px 12px;
+      border: none;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+      &:hover {
+        background: #f5f8ff;
+      }
+    .chiner-home-metrics-picker-name {
+        font-size: 13px;
+        font-weight: 600;
+        color: #1f2937;
+      }
+      .chiner-home-metrics-picker-path {
+        font-size: 11px;
+        color: #9ca3af;
+        word-break: break-all;
+      }
+    }
+  }
+  // M5B-R1：浏览/取消原生 button（蓝白配现状样式 + 焦点态；键盘可直接操作）
+  .chiner-home-metrics-picker-browse,
+  .chiner-home-metrics-picker-cancel {
+    height: 28px;
+    min-width: 80px;
+    padding: 4px 16px;
+    font-size: 12px;
+    line-height: 18px;
+    border-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+    transition: all .3s cubic-bezier(.645, .045, .355, 1);
+    &:focus-visible {
+      outline: 2px solid #40a9ff;
+      outline-offset: 1px;
+    }
+    &:active {
+      opacity: .85;
+    }
+  }
+  .chiner-home-metrics-picker-browse {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #1890ff;
+    color: #ffffff;
+    border: 1px solid #1890ff;
+    &:hover {
+      background: #40a9ff;
+      border-color: #40a9ff;
+    }
+  }
+  .chiner-home-metrics-picker-cancel {
+    background: #ffffff;
+    color: #1f2937;
+    border: 1px solid #d9d9d9;
+    &:hover {
+      color: #1890ff;
+      border-color: #1890ff;
+    }
+  }
+}

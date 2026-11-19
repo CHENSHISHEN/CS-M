@@ -10,23 +10,27 @@ import {
   getWorkbenchPrimaryNavs,
   getWorkbenchSecondaryNavs,
   isWorkbenchNavDisabled,
+  isDataWorkbenchModule,
   WB_SIDEBAR_MIN,
   WB_SIDEBAR_MAX,
   WB_INSPECTOR_MIN,
   WB_INSPECTOR_MAX,
 } from './navigation';
 import {WbIcon} from './icons';
+import {getCatalogCategories, categoryObjects} from '../../lib/model_catalog';
+import {assetOccurrences, makeAssetRef} from '../../lib/drawing_platform';
 import {calcEntityReferences, calcTableAssociations, resolveInspectorTarget} from './references';
 
 import './style/index.less';
 
 // 新工作台外壳由恒渲染的兄弟组件组成，由 .chiner-home-wb 类控制网格布局，
 // 导航/编辑器子树不因界面状态切换而重挂载。
-// 顶栏/资源树头/文档页签/编辑工具栏/右侧上下文面板按已验收原型视觉重排，
+// WB-002：顶栏/资源树头/文档页签/编辑工具栏/右侧上下文面板按已验收原型视觉重排，
 // 全部复用唯一 tabs/activeKey/menuType/草稿缓存状态，不建立第二套编辑器或模型。
-// 单顶栏承载全部命令入口，图编辑工具迁至关系图上下文工具栏。
+// WB-004C：单顶栏承载全部旧 HeaderTool 命令（映射清单见任务 evidence/command-map.md），
+// 图编辑工具迁至关系图上下文工具栏；新布局不再展开旧头部（无齿轮/兼容区接缝）。
 
-// 工作台局部下拉菜单。锚定触发器（不依赖鼠标坐标，键盘打开同样正确）、
+// WB-004 返工：工作台局部下拉菜单。锚定触发器（不依赖鼠标坐标，键盘打开同样正确）、
 // 视口贴边钳制、最大高度受窗口约束且内部滚动、Enter/Space/ArrowDown 打开、
 // ArrowUp/Down 移动、Enter 执行、Escape 关闭并还焦点、aria-expanded 真实。
 // 共享 DropDown（含 tab 右键菜单等旧调用）行为不变。
@@ -177,7 +181,7 @@ const WbMenuButton = ({currentPrefix, title, icon, menus, menuClick, disabled}) 
   />;
 };
 
-// 属性面板“模型关联”分区（位于基本信息之后、关系图引用之前）。
+// WB-004B：属性面板“模型关联”分区（位于基本信息之后、关系图引用之前）。
 // 数据由 calcTableAssociations 纯函数从有效图快照计算；默认最多 5 项可展开；
 // 每个来源图 chip 复用 diagramRefs 定位流程（开图/激活 tab/定位关联表节点）。
 const WB_ASSOC_MAX = 5;
@@ -247,12 +251,14 @@ const WorkbenchAssociations = React.memo(({currentPrefix, tableId, snapshot,
 // 顶部栏（原型 .topbar）：品牌 + 项目名 + 命令组（新建/数据库/导入/导出/工具）
 // + 全局搜索（复用 SearchSuggest）+ 主题 + 保存主按钮 + 更多。
 // 全部命令回调复用唯一 iconClick/_openModal/右键新增流程，禁用语义与原头部一致（只读隐藏命令组）。
-// 经典布局已剥离，不再提供布局切换入口（onToggleLayout/layoutMenu 移除）。
+// S3：经典布局已剥离，不再提供布局切换入口（onToggleLayout/layoutMenu 移除）。
 export const WorkbenchTopbar = React.memo(({currentPrefix, mode, isChildWindow, dataSource,
                                             onBackProjects, onSave,
                                             getSearchDataSource, jumpPosition, jumpDetail,
                                             onToggleTheme, iconClick, openModal,
-                                            onCreateObject, canvasExportable, compact, hideModelCreate}) => {
+                                            onCreateObject, canvasExportable, compact, hideModelCreate, onReturnPlatform,
+                                            onOpenAiAssistant,
+                                            dataPlatform: dataPlatformProp}) => {
   const readOnly = mode === READING;
   const themeMode = dataSource?.profile?.themeMode;
   const menuClick = (m, e) => iconClick && iconClick(e, m.key);
@@ -282,7 +288,14 @@ export const WorkbenchTopbar = React.memo(({currentPrefix, mode, isChildWindow, 
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ]), []);
-  // 数据库入口集中到左轨“数据库”工作区（menuType 9）
+  // 整改 F2：仅数据建模平台（module=data/缺失）移除顶栏数据库入口（含 compact 折叠），
+  // 集中到左轨“数据库”工作区；独立业务/绘图项目保留原顶部数据库入口
+  const dataPlatform = dataPlatformProp !== false;
+  const dbMenus = useMemo(() => ([
+    {key: 'dbConnectMenu', name: FormatMessage.string({id: 'toolbar.dbConnect'})},
+    {key: 'compareDb', name: FormatMessage.string({id: 'toolbar.compareDb'})},
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ]), []);
   const importMenus = useMemo(() => ([
     {
       key: 'PDManer-history',
@@ -377,18 +390,26 @@ export const WorkbenchTopbar = React.memo(({currentPrefix, mode, isChildWindow, 
   ]), []);
   const moreMenus = useMemo(() => {
     // 只读（READING）语义与原头部一致：工具区全部隐藏，
-    // 更多仅保留安全入口，不暴露另存/设置/大小写/数据库维护等编辑路径
+    // 更多仅保留安全入口，不暴露另存/设置/大小写/数据库维护等编辑路径；
+    // AI 助手保留（只读项目仍可对话/预演，提交由网关 READ_ONLY 守卫阻断）
+    const aiEntry = onOpenAiAssistant ? [{
+      key: 'aiAssistant', name: FormatMessage.string({id: 'toolbar.aiAssistant'}),
+    }] : [];
     if (readOnly) {
-      return [];
+      return aiEntry;
     }
-    const base = [
+    const base = aiEntry.concat([
       {key: 'saveAs', name: FormatMessage.string({id: 'toolbar.saveAs'})},
       {key: 'refresh', name: FormatMessage.string({id: 'toolbar.refresh'})},
       {key: 'configMenu', name: FormatMessage.string({id: 'toolbar.setting'})},
       {key: 'history', name: FormatMessage.string({id: 'toolbar.history'})},
-    ];
-    // 窄屏（<=1280）把低频组并入更多
+    ]);
+    // 窄屏（<=1280）把低频组并入更多；数据库组仅非数据平台项目保留
     const folded = compact ? [
+      ...(!dataPlatform ? [{
+        name: FormatMessage.string({id: 'toolbar.dbConnect'}),
+        children: dbMenus.map(m => ({...m})),
+      }] : []),
       {
         name: FormatMessage.string({id: 'toolbar.tool'}),
         children: toolMenus.map(m => ({...m})),
@@ -396,16 +417,22 @@ export const WorkbenchTopbar = React.memo(({currentPrefix, mode, isChildWindow, 
     ] : [];
     return base.concat(folded);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compact, themeMode, readOnly]);
+  }, [compact, themeMode, readOnly, onOpenAiAssistant]);
   // 顶栏统一命令执行路径：桌面独立组与 compact 并入组走同一分支表，避免 key 被漏转发
   const runTopCommand = (m, e) => {
     if (m.key === 'configMenu') {
       openModal && openModal('config');
+    } else if (m.key === 'dbConnectMenu') {
+      // 仅非数据平台项目保留原顶部数据库弹窗入口
+      if (!dataPlatform) openModal && openModal('dbConnect');
+    } else if (m.key === 'aiAssistant') {
+      onOpenAiAssistant && onOpenAiAssistant();
     } else {
       menuClick(m, e);
     }
   };
   const moreClick = runTopCommand;
+  const dbClick = runTopCommand;
   return <div className={`${currentPrefix}-wb-topbar`}>
     <div className={`${currentPrefix}-wb-topbar-brand`}>
       {!isChildWindow && <button
@@ -417,9 +444,9 @@ export const WorkbenchTopbar = React.memo(({currentPrefix, mode, isChildWindow, 
       >
         <Icon type='fa-angle-left'/>
       </button>}
-      <img className={`${currentPrefix}-wb-topbar-logo`} src='./branding/logo.png' aria-hidden="true" alt=''/>
+      <span className={`${currentPrefix}-wb-topbar-logo`} aria-hidden="true">P</span>
       <span className={`${currentPrefix}-wb-topbar-namegroup`}>
-        <span className={`${currentPrefix}-wb-topbar-name`}>CS-M</span>
+        <span className={`${currentPrefix}-wb-topbar-name`}>PDManer</span>
         <span className={`${currentPrefix}-wb-topbar-label`}>WORKBENCH</span>
       </span>
       <span className={`${currentPrefix}-wb-topbar-divider`}/>
@@ -434,6 +461,14 @@ export const WorkbenchTopbar = React.memo(({currentPrefix, mode, isChildWindow, 
         icon='plus'
         menus={createMenus}
         menuClick={(m) => onCreateObject && onCreateObject(m.key)}
+        disabled={readOnly}
+      />}
+      {!compact && !dataPlatform && <WbMenuButton
+        currentPrefix={currentPrefix}
+        title={FormatMessage.string({id: 'toolbar.dbConnect'})}
+        icon='databaseIcon'
+        menus={dbMenus}
+        menuClick={dbClick}
         disabled={readOnly}
       />}
       <WbMenuButton
@@ -471,6 +506,7 @@ export const WorkbenchTopbar = React.memo(({currentPrefix, mode, isChildWindow, 
       />
     </div>
     <div className={`${currentPrefix}-wb-topbar-actions`}>
+      {onReturnPlatform && <button type='button' className={`${currentPrefix}-wb-btn`} onClick={onReturnPlatform}><FormatMessage id='platformV3.returnToPlatform'/></button>}
       <button
         type='button'
         className={`${currentPrefix}-wb-iconbtn`}
@@ -510,6 +546,7 @@ const WB_SIDEBAR_TITLES = {
   5: 'project.checkRule',
   6: 'dataStandard.tab',
   9: 'workbench.domain.database',
+  10: 'resourceOverview.title',
 };
 
 export const WorkbenchSidebar = React.memo(({currentPrefix, menuType, filterText, onFilterChange,
@@ -608,7 +645,7 @@ export const WorkbenchSidebar = React.memo(({currentPrefix, menuType, filterText
   </div>;
 });
 
-// 资源树右边界拖动分隔条。沿用 window mousemove/mouseup 拖动机制
+// WB-003①：资源树右边界拖动分隔条。沿用 window mousemove/mouseup 拖动机制
 // （按下拖动期间 Chromium 对文档保持隐式指针捕获，拖出窗口仍持续接收、任意位置
 // 松开即结束）；拖动只改本机视图偏好（onPreview/onCommit 由主容器接线），不写模型、
 // 不触发保存。键盘左右键 ±8px 微调。卸载/窗口 blur 时立即结束并移除全部监听。
@@ -616,7 +653,7 @@ export const WorkbenchSidebarResizer = React.memo(({currentPrefix, startWidth,
                                                     onPreview, onCommit, side = 'left'}) => {
   const right = side === 'right';
   const dragRef = React.useRef(null);
-  // 统一保存 teardown，结束时/卸载时/blur 时都可靠移除 window 监听，
+  // WB-003①返工：统一保存 teardown，结束时/卸载时/blur 时都可靠移除 window 监听，
   // 不等未来某次 mouseup 才清理，无残留监听。
   const teardownRef = React.useRef(null);
   // 回调经 ref 透传：父组件 preview 重渲染时 onPreview/onCommit 引用变化，
@@ -744,7 +781,7 @@ export const WorkbenchDocumentTabs = React.memo(({currentPrefix, tabs, activeKey
   </div>;
 });
 
-// 画布拖入工具（新表/逻辑实体/分组/思维导图）。与经典 GroupIcon 相同的
+// WB-004C：画布拖入工具（新表/逻辑实体/分组/思维导图）。与经典 GroupIcon 相同的
 // HTML5 拖拽语义：draggable 元素 onDragStart 即触发 iconClick(e,key) → startDrag；
 // 点击同样触发（经典 GroupIcon onClick 兼有拖拽启动与点击两路，此处保持一致）。
 const WbDragTool = ({currentPrefix, name, title, disabled, hoverTitle, onAction}) => {
@@ -773,8 +810,9 @@ const WbDragTool = ({currentPrefix, name, title, disabled, hoverTitle, onAction}
 // 编辑工具栏（原型 .editor-toolbar）：面包屑 + 关系图上下文工具（拖入/形状/对齐/缩放）。
 // 仅在激活文档为关系图时显示画布工具（经典 checkDisable 同语义），非图文档不显示无效图工具。
 export const WorkbenchEditorToolbar = React.memo(({currentPrefix, mode, menuType, activeTab,
-                                                    getTabTitle, iconClick, onZoom, cellSelected,
-                                                    inspectorOpen, onToggleInspector, inspectorAvailable = true}) => {
+                                                    getTabTitle, iconClick, onZoom, cellSelected, modelLevel,
+                                                    inspectorOpen, onToggleInspector, inspectorAvailable = true,
+                                                    displayMode, onDisplayModeChange}) => {
   const readOnly = mode === READING;
   const isDiagram = activeTab?.type === 'diagram' && (menuType === '1' || menuType === '2');
   const canUseCanvas = !readOnly && isDiagram;
@@ -788,8 +826,31 @@ export const WorkbenchEditorToolbar = React.memo(({currentPrefix, mode, menuType
     5: FormatMessage.string({id: 'workbench.domain.checkrule'}),
     6: FormatMessage.string({id: 'workbench.domain.standard'}),
     9: FormatMessage.string({id: 'workbench.domain.database'}),
+    10: FormatMessage.string({id: 'resourceOverview.title'}),
+    11: FormatMessage.string({id: 'workbench.domain.metrics'}),
   };
   const title = activeTab ? getTabTitle(activeTab) : null;
+  const displayModeMenus = useMemo(() => {
+    if (modelLevel === 'conceptual') {
+      return [
+        { key: 'detailed', name: FormatMessage.string({id: 'workbench.displayModeConceptDetailed', defaultMessage: '完整业务卡片 (含定义)'}) },
+        { key: 'compact', name: FormatMessage.string({id: 'workbench.displayModeConceptCompact', defaultMessage: '紧凑卡片 (仅名称)'}) },
+      ];
+    }
+    if (modelLevel === 'logical') {
+      return [
+        { key: 'all', name: FormatMessage.string({id: 'workbench.displayModeLogicalAll', defaultMessage: '完整逻辑属性'}) },
+        { key: 'name', name: FormatMessage.string({id: 'workbench.displayModeLogicalName', defaultMessage: '仅逻辑名称'}) },
+        { key: 'pk', name: FormatMessage.string({id: 'workbench.displayModeLogicalPk', defaultMessage: '仅主标识符 (PK)'}) },
+      ];
+    }
+    return [
+      { key: 'all', name: FormatMessage.string({id: 'workbench.displayModeAll', defaultMessage: '代码[名称] (完整)'}) },
+      { key: 'key', name: FormatMessage.string({id: 'workbench.displayModeKey', defaultMessage: '仅物理代码 (Code)'}) },
+      { key: 'name', name: FormatMessage.string({id: 'workbench.displayModeName', defaultMessage: '仅逻辑名称 (Name)'}) },
+      { key: 'pk', name: FormatMessage.string({id: 'workbench.displayModePk', defaultMessage: '主键摘要 (仅PK)'}) },
+    ];
+  }, [modelLevel]);
   const shapeMenus = useMemo(() => ([
     {draggable: true, key: 'rect', icon: <span className={`${currentPrefix}-head-rect`}/>, name: FormatMessage.string({id: 'toolbar.rect'})},
     {draggable: true, key: 'round', icon: <span className={`${currentPrefix}-head-round`}/>, name: FormatMessage.string({id: 'toolbar.round'})},
@@ -813,22 +874,27 @@ export const WorkbenchEditorToolbar = React.memo(({currentPrefix, mode, menuType
       <span>{domainNames[menuType] || domainNames[1]}</span>
       <WbIcon name='chevron' size={11}/>
       <strong title={title?.tooltip || title?.title}>{title?.title || domainNames[menuType]}</strong>
+      {isDiagram && modelLevel && <span className={`${currentPrefix}-wb-tag`}>
+        <FormatMessage id={`modelCatalog.${modelLevel}`}/>
+      </span>}
     </div>
     <div className={`${currentPrefix}-wb-toolbar-actions`}>
       {canUseCanvas && <>
-        <WbDragTool
+        {(!modelLevel || modelLevel === 'physical') && <WbDragTool
           currentPrefix={currentPrefix}
           name='table'
           title={FormatMessage.string({id: 'toolbar.emptyEntity'})}
           disabled={false}
           onAction={(e) => iconClick(e, 'empty')}
-        />
-        <WbDragTool
+        />}
+        {(!modelLevel || modelLevel === 'logical') && <WbDragTool
           currentPrefix={currentPrefix}
           name='columns'
           title={FormatMessage.string({id: 'toolbar.emptyLogic'})}
           onAction={(e) => iconClick(e, 'logic')}
-        />
+        />}
+        {modelLevel === 'conceptual' && <WbDragTool currentPrefix={currentPrefix} name='model'
+          title={FormatMessage.string({id: 'modelCatalog.conceptEntity'})} onAction={e => iconClick(e, 'concept')}/>}
         <WbDragTool
           currentPrefix={currentPrefix}
           name='group'
@@ -862,6 +928,15 @@ export const WorkbenchEditorToolbar = React.memo(({currentPrefix, mode, menuType
           menus={alignEnable ? alignMenus : []}
           disabled={!alignEnable}
           menuClick={(m, e) => iconClick(e, m.key)}
+        />
+        <WbDropdown
+          currentPrefix={currentPrefix}
+          title={FormatMessage.string({id: 'workbench.displayMode', defaultMessage: '显示模式'})}
+          icon='eye'
+          label={null}
+          buttonClassName={`${currentPrefix}-wb-toolbtn`}
+          menus={displayModeMenus}
+          menuClick={(m) => onDisplayModeChange && onDisplayModeChange(m.key)}
         />
         <span className={`${currentPrefix}-wb-toolbar-divider`}/>
         <button
@@ -904,22 +979,21 @@ export const WorkbenchEditorToolbar = React.memo(({currentPrefix, mode, menuType
 const INSPECTOR_TYPE_LABELS = {
   entity: {id: 'workbench.inspectorTypeEntity'},
   logicEntity: {id: 'workbench.inspectorTypeLogic'},
+  conceptEntity: {id: 'modelCatalog.conceptEntity'},
   view: {id: 'workbench.inspectorTypeView'},
   dict: {id: 'workbench.inspectorTypeDict'},
 };
 
-// 对象类型 -> viewGroups 成员键（与各编辑页分组多选一致）
-const INSPECTOR_GROUP_KEYS = {
-  entity: 'refEntities',
-  logicEntity: 'refLogicEntities',
-  view: 'refViews',
-  dict: 'refDicts',
-};
-
-export const WorkbenchInspector = React.memo(({currentPrefix, dataSource, activeTab, tabs, selection,
+export const WorkbenchInspector = React.memo(({currentPrefix, dataSource, activeTab, tabs, selection, onOpenPlatformAsset,
                                                 getTabData, getSearchDataSource, getDiagramEdgeSnapshot,
                                                 onLocateReference, onEditEntity, draftVersion,
+                                                aiForced, aiPanel, onCloseAi,
                                                 resizer}) => {
+  const [inspectorTab, updateInspectorTab] = useState(aiForced ? 'ai' : 'properties');
+  useEffect(() => {
+    // 更多→AI 强制打开时直接进入 AI 页签；用户仍可切回属性
+    if (aiForced) updateInspectorTab('ai');
+  }, [aiForced]);
   // 上下文优先级（resolveInspectorTarget 纯函数，见 references.js）：
   // 图内选中仅在来源图仍为激活页签时生效；对象数据优先未保存草稿（有效数据），
   // 回退已保存 dataSource；draftVersion 在草稿落缓存时递增驱动重读。
@@ -935,7 +1009,7 @@ export const WorkbenchInspector = React.memo(({currentPrefix, dataSource, active
     return calcEntityReferences(target.data.id, getSearchDataSource());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target?.data?.id, draftVersion, dataSource]);
-  // 有效图快照仅对表类目标计算（字典无 ER 连线，不显示该分区）；
+  // WB-004B：有效图快照仅对表类目标计算（字典无 ER 连线，不显示该分区）；
   // 依赖 target 与 draftVersion，输入/连线草稿写入时随 tick 重算
   const associationSnapshot = useMemo(() => {
     if (!target || target.type === 'dict' || !getDiagramEdgeSnapshot) {
@@ -948,11 +1022,17 @@ export const WorkbenchInspector = React.memo(({currentPrefix, dataSource, active
     if (!target) {
       return [];
     }
-    const groupKey = INSPECTOR_GROUP_KEYS[target.type];
-    return (dataSource?.viewGroups || [])
-      .filter(g => (g?.[groupKey] || []).includes(target.data.id))
+    return getCatalogCategories(dataSource)
+      .filter(g => (categoryObjects(dataSource, g)[target.type] || []).some(o => o.id === target.data.id))
       .map(g => g.defName || g.defKey);
   }, [target, dataSource]);
+  const platformLinks = useMemo(() => {
+    const collection = {entity: 'entities', logicEntity: 'logicEntities', conceptEntity: 'conceptEntities'}[target?.type];
+    if (!collection) return {drawings: [], business: []};
+    const source = getSearchDataSource();
+    return {drawings: assetOccurrences(source, makeAssetRef(collection, target.data.id)).filter(r => r.module === 'drawing'),
+      business: (source.business?.businessObjects || []).filter(o => (o.modelRefs || []).some(r => r.objectType === collection && r.objectId === target.data.id))};
+  }, [target?.data?.id, target?.type, draftVersion, dataSource]);
   const renderInfo = (labelId, value, mono) => {
     return <div className={`${currentPrefix}-wb-info-line`}>
       <span><FormatMessage id={labelId}/></span>
@@ -967,10 +1047,55 @@ export const WorkbenchInspector = React.memo(({currentPrefix, dataSource, active
     aria-label={FormatMessage.string({id: 'workbench.inspectorLabel'})}
   >
     {resizer}
+    <div className={`${currentPrefix}-wb-inspector-tabs`}>
+      <button
+        type='button'
+        className={inspectorTab === 'properties' ? 'active' : ''}
+        onClick={() => updateInspectorTab('properties')}
+      >
+        <FormatMessage id='workbench.inspectorTabProperties'/>
+      </button>
+      <button
+        type='button'
+        className={inspectorTab === 'ai' ? 'active' : ''}
+        onClick={() => updateInspectorTab('ai')}
+      >
+        <WbIcon name='sparkles' size={12}/>
+        <FormatMessage id='workbench.inspectorTabAI'/>
+      </button>
+      {aiForced && <button
+        type='button'
+        className={`${currentPrefix}-wb-inspector-tabs-close`}
+        onClick={onCloseAi}
+        title={FormatMessage.string({id: 'workbench.inspectorCloseAI'})}
+        aria-label={FormatMessage.string({id: 'workbench.inspectorCloseAI'})}
+      >
+        <WbIcon name='close' size={11}/>
+      </button>}
+    </div>
     <div className={`${currentPrefix}-wb-inspector-content`}>
+      {/* 保活双 pane（INTEGRATION-R1）：切页签只切 hidden，不 unmount——
+          AI 面板的对话/草稿/候选/服务状态与属性面板在往返切换中全部保留；
+          清理只发生在切项目（ModelingAiPanel projectSwitch），不跨项目泄漏 */}
+      <div
+        className={`${currentPrefix}-wb-inspector-pane`}
+        data-pane='ai'
+        hidden={inspectorTab !== 'ai'}
+        aria-hidden={inspectorTab !== 'ai' ? 'true' : 'false'}
+      >
+        {aiPanel || <div className={`${currentPrefix}-wb-hintbox`}>
+          <div className='heading'>
+            <WbIcon name='sparkles' size={14}/>
+            <FormatMessage id='workbench.inspectorTabAI'/>
+          </div>
+          <FormatMessage id='workbench.inspectorAIHint'/>
+        </div>}
+      </div>
       <div
         className={`${currentPrefix}-wb-inspector-pane`}
         data-pane='properties'
+        hidden={inspectorTab === 'ai'}
+        aria-hidden={inspectorTab === 'ai' ? 'true' : 'false'}
       >
         {(!target ? <div className={`${currentPrefix}-wb-inspector-empty`}>
           <WbIcon name='table' size={26}/>
@@ -1006,6 +1131,11 @@ export const WorkbenchInspector = React.memo(({currentPrefix, dataSource, active
         {renderInfo(target.type === 'dict' ? 'workbench.inspectorDictItems' : 'workbench.inspectorFieldCount',
           FormatMessage.string({id: 'workbench.inspectorCountValue',
             data: {count: (target.data.fields || target.data.items || []).length}}))}
+        {onOpenPlatformAsset && <><div className={`${currentPrefix}-wb-section-divider`}/><div className={`${currentPrefix}-wb-section-title`}><FormatMessage id='platformV3.crossModuleReferences'/><span className={`${currentPrefix}-wb-tag`}>{platformLinks.drawings.length + platformLinks.business.length}</span></div>
+          {platformLinks.business.map(o => <button key={o.id} type='button' className={`${currentPrefix}-wb-reference-row`} onClick={() => onOpenPlatformAsset({module: 'business', collection: 'businessObjects', id: o.id})}><WbIcon name='table'/><span>{o.name}</span><span>↗</span></button>)}
+          {platformLinks.drawings.map(d => <div key={d.id}>{d.ids.map((id, i) => <button type='button' key={id} className={`${currentPrefix}-wb-reference-row`} onClick={() => onOpenPlatformAsset({module: 'drawing', id: d.id, cellId: id})}><WbIcon name='diagram'/><span>{d.name} · {i + 1}/{d.ids.length}</span><span>↗</span></button>)}</div>)}
+          {!platformLinks.business.length && !platformLinks.drawings.length && <p className={`${currentPrefix}-wb-table-note`}><FormatMessage id='platformV3.noCrossModuleReferences'/></p>}
+        </>}
         {associationSnapshot && <div className={`${currentPrefix}-wb-section-divider`}/>}
         {associationSnapshot && <WorkbenchAssociations
           key={target.data.id}
@@ -1023,7 +1153,7 @@ export const WorkbenchInspector = React.memo(({currentPrefix, dataSource, active
           type='button'
           key={r.id}
           className={`${currentPrefix}-wb-reference-row`}
-          // 必须携带 diagram id（_jumpDetail 的 diagramRefs 分支按 d.id 开图定位）
+          // 二轮修复：必须携带 diagram id（_jumpDetail 的 diagramRefs 分支按 d.id 开图定位）
           onClick={() => onLocateReference({id: r.id, originKey: target.data.id, cellId: r.cellId})}
           title={`${r.defKey || ''}${r.defName ? `[${r.defName}]` : ''}`}
         >
@@ -1055,9 +1185,11 @@ export const WorkbenchInspector = React.memo(({currentPrefix, dataSource, active
 // 主域栏图标：沿用原型线性 SVG（按 nav.id 映射，不改 navigation 定义）
 const WB_RAIL_ICONS = {
   model: 'model',
-  business: 'briefcase',
-  drawing: 'flow',
+  overview: 'gauge',
+  metrics: 'metrics',
   database: 'databaseIcon',
+  business: 'flow',
+  drawing: 'shapes',
   standard: 'standard',
   delivery: 'delivery',
   versions: 'versions',
@@ -1066,7 +1198,7 @@ const WB_RAIL_ICONS = {
   extensions: 'extensions',
 };
 
-// 64px 主域栏：按 navigation.getWorkbenchPrimaryNavs 渲染
+// 64px 主域栏：按项目模块渲染数据轨或原导航（见 navigation.getWorkbenchPrimaryNavs）
 export const WorkbenchRail = React.memo(({currentPrefix, mode, menuType, module, onNavChange}) => {
   const renderNav = (nav) => {
     const disabled = isWorkbenchNavDisabled(nav, mode, READING);
@@ -1142,7 +1274,7 @@ export const WorkbenchStatusbar = React.memo(({currentPrefix, mode, dataSource})
   </div>;
 });
 
-// 返回项目列表（含未保存确认）
+// 返回项目列表（含未保存确认），与 HeaderTool 关闭逻辑一致
 export const confirmBackProjects = (dataSource, close) => {
   if (validateNeedSave(dataSource)) {
     Modal.confirm({

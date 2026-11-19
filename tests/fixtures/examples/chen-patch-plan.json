@@ -1,0 +1,59 @@
+{
+  "protocolVersion": "1.0",
+  "planId": "synthetic-plan-drawing",
+  "scope": {
+    "platform": "drawing",
+    "projectSessionId": "synthetic-project-session",
+    "documentId": "synthetic-drawing"
+  },
+  "baseVersion": "synthetic-snapshot-1",
+  "contextDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+  "readSet": [
+    {
+      "resource": "synthetic-current-target",
+      "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ],
+  "expiresAt": "2026-11-26T00:00:00Z",
+  "summary": "合成示例：仅展示设计协议，不可直接执行到真实项目",
+  "assumptions": [
+    "所有existing引用均为合成，需运行时解析校验"
+  ],
+  "operations": [
+    {
+      "opId": "refine",
+      "command": "drawing.chen.patch",
+      "dependsOn": [],
+      "args": {
+        "pageId": "synthetic-page",
+        "changes": [
+          {
+            "kind": "rename",
+            "target": {
+              "kind": "existing",
+              "collection": "drawingSemantic",
+              "id": "synthetic-order-entity"
+            },
+            "name": "客户订单"
+          },
+          {
+            "kind": "addAttribute",
+            "localKey": "amount",
+            "name": "订单金额",
+            "attributeKind": "simple",
+            "key": "none",
+            "owner": {
+              "type": "entity",
+              "ref": {
+                "kind": "existing",
+                "collection": "drawingSemantic",
+                "id": "synthetic-order-entity"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "planHash": "60c745f998f606652653ee141b36c5449772a07c2e969e18db9173d888e8162b"
+}

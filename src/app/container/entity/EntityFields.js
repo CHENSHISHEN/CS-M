@@ -1,7 +1,8 @@
 import React, {useCallback, useEffect, useRef} from 'react';
 
 import { Table } from 'components';
-// 物理实体字段删除前指标影响确认（无影响不阻扰）
+// M5B-R1：物理实体字段删除前指标影响确认（无影响不阻扰）
+import {makeFieldsDeleteCheck} from '../../metrics/deleteImpact';
 
 export default React.memo(({data, dataSource, update, FieldsExtraOpt,customerHeaders,
                              dataChange, offsetHeight, updateDataSource, ready, freeze, param,
@@ -45,5 +46,10 @@ export default React.memo(({data, dataSource, update, FieldsExtraOpt,customerHea
     getDataSource={getDataSource}
     openDict={openDict}
     defaultGroups={defaultGroups}
+    // M5B-R1：仅物理实体（指标绑定目标集合 entities）接入字段删除影响确认；
+    // 未保存实体（无 id）/无指标关联字段不增加阻扰
+    checkFieldsDelete={type === 'entity' && data && data.id
+      ? makeFieldsDeleteCheck(getDataSource || (() => dataSource), 'entities', data.id)
+      : undefined}
   />;
 });

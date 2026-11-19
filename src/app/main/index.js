@@ -5,7 +5,6 @@ import {
   Menu,
   Tab,
   Button,
-  Icon,
   Loading,
   openModal,
   Message,
@@ -17,6 +16,8 @@ import {
 } from 'components';
 import Dict from '../container/dict';
 import Entity from '../container/entity';
+import ConceptEntity from '../container/conceptentity';
+import ModelCatalog from '../workbench/ModelCatalog';
 import View from '../container/view';
 import Relation from '../container/relation';
 import Config from '../container/config';
@@ -28,6 +29,7 @@ import ImportExcel from '../container/tools/excel';
 import ExportWord from '../container/tools/word';
 import StandardField from '../container/standardfield';
 import {StandardFieldLibraryContext} from '../../lib/context';
+import HeaderTool from './HeaderTool';
 import MessageHelp from './MessageHelp';
 import ToggleCase from '../container/tools/togglecase';
 import CompareTable from '../container/tools/comparetable';
@@ -56,17 +58,15 @@ import {
   validateNeedSave,
   toggleCaseDataSource,
   toggleCaseEntityOrView,
-  getUnGroup,
 } from '../../lib/datasource_util';
 import {
+  clearAllTabData,
   getAllTabData,
   getDataByTabId,
   getCache,
   replaceDataByTabId,
-  retireSavedTabData,
   setCache,
   setDataByTabId,
-  snapshotDirtyTabData,
 } from '../../lib/cache';
 import {removeSave, Save} from '../../lib/event_tool';
 
@@ -79,12 +79,11 @@ import {compareVersion} from '../../lib/update';
 import {notify} from '../../lib/subscribe';
 import {READING} from '../../lib/variable';
 import LogicEntity from '../container/logicentity';
-import ConceptEntity from '../container/conceptentity';
-import ModelCatalog from '../workbench/ModelCatalog';
-import DrawingWorkbench from '../drawing/DrawingWorkbench';
-import BusinessWorkbench from '../business/BusinessWorkbench';
-import { drawingPersistence } from '../../lib/drawing_persistence';
-import { physicalMetadataPatches, applyPhysicalMetadataPatch } from '../../lib/model_catalog';
+import {createAiHostClient} from '../ai/integration/hostClient';
+import {initAiRuntime, getAiRuntime} from '../ai/integration/aiRuntime';
+import ModelingAiPanel from '../ai/integration/ModelingAiPanel';
+import SqlImportPanel from '../ai/integration/SqlImportPanel';
+import CandidateTab from '../ai/integration/candidateTab';
 import {
   WorkbenchDocumentTabs,
   WorkbenchEditorToolbar,
@@ -100,14 +99,29 @@ import {
   readWorkbenchSidebarWidth,
   writeWorkbenchSidebarWidth,
   readWorkbenchSidebarManualWidth,
+  readWorkbenchSidebarAutoWidth,
+  writeWorkbenchSidebarAutoWidth,
+  calcFirstEntrySidebarWidth,
+  clampWorkbenchSidebarWidth,
+  firstEntryMeasureRowSelector,
+  planFirstEntryMeasure,
   readWorkbenchInspectorWidth,
   writeWorkbenchInspectorWidth,
   clampWorkbenchInspectorWidth,
-  clampWorkbenchSidebarWidth,
+  isDataWorkbenchModule,
   workbenchInspectorHidden,
+  workbenchSidebarHidden,
 } from '../workbench/navigation';
 import {filterTreeMenus} from '../workbench/treeFilter';
+import {inferDiagramLevel, physicalMetadataPatches, applyPhysicalMetadataPatch} from '../../lib/model_catalog';
+import EnterpriseHome from '../workbench/EnterpriseHome';
 import DatabaseWorkspace from '../workbench/DatabaseWorkspace';
+import ResourceOverview from '../workbench/ResourceOverview';
+import ForwardEngineering from '../workbench/ForwardEngineering';
+import DrawingWorkbench from '../drawing/DrawingWorkbench';
+import {drawingPersistence} from '../../lib/drawing_persistence';
+import BusinessWorkbench from '../business/BusinessWorkbench';
+import MetricsWorkbench from '../metrics/MetricsWorkbench';
 
 const TabItem = Tab.TabItem;
 
@@ -147,6 +161,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
   const [draggable, setDraggable] = useState(false);
   const { lang } = config;
   const cavRefArray = useRef([]);
+  const headerToolRef = useRef(null);
   //const [menus, setMenus] = useState([]);
   const [menuType, setMenuType] = useState(() => (
     restProps?.dataSource?.module === 'drawing' ? '7' : (
@@ -160,29 +175,30 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
       setMenuType('8');
     }
   }, [restProps?.dataSource?.module]);
-  const [drawingSession, setDrawingSession] = useState(null);
-  const [businessSession, setBusinessSession] = useState(null);
-  const [platformReturn, setPlatformReturn] = useState(null);
-  const [platformRequest, setPlatformRequest] = useState(null);
-  // 经典布局已剥离，新工作台是唯一布局；不再读取本地布局偏好，
+  // S3：经典布局已剥离，新工作台是唯一布局；不再读取本地布局偏好，
   // 旧 classic 偏好键不参与任何入口
-  // 图内选中镜像（图工具栏对齐禁用判断）
+  // WB-004C：图内选中镜像（图工具栏对齐禁用判断；HeaderTool 保留为无 UI
+  // 控制器承载共用 imperative setIsCellSelected，两者互不影响）
   const [wbCellSelected, setWbCellSelected] = useState([]);
-  // 资源树本地筛选（仅呈现层过滤，不改模型）
+  // WB-002：资源树本地筛选（仅呈现层过滤，不改模型）
   const [wbTreeFilter, setWbTreeFilter] = useState('');
-  // 图内选中实体（selection:changed 的附加订阅，见 selectionChanged）
+  // WB-002：图内选中实体（selection:changed 的附加订阅，见 selectionChanged）
   const [wbSelection, setWbSelection] = useState(null);
-  // 右侧上下文面板开关（仅新布局呈现）
+  // WB-002：右侧上下文面板开关（仅新布局呈现）
   const [wbInspectorOpen, setWbInspectorOpen] = useState(true);
-  // 资源树宽度 = 本机独立视图偏好（不进模型、不触发保存/dirty）；
+  // WB-003①：资源树宽度 = 本机独立视图偏好（不进模型、不触发保存/dirty）；
   // 窗口变化时仅钳制实际渲染宽度，偏好值保留，宽窗口恢复后自动还原。
-  // 初始宽度优先级 = 手调偏好 > 默认240
-  const [wbSidebarWidth, setWbSidebarWidth] = useState(
-    () => {
-      const wbManualWidth = readWorkbenchSidebarManualWidth(getCache);
-      return wbManualWidth === null || wbManualWidth === undefined
-        ? readWorkbenchSidebarWidth(getCache) : wbManualWidth;
-    });
+  // S1 R5：初始宽度优先级 = 手调偏好 > 本项目首次自动估算 > 默认240
+  // projectInfo 是字符串路径（actions/core info:path），非对象
+  const wbProjectKeyRef = useRef('');
+  wbProjectKeyRef.current = (typeof projectInfo === 'string' ? projectInfo : projectInfo?.path)
+    || restProps?.dataSource?.name || '__unsaved__';
+  const [wbSidebarWidth, setWbSidebarWidth] = useState(() => {
+    const manual = readWorkbenchSidebarManualWidth(getCache);
+    if (manual != null) return manual;
+    const auto = readWorkbenchSidebarAutoWidth(getCache, wbProjectKeyRef.current);
+    return auto != null ? auto : readWorkbenchSidebarWidth(getCache);
+  });
   const [wbInspectorWidth, setWbInspectorWidth] = useState(
     () => readWorkbenchInspectorWidth(getCache));
   const [wbWindowWidth, setWbWindowWidth] = useState(
@@ -192,8 +208,129 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
     window.addEventListener('resize', onWindowResize);
     return () => window.removeEventListener('resize', onWindowResize);
   }, []);
-  // 有效草稿版本号（tabDataChange 写缓存时递增，驱动上下文面板重读草稿）
+  // S1 R5（整改 F5）：首次进入本项目工作台且无手调偏好时，按第一层真实目录名
+  // （实际字体+徽标；含待归档下首次可见分类/旧主题域真实名称）测宽一次：
+  // [260, min(480,视口35%)] 再服从布局钳制；结果写项目级自动键（不算手调），
+  // 此后重开/切模块/改名/筛选不再测量；用户手调出现后自动估算永不覆盖。
+  // fonts.ready/rAF 异步期间再次校验原始手调键（planFirstEntryMeasure），
+  // 拖宽后放弃测量不覆盖本次宽度；目录未渲染（先进其他模块）或筛选生效时
+  // 不置 firstSized，依 menuType/筛选变化有界重试，不永久吞掉首次模型测量。
+  const wbFirstEntrySizedRef = useRef(false);
+  const wbFirstMeasureAttemptsRef = useRef(0);
+  useEffect(() => {
+    if (wbFirstEntrySizedRef.current) return;
+    const projectKey = wbProjectKeyRef.current;
+    const settle = (plan) => {
+      wbFirstEntrySizedRef.current = true;
+      if (plan.action === 'restore' && plan.width !== wbSidebarWidth) {
+        setWbSidebarWidth(plan.width);
+      }
+    };
+    const pre = planFirstEntryMeasure({
+      manualWidth: readWorkbenchSidebarManualWidth(getCache),
+      storedAutoWidth: readWorkbenchSidebarAutoWidth(getCache, projectKey),
+      filterActive: !!wbTreeFilter.trim(),
+      attempts: wbFirstMeasureAttemptsRef.current,
+    });
+    if (pre.action === 'stop' || pre.action === 'restore') {
+      settle(pre);
+      return;
+    }
+    let cancelled = false;
+    const measure = () => {
+      if (cancelled || wbFirstEntrySizedRef.current) return;
+      wbFirstMeasureAttemptsRef.current += 1;
+      const catalog = document.querySelector('.chiner-model-catalog');
+      const rows = catalog ? [...catalog.querySelectorAll(firstEntryMeasureRowSelector())] : [];
+      const plan = planFirstEntryMeasure({
+        // 手调守卫：异步等待期间用户已拖宽（手调键出现）则放弃，绝不覆盖本次宽度
+        manualWidth: readWorkbenchSidebarManualWidth(getCache),
+        storedAutoWidth: readWorkbenchSidebarAutoWidth(getCache, projectKey),
+        filterActive: !!wbTreeFilter.trim(),
+        firstLevelRowCount: rows.length,
+        attempts: wbFirstMeasureAttemptsRef.current,
+      });
+      if (plan.action === 'stop' || plan.action === 'restore') {
+        settle(plan);
+        return;
+      }
+      if (plan.action === 'defer') return; // 不置 firstSized：等待有界重试
+      const ctx = document.createElement('canvas').getContext('2d');
+      let textWidth = 0;
+      rows.forEach((row) => {
+        const name = row.querySelector('.chiner-catalog-name');
+        if (!name) return;
+        ctx.font = getComputedStyle(name).font;
+        let width = ctx.measureText(name.textContent || '').width;
+        const badge = row.querySelector('.chiner-catalog-badge');
+        if (badge) {
+          ctx.font = getComputedStyle(badge).font;
+          width += ctx.measureText(badge.textContent || '').width + 14;
+        }
+        textWidth = Math.max(textWidth, width);
+      });
+      // 只有真实一级层/旧主题域全部可测（测得有效文本宽）才标记 firstSized
+      if (!textWidth) return;
+      // 固定装饰宽：左缩进10 + 折叠箭头与边距 + 目录图标与间距 + ⋯按钮20 + 右内边距5 + 滚动条余量
+      const inspectorWidth = wbInspectorOpen
+        ? clampWorkbenchInspectorWidth(wbInspectorWidth, window.innerWidth) : 0;
+      const next = clampWorkbenchSidebarWidth(
+        calcFirstEntrySidebarWidth(textWidth + 77, window.innerWidth),
+        window.innerWidth, inspectorWidth);
+      if (Number.isFinite(next) && next > 0) {
+        wbFirstEntrySizedRef.current = true;
+        setWbSidebarWidth(next);
+        writeWorkbenchSidebarAutoWidth(setCache, projectKey, next);
+      }
+    };
+    // fonts ready 后一帧测量，避免字体未加载量宽偏小；每次条件变化重排一次尝试
+    (document.fonts?.ready || Promise.resolve())
+      .then(() => requestAnimationFrame(measure));
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuType, wbTreeFilter]);
+  // WB-002 二轮：有效草稿版本号（tabDataChange 写缓存时递增，驱动上下文面板重读草稿）
   const [wbDraftTick, setWbDraftTick] = useState(0);
+  // S3：企业首页添加请求（公共合同 addRequest:{kind,nonce}），
+  // ModelCatalog.onHomeAdd 打开首页并请求添加，EnterpriseHome 按 nonce 消费
+  const [homeAddRequest, setHomeAddRequest] = useState(null);
+  const [drawingSession, setDrawingSession] = useState(null);
+  const [businessSession, setBusinessSession] = useState(null);
+  // M2：指标平台（menuType 11）。首访后保活挂载（hidden 切换），未提交表单在
+  // 模块往返中不静默丢失；写入经 MetricsWorkbench 内部领域命令（一次一次 update）
+  const metricsRef = useRef(null);
+  const [metricsKeepAlive, setMetricsKeepAlive] = useState(false);
+  // M4B：指标定位事件（模型编辑器“指标关联”→ 指标平台；只接指标目标）
+  const [metricsOpenRequest, setMetricsOpenRequest] = useState(null);
+  useEffect(() => {
+    if (menuType === '11') setMetricsKeepAlive(true);
+  }, [menuType]);
+  // M5B 首页指标入口（一次性意图，Home 发起）：项目打开成功进入 Main 后按项目
+  // 类型分流——数据项目（module=data 或旧项目无 module）直接切到指标工作台；
+  // 业务/画图项目不强改身份，给出明确说明并停留在默认模块。消费后回调清理，
+  // 取消/失败不进入 Main，不残留。
+  const metricsEntryRef = useRef(null);
+  const metricsEntry = restProps.metricsEntry;
+  const onMetricsEntryConsumed = restProps.onMetricsEntryConsumed;
+  useEffect(() => {
+    if (!metricsEntry || !metricsEntry.nonce) return;
+    if (metricsEntryRef.current === metricsEntry.nonce) return;
+    metricsEntryRef.current = metricsEntry.nonce;
+    const module = restProps?.dataSource?.module;
+    if (module === 'drawing' || module === 'business') {
+      Message.warring({title: FormatMessage.string({id: 'metrics.entry.wrongModule', data: {
+        module: FormatMessage.string({id: module === 'drawing'
+          ? 'home.filterDrawing' : 'home.filterBusiness'}),
+      }})});
+    } else {
+      setMetricsKeepAlive(true);
+      setMenuType('11');
+    }
+    onMetricsEntryConsumed && onMetricsEntryConsumed();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metricsEntry && metricsEntry.nonce]);
+  const [platformRequest, setPlatformRequest] = useState(null);
+  const [platformReturn, setPlatformReturn] = useState(null);
   const [ruleConfigOpen, openCheckRuleConfig] = useState(false);
   const [versionType, setVersionType] = useState('1');
   const currentVersionRef = useRef(null);
@@ -231,8 +368,9 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
       isRefreshRef.current = false;
       updateTabs((pre) => {
         return pre.filter((p) => {
-          // 封面图 tab 不对应模型集合对象，刷新时直接保留
-          if (p.menuKey === 'home-cover') return true;
+          // 企业首页/旧封面 tab 不对应模型集合对象，刷新时直接保留；
+          // AI 临时候选 tab 是独立视图页（不在 allType），同样保留
+          if (p.menuKey === 'home-cover' || p.type === 'ai-candidate') return true;
           const { name } = allType.filter(t => t.type === p.type)[0];
           return (restProps.dataSource[name] || []).findIndex(d => d.id === p.menuKey) > -1;
         });
@@ -240,45 +378,206 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
       setMainId(Math.uuid());
     }
   }, [restProps.dataSource]);
-  // 打开项目无文档时默认呈现封面图（quick.home 快捷入口同源）
+  // DATA-WB-FEAT-001 阶段A：数据建模项目（module 非绘图/业务）默认打开企业级首页；
+  // 绘图/业务平台项目保持原初始工作区，不受影响
   useEffect(() => {
-    if (tabsRef.current.length === 0) {
-      _onMenuClick('home-cover', 'diagram', null, 'icon-guanxitu');
+    const module = restProps?.dataSource?.module;
+    if (module !== 'drawing' && module !== 'business' && tabsRef.current.length === 0) {
+      _onMenuClick('home-cover', 'home', null, 'fa-home');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useEffect(() => {if (drawingPersistence.available && !projectInfoRef.current) drawingPersistence.open('', dataSourceRef.current).catch(err => Message.error({title: err.message}));}, []);
+  useEffect(() => {drawingPersistence.setCloseGuard(() => validateNeedSave(dataSourceRef.current));return () => drawingPersistence.setCloseGuard(null);}, []);
+  // ===== AI 集成（PLATFORM-AI-IMPL-001/INTEGRATION）=====
+  // 共享一个 Host IPC 客户端与一个 GATEWAY 实例；建模/绘图两域经同一宿主合同
+  // 分发。会话（bind/epoch）按项目键驱动：切项目先 advance/end 旧会话再绑定新
+  // 会话，旧 epoch 在途请求即刻作废；readonly 与 baseVersion 随项目状态同步。
+  const aiRuntimeRef = useRef(null);
+  const aiSessionRef = useRef(null);
+  const aiCommitsRef = useRef(new Map());
+  const aiPanelRef = useRef(null);
+  const [aiForcedOpen, setAiForcedOpen] = useState(false);
+  // R1 保活（父级）：一旦打开过 AI，检查器保持挂载；关闭（aiForcedOpen=false）
+  // 只经 home-wb-no-inspector 隐藏布局，不卸载 AI 面板——草稿/消息/候选不丢，
+  // More→AI 重开即恢复。切到绘图/业务平台（7/8）仍按原样卸载（域独立 AI）。
+  const aiKeepAliveRef = useRef(false);
+  const [aiCandidate, setAiCandidate] = useState(null);
+  const aiCandidateRef = useRef(null);
+  aiCandidateRef.current = aiCandidate;
+  // 完整有效草稿（不是 getSearchDataSource 的有损投影）：合并已打开对象的
+  // 编辑缓存与完整图 cells，作为 AI 计划/指纹/提交的统一基准
+  const getAiValidDraft = useCallback(() => {
+    const source = {...dataSourceRef.current};
+    Object.values(getAllTabData()).filter(t => t.data && !t.isInit).forEach((t) => {
+      if (t.type === 'diagram') {
+        source.diagrams = (source.diagrams || []).map(d => (d.id === t.data.id
+          ? {...d, canvasData: {cells: t.data.cells || []}} : d));
+      } else {
+        const typeName = allType.find(a => a.type === t.type)?.name;
+        if (typeName && source[typeName]) {
+          source[typeName] = source[typeName].map(d => (d.id === t.data.id ? t.data : d));
+        }
+      }
+    });
+    return source;
+  }, []);
+  // 建模域宿主提交：幂等（同 commandId 回放原结果）；写边界同步核验网关
+  // expected（会话/epoch/baseVersion）与只读位；一次 restProps.update 同步
+  // 已打开 tab 缓存（保留未触及草稿），失败可重试且不留已执行回执
+  const commitAiModeling = useCallback(async (payload) => {
+    if (aiCommitsRef.current.has(payload.commandId)) {
+      return aiCommitsRef.current.get(payload.commandId);
+    }
+    try {
+      const rt = aiRuntimeRef.current;
+      const expected = payload.expected;
+      if (rt && expected) {
+        const session = rt.getSession();
+        if (expected.projectSessionId !== session.projectSessionId
+          || String(expected.epoch) !== String(session.epoch)
+          || String(expected.baseVersion) !== String(session.baseVersion)) {
+          return {ok: false, code: 'PROJECT_CHANGED', message: '宿主写入边界：会话/epoch/版本不匹配'};
+        }
+        if (session.readonly) {
+          return {ok: false, code: 'READ_ONLY', message: '宿主写入边界：当前只读'};
+        }
+      }
+      const next = payload.dataSource;
+      (payload.receipt?.objects || []).forEach(({collection, id}) => {
+        const type = {entities: 'entity', logicEntities: 'logicEntity',
+          conceptEntities: 'conceptEntity', views: 'view'}[collection];
+        if (!type) return;
+        const tabKey = `${id}${separator}${type}`;
+        const tabData = getDataByTabId(tabKey);
+        if (tabData && tabData.data && tabData.data.id === id && !tabData.isInit) {
+          const nextObj = (next[collection] || []).find(o => o.id === id);
+          if (nextObj) {
+            replaceDataByTabId(tabKey, {...tabData, data: nextObj});
+            notify('tabDataChange', {id, d: nextObj});
+          }
+        }
+      });
+      dataSourceRef.current = next;
+      restProps.update(next);
+      const result = {ok: true};
+      aiCommitsRef.current.set(payload.commandId, result);
+      return result;
+    } catch (error) {
+      return {ok: false, code: 'COMMIT_FAILED', message: error && error.message};
+    }
+  }, [restProps]);
+  if (!aiRuntimeRef.current) {
+    aiRuntimeRef.current = initAiRuntime({
+      client: createAiHostClient(),
+      getModelingSnapshot: () => getAiValidDraft(),
+      commitModeling: commitAiModeling,
+      getDrawingDocuments: () => dataSourceRef.current.drawings || [],
+    });
+  }
+  // 项目键变化 → 会话切换（旧会话作废）；卸载结束会话
+  const aiProjectKey = wbProjectKeyRef.current;
+  useEffect(() => {
+    const rt = aiRuntimeRef.current;
+    if (!rt || !rt.available()) return undefined;
+    let cancelled = false;
+    const run = async () => {
+      if (aiSessionRef.current && aiSessionRef.current.key === aiProjectKey) return;
+      const previous = aiSessionRef.current;
+      aiSessionRef.current = null;
+      rt.setSession({projectSessionId: '', epoch: 1, readonly: mode === READING, baseVersion: ''});
+      if (previous) {
+        try { await rt.client.advanceEpoch(previous.projectSessionId); } catch (e) { /* 旧会话可能已失效 */ }
+        try { await rt.client.endSession(previous.projectSessionId); } catch (e) { /* 同上 */ }
+      }
+      const projectSessionId = `pmaner_${Math.uuid()}`;
+      try {
+        const bound = await rt.client.bindSession(projectSessionId);
+        if (cancelled) return;
+        aiSessionRef.current = {projectSessionId, epoch: bound.epoch, key: aiProjectKey};
+        rt.setSession({projectSessionId, epoch: bound.epoch,
+          readonly: mode === READING, baseVersion: 'v1'});
+      } catch (e) {
+        // Host 拒绝/不可用：会话保持空，发送请求会被拒绝并提示
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiProjectKey, mode === READING]);
+  // Main 卸载（关闭项目，src/app/home/index.js 换载）释放 AI 会话隔离最后一环
+  // （msg_6948bfaf64c7）：结束项目会话并释放 Main 拥有的 runtime 与 client——
+  // 在途按精确 ID 取消、旧宿主闭包随实例释放，新 Main 重新 initAiRuntime 绑定
+  // 新宿主；异步收尾（endSession 回调）只作用于本实例，不清掉可能的新实例。
+  useEffect(() => () => {
+    const rt = aiRuntimeRef.current;
+    const session = aiSessionRef.current;
+    aiRuntimeRef.current = null;
+    aiSessionRef.current = null;
+    aiCommitsRef.current.clear();
+    if (!rt) return;
+    if (session && rt.available()) {
+      rt.client.endSession(session.projectSessionId).catch(() => { /* 旧会话可能已失效 */ });
+    }
+    rt.dispose();      // 幂等：新宿主接管时已释放则无副作用
+    rt.client.dispose(); // 本窗口客户端：结算在途 + best-effort Host 取消
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // 项目草稿引用变化 → baseVersion 递增（旧计划提交前的 staleness 复验基准）
+  useEffect(() => {
+    const rt = aiRuntimeRef.current;
+    if (rt && aiSessionRef.current) rt.bumpBaseVersion();
+  }, [restProps.dataSource]);
+  useEffect(() => {
+    const rt = aiRuntimeRef.current;
+    if (rt) rt.setSession({readonly: mode === READING});
+  }, [mode]);
+  // 保存成功：只有保存开始前已 dirty 的回执推到 saved（applied≠saved；
+  // 保存期间/之后的新提交不得被本次成功回调误标，仍待下一次真实保存）
+  const noteAiPersistenceSaved = (dirtyAtSaveStart) => {
+    const rt = aiRuntimeRef.current;
+    if (!rt) return;
+    (dirtyAtSaveStart || []).forEach((commandId) => {
+      const receipt = rt.gateway.getReceipt(commandId);
+      if (receipt.ok && receipt.receipt.persistence
+        && receipt.receipt.persistence.state === 'dirty') {
+        rt.gateway.notePersistence({commandId, state: 'saved'});
+      }
+    });
+  };
   const saveProject = (saveAs, callback) => {
     const isSaveAs = saveAs || !projectInfoRef.current;
-    // 保存开始前捕获脏缓存快照（引用级）：条目写点均为不可变替换，
-    // 成功后引用未变即视为已随本次保存落盘，引用变化即窗口内新编辑
-    const dirtySnapshot = snapshotDirtyTabData();
+    // 保存开始时刻的 dirty 回执清单：成功回调只推进这一批
+    const aiRt = aiRuntimeRef.current;
+    const dirtyAtSaveStart = aiRt ? aiRt.gateway.listReceipts()
+      .filter(r => r.persistence && r.persistence.state === 'dirty')
+      .map(r => r.commandId) : [];
     const newData = updateAllData(dataSourceRef.current);
     if (newData.result.status) {
       restProps.save(newData.dataSource, FormatMessage.string({id: 'saveProject'}), isSaveAs, (err) => {
         if (!err) {
-          // 成功：退休“已保存且窗口内未再编辑”的缓存条目；窗口内再次
-          // 编辑（引用已变）或新增的脏条目保留，不做整体清空式丢弃
-          const hasPendingEdits = retireSavedTabData(dirtySnapshot);
-          if (!isSaveAs && hasPendingEdits) {
-            // 窗口内又有新编辑：重新合并发布为待保存状态（redux 引用
-            // ≠ memoryCache('data')，脏提示保持），发布本身触发真实刷新
-            const fresh = updateAllData(dataSourceRef.current);
-            if (fresh.result.status) {
-              restProps?.update(fresh.dataSource);
-            } else {
-              // 合并校验失败不发布，但仍真实刷新已退休页签的蓝点
-              setWbDraftTick((pre) => pre + 1);
+          if (!isSaveAs) {
+            // M5B 保存接缝：saveProject action 成功后已发布 canonical 已存快照
+            // （saveProjectSuccess(tempData) → redux === memoryCache('data')，
+            // validateNeedSave 真实清除）。这里不再用保存前的 newData.dataSource
+            // 覆盖 redux——那会使 redux 与 memoryCache 引用/时间戳不一致，
+            // 保存成功后仍恒显“未保存”。落盘窗口内新增的编辑不丢弃：tab 编辑
+            // 重新合并后发布为待保存状态（保持脏），指标平台直写已由 action 保留。
+            const tabCache = getAllTabData();
+            const pendingTabIds = Object.keys(tabCache)
+              .filter(c => tabCache[c] && !tabCache[c].isInit);
+            if (pendingTabIds.length > 0) {
+              const fresh = updateAllData(dataSourceRef.current);
+              if (fresh.result.status) {
+                restProps?.update(fresh.dataSource);
+              }
             }
-          } else {
-            // 普通保存不再发布新对象：保存 action 成功后已发布 canonical
-            // 已存快照（redux === memoryCache('data')，validateNeedSave
-            // 真实清除），此处递增草稿版本号真实触发页签蓝点/未保存提示重算
-            setWbDraftTick((pre) => pre + 1);
           }
           Message.success({title: FormatMessage.string({id: 'saveSuccess'})});
+          clearAllTabData();
+          noteAiPersistenceSaved(dirtyAtSaveStart);
           callback && callback(false);
         } else {
-          // 保存失败：缓存与脏状态原样保留，待下次保存
           callback && callback(true);
           Message.error({title: `${FormatMessage.string({id: 'saveFail'})}:${err?.message}`});
         }
@@ -335,7 +634,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
     }
     return undefined;
   }, [activeKey, tabs]);
-  // 经典布局剥离——updateNavEmptyHide/_groupMenuChange 随经典树头部一并移除，
+  // S3：经典布局剥离——updateNavEmptyHide/_groupMenuChange 随经典树头部一并移除，
   // 空/分组过滤不再写模型偏好
   const onLocation = (e) => {
     e.stopPropagation();
@@ -459,32 +758,17 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
     });
     return source;
   };
+  // WB-004B：最小局部有效图快照接缝（仅右侧属性面板模型关联使用）。
+  // 与 getSearchDataSource 的搜索快照约定互不影响：这里保留图草稿 cells 的边端点
+  // （source.cell/target.cell）与表节点 originKey，并合并表对象未保存草稿（改名即时生效）。
+  // 返回轻量结构 {tables: {id->有效表}, diagrams: [{id,defKey,defName,cells}]}，
+  // 不深拷贝模型、不建立第二份模型状态。
   const getPlatformSource = () => {
     const source = getSearchDataSource();
     Object.values(getAllTabData()).filter(t => t.type === 'diagram' && t.data && !t.isInit).forEach(t => {
       source.diagrams = (source.diagrams || []).map(d => d.id === t.data.id ? {...d, canvasData: {cells: t.data.cells || []}} : d);
     });
     return source;
-  };
-  const navigatePlatform = request => {
-    if (request.module === 'drawing') {
-      setDrawingSession({view: 'documents', active: request.id, locate: request.cellId ? {id: request.cellId, nonce: Date.now()} : null});
-      setPlatformReturn(menuType);
-      setMenuType('7');
-      return;
-    }
-    if (request.module === 'business') {
-      setPlatformReturn(menuType);
-      setPlatformRequest({...request, nonce: Date.now()});
-      setMenuType('8');
-      return;
-    }
-    const key = request.collection || 'diagrams';
-    const asset = (getPlatformSource()[key === 'diagramRefs' ? 'diagrams' : key] || []).find(d => d.id === request.id);
-    if (!asset) return;
-    setPlatformReturn(menuType);
-    setMenuType('1');
-    _jumpDetail(key === 'diagramRefs' ? {...asset, cellId: request.cellId, originKey: asset.canvasData?.cells?.find(c => c.id === request.cellId)?.originKey} : asset, key);
   };
   const getDiagramEdgeSnapshot = () => {
     const base = dataSourceRef.current;
@@ -723,8 +1007,16 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
     });
   };
   const injectDataSource = (dataSource, modal) => {
+    // M4B 窄通知：先取导入前诊断数（update 后 dataSourceRef 尚未推进）
+    const diagBefore = (dataSourceRef.current?.profile?.metricPlatform?.importDiagnostics || []).length;
     restProps?.update({...dataSource});
     Message.success({title: FormatMessage.string({id: 'optSuccess'})});
+    const diagAfter = (dataSource?.profile?.metricPlatform?.importDiagnostics || []).length;
+    if (diagAfter > diagBefore) {
+      // 引导到指标平台“模型关联”页查看重命名/冲突/未随导入明细（不重写导入模块）
+      Message.warring({title: FormatMessage.string({
+        id: 'metrics.binding.diag.importNotice', data: {count: diagAfter - diagBefore}})});
+    }
     modal && modal.close();
   };
   const importFromPDMan = (type) => {
@@ -770,6 +1062,9 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
           const allRefEntities = newData.viewGroups.reduce((a, b) => a.concat(b.refEntities), []);
           restProps.closeLoading();
           modal = openModal(<>
+            {(newData.conceptEntities?.length || newData.profile?.modelCatalog) && <p className='chiner-wb-table-note'>
+              <FormatMessage id='modelCatalog.importNotice'/>
+            </p>}
             <ImportPd
             defaultSelected={newData.diagrams.reduce((a, b) => a
                   .concat((b.canvasData?.cells || []).map(c => c.originKey)
@@ -1462,88 +1757,6 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
     menuType,
     config.lang]);
 
-  const navEmptyHide = !!restProps.dataSource?.profile?.navEmptyHide;
-  const simpleMenu = useMemo(() => [
-    {
-      id: 'entities',
-      defKey: 'entities',
-      type: 'entities',
-      icon: 'fa-table',
-      defName: FormatMessage.string({id: 'project.entities'}),
-      children: (restProps.dataSource?.entities || []).map(e => ({...e, type: 'entity'})),
-    },
-    {
-      id: 'logicEntities',
-      defKey: 'logicEntities',
-      type: 'logicEntities',
-      icon: 'fa-columns',
-      defName: FormatMessage.string({id: 'project.logicEntities'}),
-      children: (restProps.dataSource?.logicEntities || []).map(e => ({...e, type: 'logicEntity'})),
-    },
-    {
-      id: 'views',
-      defKey: 'views',
-      type: 'views',
-      icon: 'icon-shitu',
-      defName: FormatMessage.string({id: 'project.views'}),
-      children: (restProps.dataSource?.views || []).map(v => ({...v, type: 'view'})),
-    },
-    {
-      id: 'diagrams',
-      defKey: 'diagrams',
-      type: 'diagrams',
-      icon: 'icon-guanxitu',
-      defName: FormatMessage.string({id: 'project.diagram'}),
-      children: (restProps.dataSource?.diagrams || []).map(d => ({...d, type: 'diagram'})),
-    },
-    {
-      id: 'dicts',
-      defKey: 'dicts',
-      type: 'dicts',
-      icon: 'icon-shujuzidian',
-      defName: FormatMessage.string({id: 'project.dicts'}),
-      children: (restProps.dataSource?.dicts || []).map(d => ({...d, type: 'dict'})),
-    },
-  ], [restProps.dataSource?.entities,
-      restProps.dataSource?.logicEntities,
-    restProps.dataSource?.views,
-      restProps.dataSource?.diagrams,
-    restProps.dataSource?.dicts,
-    config.lang]);
-  const defaultGroupMenu =
-      getUnGroup(restProps.dataSource, FormatMessage.string({id: 'exportSql.defaultGroup'}));
-  const useDefaultGroupMenu = ['refDiagrams', 'refDicts', 'refEntities', 'refViews', 'refLogicEntities']
-      .some(key => defaultGroupMenu[key].length > 0);
-  const groupMenu = useMemo(() => restProps.dataSource?.viewGroups
-      ?.concat(useDefaultGroupMenu ? defaultGroupMenu : [])?.map(v => ({
-    ...v,
-    type: 'groups',
-    icon: 'fa-th-large',
-    children: simpleMenu.map((c) => {
-      const currentRef = (v[`ref${c.defKey.slice(0, 1).toUpperCase() + c.defKey.slice(1)}`] || []);
-      const temChildren = [...c.children];
-      return {
-        ...c,
-        id: `${v.defKey}${separator}${c.defKey}`,
-        defKey: `${v.defKey}${separator}${c.defKey}`,
-        type: c.defKey,
-        children: currentRef.map((r) => {
-          const cIndex = temChildren.findIndex(e => e.id === r);
-          const child = temChildren[cIndex];
-          // 移除已经排好序的数据 在海量的数据下优化下一次查找的次数
-          if(cIndex > -1) {
-            temChildren.splice(cIndex, 1);
-          }
-          return child;
-        }).filter(r => !!r),
-      };
-    }).filter(c => (navEmptyHide ? c?.children?.length > 0 : true)),
-  })), [simpleMenu, navEmptyHide, restProps.dataSource?.viewGroups]);
-  const menus = {
-    modalAll: simpleMenu.filter(s => (navEmptyHide ? s?.children?.length > 0 : true)),
-    modalGroup: groupMenu,
-  };
-  const tempMenu = menus[groupType];
   // 标准域资源统计（真实数据同源：词元/字段标准库）
   const wbStandardStats = useMemo(() => ({
     roots: (restProps.dataSource?.profile?.fieldRecommendation?.wordRoots || []).length,
@@ -1562,7 +1775,6 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
   // 上下文面板“编辑表/字典”：复用唯一打开入口（已打开则仅激活）
   const _wbOpenInspectorTarget = (id, type) => {
     const icons = {
-      conceptEntity: 'fa-cube',
       entity: 'entity.svg',
       logicEntity: 'fa-columns',
       view: 'view.svg',
@@ -1570,13 +1782,34 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
     };
     _onMenuClick(id, type, null, icons[type] || 'entity.svg');
   };
-  // 顶栏“新建”项目对象创建，复用资源树右键 addOpt 全流程
+  // WB-004C：顶栏“新建”项目对象创建，复用资源树右键 addOpt 全流程
   const _wbCreateObject = (type) => {
     _contextMenuClick(null, getMenu('add', '', type, [], groupTypeRef.current, ''));
   };
+  // S2 R3：逻辑 → 物理正向生成向导（读最新有效草稿；只读不进入；
+  // 提交为纯增量原子合并，不触碰既有实体/其他 tab 草稿）
+  const _wbOpenForwardWizard = (preselect) => {
+    if (mode === READING) return;
+    let modal;
+    const close = () => { modal && modal.close(); };
+    modal = openModal(<ForwardEngineering
+      getDraftSource={getSearchDataSource}
+      getSource={getDataSource}
+      preselect={preselect}
+      onClose={close}
+      onCommit={(next) => {
+        dataSourceRef.current = next;
+        restProps.update(next);
+      }}
+    />, {
+      fullScreen: true,
+      title: FormatMessage.string({id: 'forward.title'}),
+      buttons: [],
+    });
+  };
   const tabDataChange = (data, t) => {
     setDataByTabId(t.tabKey, data);
-    // 表/图有效草稿落缓存后通知上下文面板重算
+    // WB-002 二轮：表/图有效草稿落缓存后通知上下文面板重算
     // （不创建第二份模型；递增同时刷新上下文和未保存提示）
     setWbDraftTick((pre) => pre + 1);
   };
@@ -1593,10 +1826,11 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
     if (sourceTabKey !== activeKeyRef.current) {
       return;
     }
-    // 图工具栏的对齐禁用状态镜像（checkAlignEnable 语义与原工具条一致）
+    headerToolRef.current.setIsCellSelected(cell);
+    // WB-004C：图工具栏的对齐禁用状态镜像（checkAlignEnable 语义与原工具条一致）
     setWbCellSelected(cell || []);
-    // 附加订阅：同步图内选中实体给右侧上下文面板（不影响既有工具条逻辑）。
-    // 记录来源页签 tabKey，面板仅在"该图仍为当前激活页签"时采信该选择，
+    // WB-002 附加订阅：同步图内选中实体给右侧上下文面板（不影响既有工具条逻辑）。
+    // 二轮修复：记录来源页签 tabKey，面板仅在"该图仍为当前激活页签"时采信该选择，
     // 背景图残留选择不再覆盖后来打开的其他对象；清空选择即回退页签上下文。
     const cells = cell || [];
     const firstEntity = cells.filter(c => c?.isNode?.() && c.getProp('originKey'))[0];
@@ -1783,7 +2017,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
       tabInstanceRef.current[activeKeyRef.current]?.twinkle(param.defKey);
       return;
     }
-    if (['entities', 'logicEntities', 'views', 'dicts'].includes(key)) {
+    if (['entities', 'logicEntities', 'conceptEntities', 'views', 'dicts'].includes(key)) {
       const type = key === 'entities' && d.type === 'refViews' ? 'view'
         : allType.find(item => item.name === key)?.type;
       setMenuType('1');
@@ -1808,6 +2042,43 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
       setMenuType('1');
     }
   };
+  const navigatePlatform = request => {
+    if (request.module === 'drawing') {setDrawingSession({view: 'documents', active: request.id, locate: request.cellId ? {id: request.cellId, nonce: Date.now()} : null});setPlatformReturn(menuType);setMenuType('7');return;}
+    if (request.module === 'business') {setPlatformReturn(menuType);setPlatformRequest({...request, nonce: Date.now()});setMenuType('8');return;}
+    const key = request.collection || 'diagrams';
+    const asset = (getPlatformSource()[key === 'diagramRefs' ? 'diagrams' : key] || []).find(d => d.id === request.id);
+    if (!asset) return;
+    setPlatformReturn(menuType);setMenuType('1');
+    _jumpDetail(key === 'diagramRefs' ? {...asset, cellId: request.cellId, originKey: asset.canvasData?.cells?.find(c => c.id === request.cellId)?.originKey} : asset, key);
+  };
+  // M4B/M5A 指标定位事件（只接指标目标）：definition=打开指标定义（含从模型字段预填的
+  // 原子草案），bindings=打开模型关联详情，lineage=打开血缘与影响页焦点。经
+  // metricsKeepAlive 保活切换，切回模型域不丢已存状态；未提交表单由
+  // MetricsWorkbench 脏守卫先确认。
+  const openMetricTarget = request => {
+    if (!request || (request.module !== 'definition' && request.module !== 'bindings'
+      && request.module !== 'lineage')) return;
+    setMetricsKeepAlive(true);
+    if (menuType !== '11') setPlatformReturn(menuType);
+    setMetricsOpenRequest({...request, nonce: Date.now() + Math.random()});
+    setMenuType('11');
+  };
+  // M4B 从指标平台精确打开模型/字段：端点按稳定 ID 解析当前项目（不在场即忽略，
+  // 不猜同名对象）；fieldDefKey 经 tab param/twinkle 定位到具体字段行。
+  const openModelFromMetrics = ref => {
+    if (!ref || !ref.collection || !ref.objectId) return;
+    const object = ((getDataSource() || {})[ref.collection] || [])
+      .find(d => d.id === ref.objectId);
+    if (!object) return;
+    const typeMap = {entities: 'entity', logicEntities: 'logicEntity',
+      conceptEntities: 'conceptEntity'};
+    const type = typeMap[ref.collection];
+    if (!type) return;
+    setPlatformReturn('11');
+    setMenuType('1');
+    _onMenuClick(ref.objectId, type, null, 'fa-table',
+      ref.fieldDefKey ? {defKey: ref.fieldDefKey} : null);
+  };
   const getTabComponent = (t) => {
     const type = t.type;
     const key = t.menuKey;
@@ -1820,20 +2091,39 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
       group = restProps?.dataSource?.viewGroups?.filter(v => v[groupRefKey]?.includes(key)) || [];
     }
     if (type === 'conceptEntity') {
-      return (
-        <ConceptEntity
-          entity={key}
-          dataSource={restProps.dataSource}
-          tabKey={t.tabKey}
-          readOnly={mode === READING}
-          updateDataSource={restProps?.update}
-          getDataSource={getDataSource}
-          jumpDetail={_jumpDetail}
-          hasRender={instance => hasRender(t.tabKey, instance)}
-          hasDestory={() => hasDestroy(t.tabKey)}
-          tabDataChange={data => tabDataChange(data, t)}
-        />
-      );
+      // S3 关联合同：概念实体与逻辑实体同样接收 updateDataSource/getDataSource/jumpDetail/readOnly
+      return <ConceptEntity entity={key} dataSource={restProps.dataSource} tabKey={t.tabKey}
+        readOnly={mode === READING}
+        updateDataSource={restProps?.update}
+        getDataSource={getDataSource}
+        jumpDetail={_jumpDetail}
+        openMetric={openMetricTarget}
+        hasRender={instance => hasRender(t.tabKey, instance)}
+        hasDestory={() => hasDestroy(t.tabKey)}
+        tabDataChange={data => tabDataChange(data, t)}/>;
+    } else if (type === 'ai-candidate') {
+      // AI 临时候选页：独立视图 tab（不进 allType/tab 缓存/dirty），关闭即弃
+      return <CandidateTab
+        locale={config.lang === 'zh' ? 'zh' : 'en'}
+        variant={aiCandidateRef.current?.variant === 'drawing' ? 'drawing' : 'modeling'}
+        candidate={aiCandidateRef.current?.candidate}
+        plan={aiCandidateRef.current?.plan}
+        selectedOpIds={aiCandidateRef.current?.selectedOpIds}
+        onClose={() => _tabClose(t.tabKey, true)}
+      />;
+    } else if (type === 'home') {
+      // 企业级首页文档：真实计数/概览图引用与可选 profile.enterpriseModeling 元数据；
+      // 不是关系图文档，不参与画布工具/对齐/图片导出等图上下文
+      return <EnterpriseHome
+        dataSource={restProps.dataSource}
+        updateDataSource={restProps.update}
+        readOnly={mode === READING}
+        getDataSource={getSearchDataSource}
+        addRequest={homeAddRequest}
+        onOpenDiagram={(id) => _onMenuClick(id, 'diagram', null, 'icon-guanxitu')}
+        onCreateDiagram={() => _wbCreateObject('diagrams')}
+        onOpenCoverDiagram={() => _onMenuClick('home-cover', 'diagram', null, 'icon-guanxitu')}
+      />;
     } else if (type === 'entity') {
       return (
         <Entity
@@ -1857,6 +2147,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
           tabDataChange={data => tabDataChange(data, t)}
           jumpDetail={_jumpDetail}
           readOnly={mode === READING}
+          openMetric={openMetricTarget}
           />);
     } else if (type === 'logicEntity') {
       return (
@@ -1880,6 +2171,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
           setMenuType={setMenuType}
           openCheckRuleConfig={openCheckRuleConfig}
           readOnly={mode === READING}
+          openMetric={openMetricTarget}
         />);
     } else if (type === 'view') {
       return <View
@@ -1934,22 +2226,6 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
       />;
     }
     return '';
-  };
-  const getName = (m) => {
-    if (m.defKey !== m.defName) {
-      if (m.type === 'groups'){
-        return `${m.defKey}${(m.defName !== m.defKey && m.defName) ? `-${m.defName}` : ''}`;
-      } else if (m.type === 'entity' || m.type === 'logicEntity' || m.type === 'view' || m.type === 'diagram' || m.type === 'dict'){
-        if (m.defName) {
-          const tempDisplayMode = m.sysProps?.nameTemplate || '{defKey}[{defName}]';
-          return tempDisplayMode.replace(/\{(\w+)\}/g, (match, word) => {
-            return m[word] || m.defKey || '';
-          });
-        }
-        return m.defKey;
-      }
-    }
-    return m.defName || m.defKey;
   };
   const domainGetName = (m) => {
     const dataTypeSupports = _.get(dataSourceRef.current, 'profile.dataTypeSupports', []);
@@ -2015,9 +2291,16 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
   const currentPrefix = getPrefix(prefix);
   const getTabTitle = (t) => {
     if (t.menuKey === 'home-cover') {
+      const titleId = t.type === 'home' ? 'enterpriseHome.title' : 'project.homeCover';
       return {
-        title: FormatMessage.string({id: 'project.homeCover'}),
-        tooltip: FormatMessage.string({id: 'project.homeCover'}),
+        title: FormatMessage.string({id: titleId}),
+        tooltip: FormatMessage.string({id: titleId}),
+      };
+    }
+    if (t.type === 'ai-candidate') {
+      return {
+        title: FormatMessage.string({id: 'ai.candidateTab'}),
+        tooltip: FormatMessage.string({id: 'ai.candidateTab'}),
       };
     }
     const currentType = allType.filter(a => a.type === t.type)[0];
@@ -2071,9 +2354,10 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
         openCheckRuleConfig(false);
       }
       setMenuType(key);
-      // 从其他主模块回到模型域且无打开文档时，默认呈现封面图
+      // S3：从其他主模块回到模型域且无打开文档时，默认呈现企业首页
+      // （原有 tabs 与草稿保留，不强制关闭/重建）
       if (key === '1' && tabsRef.current.length === 0) {
-        _onMenuClick('home-cover', 'diagram', null, 'icon-guanxitu');
+        _onMenuClick('home-cover', 'home', null, 'fa-home');
       }
       afterChange && afterChange();
     };
@@ -2090,7 +2374,16 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
     setWbTreeFilter('');
     catalogRef.current?.jumpPosition(d, key === 'entities' && d.type === 'refViews' ? 'views' : key);
   };
-  const backProjectConfirm = () => confirmBackProjects(dataSourceRef.current, restProps.close);
+  const backProjectConfirm = async () => {
+    try {await drawingPersistence.flush();} catch (err) {Message.error({title: err.message});return;}
+    // M2：关闭项目会卸载指标平台（未提交表单丢失），有脏表单先确认
+    const proceedClose = () => confirmBackProjects(dataSourceRef.current, restProps.close);
+    if (metricsRef.current && metricsRef.current.isDirty && metricsRef.current.isDirty()) {
+      metricsRef.current.checkLeave(proceedClose);
+    } else {
+      proceedClose();
+    }
+  };
   useEffect(() => {
     const clear = () => {
       if (autoSaveRef.current) {
@@ -2133,7 +2426,17 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
     return newDataSource;
   };
   const openHome = () => {
-    _onMenuClick('home-cover', 'diagram', null, 'icon-guanxitu');
+    _onMenuClick('home-cover', 'home', null, 'fa-home');
+  };
+  // S3：目录“企业首页组件”点击/拖放入口 —— 打开企业首页并按公共合同发起添加请求
+  // （addRequest:{kind,nonce}，EnterpriseHome 消费后按 nonce 去重；只读态由首页禁写）
+  const _wbHomeAdd = (kind) => {
+    setHomeAddRequest({kind, nonce: Date.now()});
+    if (menuType !== '1' && menuType !== '2') {
+      _menuTypeChange('1', () => _onMenuClick('home-cover', 'home', null, 'fa-home'));
+    } else {
+      _onMenuClick('home-cover', 'home', null, 'fa-home');
+    }
   };
   const renderOperatingFloor = () => {
     return (
@@ -2174,6 +2477,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
               common={common}
               setMenuType={setMenuType}
               readOnly={mode === READING}
+              onRequestAiFix={aiRuntimeReady ? handleQualityAiFix : null}
             />
         }
         {
@@ -2181,6 +2485,28 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
             dataSource={restProps.dataSource}
             updateDataSource={restProps.update}
             openStandardEdit={() => standardFieldRef.current?.openEdit()}
+          />
+        }
+        {
+          (menuType === '10') && <ResourceOverview
+            source={getSearchDataSource()}
+            getDataSource={getDataSource}
+            projectInfo={projectInfoRef.current}
+            readOnly={mode === READING}
+            draftVersion={wbDraftTick}
+            onOpenItem={(item) => {
+              // 下钻打开：实体类直接开编辑 tab；图开图；标准进字段标准编辑；规则进规则模块
+              if (item.collection === 'diagrams') {
+                _onMenuClick(item.id, 'diagram', null, 'icon-guanxitu');
+              } else if (item.collection === 'standardFields') {
+                standardFieldRef.current?.openEdit(item.raw);
+              } else if (item.collection === 'namingRules') {
+                _menuTypeChange('5');
+              } else {
+                _onMenuClick(item.id, item.type, null, 'entity.svg');
+              }
+            }}
+            onOpenModule={(m) => _menuTypeChange(m)}
           />
         }
         {
@@ -2205,10 +2531,11 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
           ref={appCodeRef}
           style={{display: menuType === '3' ? 'block' : 'none'}}
           />
-        {/* 显示控制必须在外层包装 div 上：Tab 组件(AutoCompose)的 style 只作用于
-            内层 .chiner-tab，外层包装(height:100%, position:relative)若保持渲染，
-            会透明拦截数据标准/交付/版本/规则检查等模块的点击；整体隐藏后非
-            模型/类型模块恢复可操作。 */}
+        {/* WB-003④：显示控制必须在外层包装 div 上。Tab 组件(AutoCompose)的 style
+            只作用于内层 .chiner-tab，外层 .chiner-auto-compose-tab-top 包装
+            (height:100%, position:relative) 在新工作台 grid 同格叠加中仍渲染在
+            数据标准/交付/版本/规则检查等模块上方，透明拦截其全部点击，造成
+            “模块点击无反应”。在外层整体隐藏后，非模型/类型模块恢复可操作。 */}
         <div
           className={`${currentPrefix}-wb-editor-host`}
           style={{
@@ -2249,7 +2576,6 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
       </>
     );
   };
-  const createGroupMenu = getMenu('add', '', 'groups', [], groupTypeRef.current, '');
   const createAppCodeMenu = getMenu('add', '', 'appCode', [], '', '');
   const onListDrop = (dropId, dragId) => {
     const dataTypeSupports = dataSourceRef.current?.profile?.dataTypeSupports || [];
@@ -2272,7 +2598,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
   const setCurrentMeta = (m, isCustomer) => {
     currentMetaRef.current?.setMeta(m, isCustomer);
   };
-  // 单一 CSS 变量驱动网格与资源容器宽度（新布局内 CSS !important 使用该变量）
+  // WB-003①：单一 CSS 变量驱动网格与资源容器宽度（新布局内 CSS !important 使用该变量）
   const wbInspectorEffectiveWidth = clampWorkbenchInspectorWidth(wbInspectorWidth, wbWindowWidth);
   const wbSidebarEffectiveWidth = clampWorkbenchSidebarWidth(
     wbSidebarWidth, wbWindowWidth, wbInspectorOpen ? wbInspectorEffectiveWidth : 0);
@@ -2295,13 +2621,88 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
     if (commit) writeWorkbenchInspectorWidth(setCache, next);
     return next;
   };
+  const activeDiagram = restProps.dataSource.diagrams?.find(d => d.id === activeTab?.menuKey);
+  const activeModelLevel = activeDiagram?.modelLevel || inferDiagramLevel(activeDiagram, restProps.dataSource);
+  // ===== AI 面板节点（检查器 AI 页签内容）=====
+  const aiLocale = config.lang === 'zh' ? 'zh' : 'en';
+  const handleAiCandidateChange = useCallback((next, variant) => {
+    // 绘图候选在绘图 AI 面板内自持预览（menuType 7 不开建模候选 tab）
+    if (variant === 'drawing') return;
+    setAiCandidate(next ? {...next, variant} : null);
+    const tabKey = `ai-candidate${separator}ai-candidate`;
+    if (next) {
+      if (menuType !== '1' && menuType !== '2') {
+        _menuTypeChange('1', () => _onMenuClick('ai-candidate', 'ai-candidate', null, 'fa-sparkles'));
+      } else {
+        _onMenuClick('ai-candidate', 'ai-candidate', null, 'fa-sparkles');
+      }
+    } else if (tabsRef.current.some(t => t.tabKey === tabKey)) {
+      _tabClose(tabKey, true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuType]);
+  const aiSaveSeam = useCallback((cb) => {
+    saveProject(false, (failed) => cb(failed));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restProps.dataSource, tabs]);
+  const aiValidDraft = useMemo(() => getAiValidDraft(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [restProps.dataSource, wbDraftTick]);
+  const aiRuntimeReady = aiRuntimeRef.current && aiRuntimeRef.current.available() === true;
+  const aiSqlPanelNode = aiRuntimeReady ? <SqlImportPanel
+    runtime={aiRuntimeRef.current}
+    locale={aiLocale}
+    dataSource={aiValidDraft}
+    draftVersion={wbDraftTick}
+    readOnly={mode === READING}
+    onCandidateChange={handleAiCandidateChange}
+    onSaveProject={aiSaveSeam}
+  /> : null;
+  const aiModelingPanelNode = aiRuntimeReady ? <ModelingAiPanel
+    ref={aiPanelRef}
+    runtime={aiRuntimeRef.current}
+    locale={aiLocale}
+    dataSource={aiValidDraft}
+    draftVersion={wbDraftTick}
+    readOnly={mode === READING}
+    onCandidateChange={handleAiCandidateChange}
+    onSaveProject={aiSaveSeam}
+    sqlPanel={aiSqlPanelNode}
+  /> : <div className='chiner-ai-unavailable'>
+    <FormatMessage id='ai.hostUnavailable'/>
+  </div>;
+  // 质量规则“生成修复候选”：打开 AI 检查器并把失败摘要注入 composer（仍走完整审阅）
+  const openAiAssistant = useCallback(() => {
+    aiKeepAliveRef.current = true; // 打开过即保活：后续关闭只隐藏不卸载
+    setAiForcedOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const handleQualityAiFix = useCallback((summaryText) => {
+    openAiAssistant();
+    if (menuType !== '1' && menuType !== '2') {
+      _menuTypeChange('1', () => aiPanelRef.current?.injectUserText(summaryText));
+    } else {
+      aiPanelRef.current?.injectUserText(summaryText);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuType]);
+  const handleDisplayModeChange = (modeKey) => {
+    const cavRef = getCurrentCav();
+    if (cavRef && typeof cavRef.setDisplayMode === 'function') {
+      cavRef.setDisplayMode(modeKey);
+    }
+  };
   return <Loading visible={common.loading} title={common.title}>
+    <HeaderTool ref={headerToolRef}/>
     <div
       style={homeStyle}
-      // 按属性面板实际可见性收起根网格右列（数据库工作区不渲染面板也不预留空列）；
-      // wbInspectorOpen 偏好保留，返回模型文档按原开合恢复。
-      // 派生规则见 navigation.workbenchInspectorHidden。
-      className={`${currentPrefix}-home ${currentPrefix}-home-wb${menuType === '7' && drawingSession?.active ? ` ${currentPrefix}-home-drawing-focus` : ''}${workbenchInspectorHidden({menuType, activeTabType: activeTab?.type, inspectorOpen: wbInspectorOpen}) ? ` ${currentPrefix}-home-wb-no-inspector` : ''}${menuType === '7' || menuType === '8' ? ` ${currentPrefix}-home-wb-no-sidebar` : ''}`}>
+      // 整改 F3：按“实际属性面板可见性”收起根网格右列（首页文档/数据库工作区
+      // 不渲染面板也不预留 320px 空列）；wbInspectorOpen 偏好保留，返回模型文档
+      // 按原开合恢复；绘图/业务平台布局不受影响。派生规则见 navigation.workbenchInspectorHidden。
+      // S3整改：总览上下文收起模型资源栏与拖宽器（该栏在总览只有标题无内容），
+      // 释放宽度给总览面板；仅呈现层收起，--wb-sidebar-w 与本机宽度偏好不读不写，
+      // 返回模型域按原宽度恢复。派生规则见 navigation.workbenchSidebarHidden。
+      className={`${currentPrefix}-home ${currentPrefix}-home-wb${menuType === '7' && drawingSession?.active ? ` ${currentPrefix}-home-drawing-focus` : ''}${workbenchInspectorHidden({menuType, activeTabType: activeTab?.type, inspectorOpen: wbInspectorOpen || aiForcedOpen, forceVisible: aiForcedOpen}) ? ` ${currentPrefix}-home-wb-no-inspector` : ''}${workbenchSidebarHidden({menuType}) ? ` ${currentPrefix}-home-wb-no-sidebar` : ''}`}>
       <WorkbenchTopbar
         key='wb-topbar'
         currentPrefix={currentPrefix}
@@ -2318,9 +2719,14 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
         openModal={_openModal}
         onCreateObject={_wbCreateObject}
         hideModelCreate
+        onOpenAiAssistant={() => {
+          aiKeepAliveRef.current = true; // More→AI 打开即进入保活
+          setAiForcedOpen(true);
+        }}
         onReturnPlatform={platformReturn && menuType !== platformReturn ? () => {setMenuType(platformReturn);setPlatformReturn(null);} : null}
         canvasExportable={!(activeTab?.type !== 'diagram' || (menuType !== '1' && menuType !== '2'))}
         compact={wbWindowWidth <= 1280}
+        dataPlatform={isDataWorkbenchModule(restProps.dataSource?.module)}
       />
       {menuType === '7' ? (
         <div className={`${currentPrefix}-home-drawing-area`}>
@@ -2328,8 +2734,8 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
             dataSource={restProps.dataSource}
             projectInfo={projectInfoRef.current}
             updateDataSource={next => {restProps.update(next);drawingPersistence.change(next.drawings || []).catch(() => {});}}
-            session={drawingSession}
-            onSessionChange={setDrawingSession}
+            session={menuType === '7' ? drawingSession : businessSession}
+            onSessionChange={menuType === '7' ? setDrawingSession : setBusinessSession}
             referenceSource={getPlatformSource()}
             onNavigate={navigatePlatform}
             openRequest={platformRequest}
@@ -2343,8 +2749,8 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
           <BusinessWorkbench
             dataSource={restProps.dataSource}
             updateDataSource={restProps.update}
-            session={businessSession}
-            onSessionChange={setBusinessSession}
+            session={menuType === '7' ? drawingSession : businessSession}
+            onSessionChange={menuType === '7' ? setDrawingSession : setBusinessSession}
             referenceSource={getPlatformSource()}
             onNavigate={navigatePlatform}
             openRequest={platformRequest}
@@ -2353,8 +2759,29 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
           />
         </div>
       ) : null}
+      {/* M2：指标平台整页（menuType 11）。首访后保活（hidden 切换不卸载），
+          未提交表单在模块往返中保留；模型资源树/属性栏由 no-sidebar/no-inspector
+          类收起，原布局偏好不读不写，回模型域自动恢复 */}
+      {metricsKeepAlive ? (
+        <div
+          className={`${currentPrefix}-home-metrics-area`}
+          hidden={menuType !== '11'}
+        >
+          <MetricsWorkbench
+            ref={metricsRef}
+            source={restProps.dataSource}
+            getDataSource={getDataSource}
+            updateDataSource={restProps.update}
+            readOnly={mode === READING}
+            projectDirty={validateNeedSave(restProps.dataSource)}
+            openRequest={metricsOpenRequest}
+            onOpenModel={openModelFromMetrics}
+          />
+        </div>
+      ) : null}
       <div
-        className={`${currentPrefix}-home-resize-container`}>
+        className={`${currentPrefix}-home-resize-container`}
+        style={{display: (menuType === '7' || menuType === '8' || menuType === '11') ? 'none' : undefined}}>
         <WorkbenchSidebar
           currentPrefix={currentPrefix}
           menuType={menuType}
@@ -2377,31 +2804,29 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
         <Tab activeKey={menuType} onChange={_menuTypeChange} showHeader={false}>
           <TabItem key='1' title={FormatMessage.string({id: 'modelTab'})} icon='model.svg'>
             <div className={`${currentPrefix}-home-menu-container`}>
-              <ModelCatalog
-                ref={catalogRef}
-                source={getSearchDataSource()}
-                getSource={getDataSource}
-                onUpdate={next => {
-                  physicalMetadataPatches(dataSourceRef.current, next).forEach((patch) => {
-                    const tabKey = `${patch.id}${separator}entity`;
-                    const tabData = getDataByTabId(tabKey);
-                    if (tabData && tabData.data && tabData.data.id === patch.id) {
-                      const merged = applyPhysicalMetadataPatch(tabData.data, patch);
-                      replaceDataByTabId(tabKey, {...tabData, data: merged});
-                      notify('tabDataChange', {id: patch.id, d: merged});
-                    }
-                  });
-                  dataSourceRef.current = next;
-                  restProps.update(next);
-                }}
-                onOpen={_onMenuClick}
-                onCloseObject={(id, type) => _tabClose(id + separator + type, true)}
-                onDrag={createEmptyTable}
-                filter={wbTreeFilter}
-                viewMode={catalogView}
-                readOnly={mode === READING}
-                onHome={openHome}
-              />
+                <ModelCatalog ref={catalogRef} source={getSearchDataSource()} getSource={getDataSource}
+                  onUpdate={next => {
+                    // S1 整改 F7：目录提交改变实体物理归属元数据（如删库撤归属）时，
+                    // 仅同步 physicalDatabaseId/physicalDbTypeId 到已打开实体 tab 的
+                    // 缓存与内部编辑 state（replaceDataByTabId + tabDataChange 通知）。
+                    // 合并基准是 tab 草稿本身：保留名称/字段/notes 与 isInit，
+                    // 不用已保存对象整表回退，避免保存/搜索把已删容器 ID 复活
+                    physicalMetadataPatches(dataSourceRef.current, next).forEach((patch) => {
+                      const tabKey = `${patch.id}${separator}entity`;
+                      const tabData = getDataByTabId(tabKey);
+                      if (tabData && tabData.data && tabData.data.id === patch.id) {
+                        const merged = applyPhysicalMetadataPatch(tabData.data, patch);
+                        replaceDataByTabId(tabKey, {...tabData, data: merged});
+                        notify('tabDataChange', {id: patch.id, d: merged});
+                      }
+                    });
+                    dataSourceRef.current = next;
+                    restProps.update(next);
+                  }}
+                  onOpen={_onMenuClick} onCloseObject={(id, type) => _tabClose(id + separator + type, true)}
+                  onDrag={createEmptyTable} filter={wbTreeFilter} viewMode={catalogView}
+                  onGenerate={_wbOpenForwardWizard}
+                  readOnly={mode === READING} onHome={openHome} onHomeAdd={_wbHomeAdd}/>
             </div>
           </TabItem>
           <TabItem key='2' title={FormatMessage.string({id: 'domainTab'})} icon='data_type.svg'>
@@ -2469,7 +2894,8 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
           <TabItem key='5' title={FormatMessage.string({id: 'project.checkRule'})} icon='fa-flag-checkered' />
           <TabItem hidden={mode === READING} key='6' title={FormatMessage.string({id: 'dataStandard.tab'})} icon='fa-book' />
         </Tab>
-        {/* 资源树宽度拖动由 WorkbenchSidebarResizer 承载 */}
+        {/* S3整改1：经典布局 resize 分隔条 DOM 已删除（回调随经典头部剥离后成为
+            未定义引用，打开项目即崩溃）；宽度拖动由 WorkbenchSidebarResizer 承载 */}
         <WorkbenchSidebarResizer
           currentPrefix={currentPrefix}
           startWidth={wbSidebarEffectiveWidth}
@@ -2479,6 +2905,9 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
       </div>
       <div
         className={`${currentPrefix}-home-resize-other`}
+        style={{
+          display: (menuType === '7' || menuType === '8' || menuType === '11') ? 'none' : undefined,
+        }}
       >
         <WorkbenchDocumentTabs
           currentPrefix={currentPrefix}
@@ -2496,20 +2925,30 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
           menuType={menuType}
           activeTab={menuType === '1' || menuType === '2' ? activeTab : null}
           getTabTitle={getTabTitle}
+          modelLevel={activeModelLevel}
+          displayMode={activeDiagram?.displayMode}
+          onDisplayModeChange={handleDisplayModeChange}
           iconClick={iconClick}
           onZoom={resize}
           cellSelected={wbCellSelected}
           inspectorOpen={wbInspectorOpen}
           onToggleInspector={() => setWbInspectorOpen(pre => !pre)}
-          inspectorAvailable={menuType !== '9'}
+          inspectorAvailable={menuType !== '9' && menuType !== '10' && activeTab?.type !== 'home'}
         />
         {renderOperatingFloor()}
       </div>
-      {/* 数据库工作区（menuType 9）无对象上下文，不渲染属性面板也不预留空列；
-          其余模块常驻渲染（含首页封面），未选中对象时面板显示空提示 */}
-      {menuType !== '9' && <WorkbenchInspector
+      {/* DATA-WB-FEAT-001：数据库工作区（menuType 9）、资源总览（menuType 10）与首页文档
+          激活时不显示属性面板（无对象上下文，不常驻空属性栏），模型/类型域其他文档保持原行为。
+          AI 助手强制打开时（更多→AI）独立挂载检查器（AI 页签激活）：不复活资源总览
+          空资源树，关闭恢复此前布局（wbInspectorOpen 原值），绘图/业务平台除外。
+          R1 保活：打开过 AI 后（aiKeepAliveRef）检查器保持挂载，关闭只经
+          home-wb-no-inspector 隐藏（display:none），AI 面板不卸载、状态不丢 */}
+      {((menuType !== '7' && menuType !== '8' && menuType !== '9' && menuType !== '10' && menuType !== '11' && activeTab?.type !== 'home') || aiForcedOpen || aiKeepAliveRef.current) && menuType !== '7' && menuType !== '8' && <WorkbenchInspector
         currentPrefix={currentPrefix}
-        resizer={wbInspectorOpen ? <WorkbenchSidebarResizer
+        aiForced={aiForcedOpen}
+        aiPanel={aiModelingPanelNode}
+        onCloseAi={() => setAiForcedOpen(false)}
+        resizer={(wbInspectorOpen || aiForcedOpen) ? <WorkbenchSidebarResizer
           currentPrefix={currentPrefix}
           side='right'
           startWidth={wbInspectorEffectiveWidth}

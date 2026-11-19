@@ -219,7 +219,7 @@ export default React.memo(({
                     <FormatMessage id='home.orderProcess' />
                   </div>
                   <div className={`${currentPrefix}-create-proj-template-item-desc`}>
-                    <FormatMessage id='home.orderProcessDesc' />
+                    <FormatMessage id='home.orderProcessDesc' /> (开发中)
                   </div>
                 </div>
               ) : (

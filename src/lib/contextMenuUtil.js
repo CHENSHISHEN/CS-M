@@ -1,4 +1,5 @@
 import React from 'react';
+import {assetDependents} from './drawing_platform';
 import _ from 'lodash/object';
 
 import { Button, openModal, Modal, Message, FormatMessage } from 'components';
@@ -42,6 +43,9 @@ import {
 } from './datasource_util';
 // 专门处理左侧菜单 右键菜单数据
 import { separator } from '../../profile';
+import {linkDeletionImpact} from './concept_logical_links';
+// M5B-R1：三层模型对象删除前指标影响汇总（只读窄接缝）
+import {summarizeMetricDeleteImpact, metricDeleteImpactLines} from '../app/metrics/deleteImpact';
 import demoProject from './template/教学管理系统.pdma.json';
 import * as Component from 'components';
 import Note from '../app/container/tools/note';
@@ -1521,11 +1525,25 @@ const pasteOpt = (dataSource, menu, updateDataSource) => {
 };
 
 const deleteOpt = (dataSource, menu, updateDataSource, tabClose) => {
-  const collection = {entity: 'entities', logicEntity: 'logicEntities', diagram: 'diagrams'}[menu.dataType] || menu.dataType;
+  const collection = {entity: 'entities', logicEntity: 'logicEntities', conceptEntity: 'conceptEntities', diagram: 'diagrams'}[menu.dataType] || menu.dataType;
   const ids = [menu.dataKey, ...(menu.otherMenus || []).filter(m => m.type === menu.dataType).map(m => m.key || m.id)].filter(Boolean);
+  const impact = Array.from(new Set(ids.reduce((a, id) => a.concat(assetDependents(dataSource, collection, id)), [])));
+  // S3整改3：概念/逻辑实体删除前统一关联影响提示（与 ModelCatalog 同一 helper）。
+  // 同一批次 linkDeletionImpact 单遍过滤去重（两端都在批次内只计一次）；
+  // 解除关联不删实体、实体删除保留可见失效边由 helper 语义保证，此处只加提示不改删除流程
+  const linkIds = collection === 'conceptEntities' ? {conceptIds: ids}
+    : (collection === 'logicEntities' ? {logicalIds: ids} : null);
+  const linkImpact = linkIds ? linkDeletionImpact(dataSource, linkIds) : null;
+  // M5B-R1：三层模型对象（含批量）删除前指标影响汇总——只读 getLineageImpact，
+  // 直接/传递按 revisionId 去重，以指标名称+编码+版本提示；无指标元数据不增加阻扰；
+  // 确认后仍走原删除流程，指标版本与绑定证据不静默修改（失效由稳定 ID 投影）
+  const metricImpact = ['entities', 'logicEntities', 'conceptEntities'].indexOf(collection) >= 0
+    ? summarizeMetricDeleteImpact(dataSource,
+      ids.map(id => ({collection, objectId: id}))) : null;
+  const metricImpactText = metricDeleteImpactLines(metricImpact).join('\n');
   Modal.confirm({
     title: FormatMessage.string({id: 'deleteConfirmTitle'}),
-    message: FormatMessage.string({id: 'deleteConfirm'}),
+    message: `${FormatMessage.string({id: 'deleteConfirm'})}${impact.length ? `\n${FormatMessage.string({id: 'platformV3.deleteImpact'})}: ${impact.join('、')}` : ''}${linkImpact?.count ? `\n${FormatMessage.string({id: 'modelCatalog.linkImpact'}, {count: linkImpact.count})}` : ''}${metricImpact && metricImpact.count > 0 ? `\n${FormatMessage.string({id: 'metrics.deleteImpact.title'}, {count: metricImpact.count})}\n${metricImpactText}` : ''}`,
     onOk: () => {
       const { dataType, dataKey, otherMenus = [] } = menu;
       const domain = domainData.filter(d => d.type === dataType)[0];

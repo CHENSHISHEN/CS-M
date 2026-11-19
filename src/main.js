@@ -5,6 +5,14 @@ const path = require('path');
 const url = require('url');
 require('@electron/remote/main').initialize();
 
+// AI Host Broker（纯 CommonJS，开发态 src/host/ai、成品经 webpack 复制到 build/host/ai，路径一致）
+const {createAiHostBroker, registerAiHostIpc} = require('./host/ai');
+const aiBroker = createAiHostBroker();
+const aiIpc = registerAiHostIpc({ipcMain, broker: aiBroker});
+// 只在真正退出时清理（will-quit 不可被绘图关闭守卫取消）；
+// before-quit 可能被 preventDefault 取消退出，若提前 dispose 会导致取消退出后 AI 通道失效
+app.on('will-quit', () => {aiIpc.dispose();});
+
 // 保持一个对于 window 对象的全局引用，如果你不这样做，
 // 当 JavaScript 对象被垃圾回收， window 会被自动地关闭
 let win;
@@ -85,6 +93,9 @@ function createWindow() {
       enableRemoteModule: true,
     }
   });
+
+  // AI 窄 IPC：attach 本窗口 webContents（窗口 destroyed 由 Host 自动清理订阅与在途请求）
+  aiIpc.attachWindow(win.webContents);
 
   // 然后加载应用的 index.html。
   if (process.env.CHINER_NODE_ENV === 'development') {

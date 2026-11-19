@@ -45,7 +45,7 @@ const findDraftData = (tabs, getTabData, type, menuKey) => {
   const tabData = getTabData ? getTabData(t.tabKey) : null;
   return (tabData && tabData.data && tabData.isInit === false) ? tabData.data : null;
 };
-// 直接关联表计算（纯函数）。
+// WB-004B：直接关联表计算（纯函数）。
 // 输入 snapshot 为 main/index.js getDiagramEdgeSnapshot 的最小局部有效图快照：
 //   tables: 表稳定ID -> 有效表数据（已合并对象页签未保存草稿，改名即时生效）
 //   diagrams: [{id, defKey, defName, cells}]（已合并图页签未保存草稿，连线增删/撤销即时生效）

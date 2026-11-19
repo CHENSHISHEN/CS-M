@@ -8,6 +8,9 @@ import {separator} from '../../profile';
 import {firstUp} from './string';
 import './Math';
 import {getCatalogCategories} from './model_catalog';
+import {mergeConceptLogicalLinkCollections} from './concept_logical_links';
+import {mergeProjectMetadataForImport} from './quality/projectMetadata';
+import {mergeMetricPlatformForImport} from './metrics/persistence';
 
 export const demoGroup = [{defKey: "DEFAULT_GROUP", defName: "默认分组"}];
 export const demoTable = {
@@ -969,6 +972,9 @@ export const _getFieldBaseType = (f, domains, mappings, currentDb) => {
 export const _remapModelCatalog = (catalog, collections, type = 'old') => {
     if (!catalog) return catalog;
     const remap = (kind, id) => (collections[kind] || []).find(item => item[type] === id)?.id || id;
+    // S1 整改 F3：物理库 categoryId 先按 category 映射，未命中回退 legacyGroup
+    // （旧主题域）：categoryId=OLD_GROUP 且只有 legacyGroup old→NEW_GROUP 映射时
+    // 必须得到 NEW_GROUP，不能原样保留旧域 id
     const remapDbCategory = (id) => {
         const mapped = remap('category', id);
         return mapped !== id ? mapped : remap('legacyGroup', id);
@@ -983,6 +989,7 @@ export const _remapModelCatalog = (catalog, collections, type = 'old') => {
                 [kind]: [...new Set((category.members[kind] || []).map(id => remap(kind, id)))],
             }), {}),
         })),
+        // S1 R6：物理模型库容器随项目重构同步重映射（缺映射保留原值，回收兜底）
         ...(catalog.physicalDatabases ? {physicalDatabases: catalog.physicalDatabases.map(db => ({
             ...db,
             id: remap('database', db.id),
@@ -1002,6 +1009,7 @@ const mergeModelCatalog = (oldCatalog, newCatalog, collections, typeOldNew, impo
     });
     const mapped = _remapModelCatalog(newCatalog, {...collections, layer: layerMap});
     const categories = (oldCatalog?.categories || []).slice();
+    // 分类匹配同时记录导入→目标 id 映射，供物理模型库 categoryId 对齐
     const categoryMap = [];
     (mapped?.categories || []).forEach(category => {
         const index = categories.findIndex(item => item.id === category.id
@@ -1022,11 +1030,16 @@ const mergeModelCatalog = (oldCatalog, newCatalog, collections, typeOldNew, impo
             categoryMap.push({old: category.id, id: current.id});
         }
     });
+    // S1 R6：合并物理模型库。同一库判定 = 重映射后分类 + defKey(忽略大小写) + 重映射后类型，
+    // 三者全同才并入目标库；同号不同库保留双方（导入方换新 id），绝不覆盖目标原库。
     const remapType = (id) => (typeOldNew || []).filter(t => t.old === id)[0]?.id;
     const remapCategory = (id) => {
         if (id == null) return null;
         const direct = categoryMap.filter(m => m.old === id)[0]?.id;
         if (direct) return direct;
+        // S1 整改 F3：category 映射未命中时回退 legacyGroup（viewGroups）old→new，
+        // 再按合并后分类的 legacyGroupId 对齐目标挂载分类；仍无则保留映射后的
+        // 主题域 id 本身（未挂载主题域按 group id 投影为分类，同样有效）
         const legacyId = (collections.legacyGroup || []).filter(t => t.old === id)[0]?.id;
         if (legacyId) {
             return categoryMap.filter(m => m.old === legacyId)[0]?.id
@@ -1056,8 +1069,23 @@ const mergeModelCatalog = (oldCatalog, newCatalog, collections, typeOldNew, impo
         return {old: db.id, id};
     });
     const catalog = {...oldCatalog, version: 1, layers, categories};
+    // 双方均无该元数据时不新增空数组
     if (databases.length > 0 || oldCatalog?.physicalDatabases) {
         catalog.physicalDatabases = databases;
+    }
+    // S3-LINKS：概念-逻辑关联随导入合并——导入边端点经 concept/logic 集合映射重建
+    // （并入项 old=导入id / 追加项同 id 两种命中，来源不在导入侧一律 unresolved，
+    // 禁止目标项目同号误绑），换新边 ID 后按端点对去重，目标已有同端点对边时保留目标边
+    const targetLinks = oldCatalog?.conceptLogicalLinks || [];
+    const importedLinks = newCatalog?.conceptLogicalLinks || [];
+    if (targetLinks.length > 0 || importedLinks.length > 0) {
+        catalog.conceptLogicalLinks = mergeConceptLogicalLinkCollections(
+            targetLinks, importedLinks, {
+                concepts: collections.conceptEntity || [],
+                logics: collections.logicEntity || [],
+                importedConcepts: importedCollections?.conceptEntities || [],
+                importedLogics: importedCollections?.logicEntities || [],
+            });
     }
     return {catalog, databaseMap};
 };
@@ -1153,7 +1181,7 @@ export const _mergeDataSource = (oldDataSource, newDataSource, selectEntity, ign
             }
             return keys;
         });
-    // -LINKS 整改：跨项目 id 撞号保护——导入概念/逻辑与目标同 id 但 defKey 不同时，
+    // S3-LINKS 整改：跨项目 id 撞号保护——导入概念/逻辑与目标同 id 但 defKey 不同时，
     // 属两个不同对象：导入方换新 id 追加并带 old 标记（供关联边/图引用按 old 映射到新 id），
     // 目标对象与目标 id 原样保留；defKey 相同仍按既有语义并入目标（沿用目标 id）。
     // 仅作用于概念/逻辑集合前置处理，不改全局 _mergeData 与物理导入
@@ -1254,7 +1282,8 @@ export const _mergeDataSource = (oldDataSource, newDataSource, selectEntity, ign
                     } else if(c.shape === 'erdRelation') {
                         const getPort = ({cell, port} = {}) => {
                             const sourceOriginKey = (d.canvasData?.cells || []).filter(c => c.id === cell)[0];
-                            if (!sourceOriginKey || sourceOriginKey.type === 'C' || sourceOriginKey.type === 'L' || !port?.includes(separator)) return null;
+                            if (!sourceOriginKey || sourceOriginKey.type === 'C'
+                                || sourceOriginKey.type === 'L' || !port?.includes(separator)) return null;
                             const mapped = getCurrentEntity(sourceOriginKey.originKey, port.split(separator)[0], 'entity');
                             return mapped.refField !== port.split(separator)[0] ? mapped : null;
                         }
@@ -1389,6 +1418,7 @@ export const _mergeDataSource = (oldDataSource, newDataSource, selectEntity, ign
         }
         return _.omit(tempD, ['old', 'group', 'isNew']);
     }
+    // S1 R6：目录/物理模型库合并先于返回值组装（实体与图的重映射需要容器映射表）
     const catalogMerge = (oldDataSource.profile?.modelCatalog || newDataSource.profile?.modelCatalog)
         ? mergeModelCatalog(oldDataSource.profile?.modelCatalog,
             newDataSource.profile?.modelCatalog, {conceptEntity: tempConceptEntities,
@@ -1398,6 +1428,108 @@ export const _mergeDataSource = (oldDataSource, newDataSource, selectEntity, ign
             {conceptEntities: newDataSource.conceptEntities || [],
                 logicEntities: newDataSource.logicEntities || []})
         : null;
+    const databaseOldNew = catalogMerge?.databaseMap || [];
+    // 仅导入侧对象重映射物理归属：容器/类型 id 属于导入集合则换目标 id；
+    // 不属于（悬空或撞目标同号）一律撤归属回收，绝不保留可能指向目标同号对象的旧 id
+    const importedTypeIds = new Set((newDataSource.profile?.dataTypeSupports || []).map(d => d.id));
+    const remapImportedPhysical = (obj) => {
+        if (obj.physicalDatabaseId == null && obj.physicalDbTypeId == null) return obj;
+        const next = {...obj};
+        if (next.physicalDatabaseId != null) {
+            const dbHit = databaseOldNew.filter(m => m.old === next.physicalDatabaseId)[0];
+            if (dbHit) next.physicalDatabaseId = dbHit.id;
+            else delete next.physicalDatabaseId;
+        }
+        if (next.physicalDbTypeId != null) {
+            if (importedTypeIds.has(next.physicalDbTypeId)) {
+                const typeHit = tempDataTypeSupports.filter(t => t.old === next.physicalDbTypeId)[0];
+                if (typeHit && typeHit.id !== next.physicalDbTypeId) next.physicalDbTypeId = typeHit.id;
+            } else {
+                delete next.physicalDbTypeId;
+            }
+        }
+        return next;
+    };
+    // S2 G07：仅导入侧对象重建来源逻辑溯源键——源逻辑实体随导入则 old→目标 id，
+    // 字段按 defKey 对齐到合并后逻辑实体；源没随导入一律清除可选来源，
+    // 不保留可能碰巧指向目标项目同号对象的旧 id
+    // 整改F2：物理字段来源（fields[].logicalFieldId）同样按所属源逻辑实体
+    // 上下文重映射；此前仅重映射实体级来源，子字段来源残留旧 id
+    const clearFieldLogicOrigins = (fields) => (fields || []).map((f) => {
+        if (f == null || f.logicalFieldId == null) return f;
+        return _.omit(f, 'logicalFieldId');
+    });
+    const remapFieldLogicOrigins = (fields, sourceLogic, hit) => (fields || []).map((f) => {
+        if (f == null || f.logicalFieldId == null) return f;
+        const sourceField = (sourceLogic.fields || [])
+            .filter(x => x.id === f.logicalFieldId)[0];
+        const targetField = sourceField && (hit.fields || [])
+            .filter(x => x.defKey === sourceField.defKey)[0];
+        return targetField ? {...f, logicalFieldId: targetField.id}
+            : _.omit(f, 'logicalFieldId');
+    });
+    const remapImportedLogicOrigin = (obj) => {
+        const hasFieldOrigin = (obj.fields || [])
+            .some(f => f != null && f.logicalFieldId != null);
+        if (obj.logicalEntityId == null && obj.logicalFieldId == null && !hasFieldOrigin) {
+            return obj;
+        }
+        const next = {...obj};
+        if (next.logicalEntityId != null) {
+            // 未匹配项由 _mergeData 按原 id 原样并入（无 old），需同时按 id 命中
+            const hit = tempLogicEntities
+                .filter(l => l.old === next.logicalEntityId
+                    || (l.old == null && l.id === next.logicalEntityId))[0];
+            const sourceLogic = (newDataSource.logicEntities || [])
+                .filter(l => l.id === next.logicalEntityId)[0];
+            if (!hit || !sourceLogic) {
+                delete next.logicalEntityId;
+                delete next.logicalFieldId;
+                next.fields = clearFieldLogicOrigins(next.fields);
+                return next;
+            }
+            next.logicalEntityId = hit.id;
+            if (next.logicalFieldId != null) {
+                const sourceField = (sourceLogic.fields || [])
+                    .filter(f => f.id === next.logicalFieldId)[0];
+                const targetField = sourceField && (hit.fields || [])
+                    .filter(f => f.defKey === sourceField.defKey)[0];
+                if (targetField) next.logicalFieldId = targetField.id;
+                else delete next.logicalFieldId;
+            }
+            next.fields = remapFieldLogicOrigins(next.fields, sourceLogic, hit);
+        } else {
+            delete next.logicalFieldId;
+            next.fields = clearFieldLogicOrigins(next.fields);
+        }
+        return next;
+    };
+    // METADATA：AI 质量规则集/词元随导入合并——词元配对复用/撞号换新、规则集
+    // id 避让且默认停用、scope 按合并集合重绑；未随导入的对象（含源标准字段库）
+    // 一律未解析留诊断，绝不绑定目标同号对象；目标已有 quality/未知设置保持
+    const metadataMerge = mergeProjectMetadataForImport({
+        targetProfile: oldDataSource.profile,
+        sourceProfile: newDataSource.profile,
+        merged: {entities: tempEntities, logicEntities: tempLogicEntities,
+            conceptEntities: tempConceptEntities},
+        sources: {entities: newEntities,
+            logicEntities: newDataSource.logicEntities || [],
+            conceptEntities: newDataSource.conceptEntities || []},
+        makeId: () => Math.uuid(),
+    });
+    // M4A：指标存储随导入合并——源 profile.metricPlatform 不静默丢弃；概念/定义/
+    // 版本/字典/绑定显式并入（code/id 冲突换新留诊断），绑定端点仅解析到随导入
+    // 合并的对象，未随导入转 unresolved；目标既有草案/发布/未知键原样保留
+    const metricPlatformMerge = mergeMetricPlatformForImport({
+        targetProfile: oldDataSource.profile,
+        sourceProfile: newDataSource.profile,
+        merged: {entities: tempEntities, logicEntities: tempLogicEntities,
+            conceptEntities: tempConceptEntities},
+        sources: {entities: newEntities,
+            logicEntities: newDataSource.logicEntities || [],
+            conceptEntities: newDataSource.conceptEntities || []},
+        makeId: () => Math.uuid(),
+    });
     return {
         ...oldDataSource,
         domains: tempDomains.map(d => {
@@ -1434,13 +1566,23 @@ export const _mergeDataSource = (oldDataSource, newDataSource, selectEntity, ign
             codeTemplates: tempCodeTemplates,
             dataTypeSupports: tempDataTypeSupports.map(t => _.omit(t, 'old')),
             uiHint: tempUiHint.map(t => _.omit(t, 'old')),
+            ...(metadataMerge?.quality ? {quality: metadataMerge.quality} : {}),
+            ...(metadataMerge?.fieldRecommendation
+                ? {fieldRecommendation: metadataMerge.fieldRecommendation} : {}),
+            ...(metricPlatformMerge ? {metricPlatform: metricPlatformMerge} : {}),
             ...(catalogMerge ? {modelCatalog: catalogMerge.catalog} : {}),
         },
         conceptEntities: tempConceptEntities.map(e => ({..._.omit(e, 'old'), type: 'C', fields: [], headers: []})),
         logicEntities: tempLogicEntities.map(e => _.omit(e, 'old')),
-        entities: tempEntities.map(e => refactor(e, 'entity')),
+        entities: tempEntities.map(e => {
+            const result = refactor(e, 'entity');
+            // 仅导入来源（匹配项带 old / 新增项带 isNew）重映射物理库归属与来源逻辑溯源键
+            return (e.old || e.isNew)
+                ? remapImportedLogicOrigin(remapImportedPhysical(result)) : result;
+        }),
         views: tempViews.map(e => refactor(e, 'view')),
-        diagrams: tempDiagrams.map(t => _.omit(t, ['old'])),
+        diagrams: tempDiagrams.map(t => (t.old
+            ? remapImportedPhysical(_.omit(t, ['old'])) : _.omit(t, ['old']))),
         viewGroups: tempViewGroups.map(v => {
             return _.omit({
                 ...v,

@@ -13,6 +13,7 @@ import { addDomResize, removeDomResize } from '../../../lib/listener';
 import EntityBasePropertiesList from './EntityBasePropertiesList';
 import EntityFields from './EntityFields';
 import {getPrefix} from '../../../lib/prefixUtil';
+import {getCatalogCategories, categoryObjects, readCatalog} from '../../../lib/model_catalog';
 
 
 export default React.memo(({prefix, data, dataSource, BaseExtraCom, customerHeaders,
@@ -69,6 +70,9 @@ export default React.memo(({prefix, data, dataSource, BaseExtraCom, customerHead
     }
   }, [dataSource?.entities?.length]);
   const currentPrefix = getPrefix(prefix);
+  const catalogGroups = getCatalogCategories(dataSource).filter(category =>
+    !category.legacyGroupId && categoryObjects(dataSource, category)[type === 'view' ? 'view' : 'entity']
+      .some(entity => entity.id === data.id));
   const onDragOver = (e) => {
     e.preventDefault();
   };
@@ -210,6 +214,22 @@ export default React.memo(({prefix, data, dataSource, BaseExtraCom, customerHead
                 </span>
               </div>
             </div>
+            {catalogGroups.length > 0 && <div className={`${currentPrefix}-form-item`}>
+              <span className={`${currentPrefix}-form-item-label`}>
+                <FormatMessage id='modelCatalog.categoryMembership'/>
+              </span>
+              <span
+                className={`${currentPrefix}-form-item-component`}
+                title={FormatMessage.string({id: 'modelCatalog.manageMembership'})}>
+                {catalogGroups.map((category) => {
+                  const layer = readCatalog(dataSource).layers
+                      .find(item => item.id === category.layerId);
+                  return <span key={category.id} style={{display: 'inline-block', marginRight: 12}}>
+                    {[layer?.defName || layer?.defKey, category.defName || category.defKey].filter(Boolean).join(' / ')}
+                  </span>;
+                })}
+              </span>
+            </div>}
             <div className={`${currentPrefix}-form-item`}>
               <span
                 className={`${currentPrefix}-form-item-label`}

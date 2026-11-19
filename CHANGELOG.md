@@ -1,5 +1,25 @@
 # 变更记录
 
+## 0.5.0 (2026-11-19)
+
+- **企业级全域统一建模体系（Enterprise Modeling）**：
+  - 企业首页架构画布（Enterprise Architecture Canvas）：支持直接拖拽绘制企业架构、业务域卡片、KPI 指标卡片、重点架构图引用缩略展示与自适应包围盒。
+  - 概念-逻辑实体显式关联（Concept-Logical Links）：显式多对多关联映射、端点失效保护、双向索引反查、级联删除影响分析（`linkDeletionImpact`）与跨分支导入重映射。
+  - 模型全景资源总览（Model Resource Overview）：跨概念、逻辑、物理三层模型目录的穿透级统计、分类/主题域/数据域资产汇总与下钻检索。
+  - 模型前向工程生成引擎（Forward Engineering）：逻辑实体到物理表的批量生成、数据库类型映射解析、逻辑前缀清洗、表名冲突检测与无损合并。
+- **全生命周期指标平台（Metric Platform）**：
+  - 核心定义与版本化治理：原子指标、派生指标、复合指标三类口径规范，支持多版本（1.0/1.1）不可变发布、草案修订、哈希校验与部门口径分叉管理。
+  - 统一数据字典（Metric Dictionary）：覆盖部门、通用维度、计算限定、统计周期、计量单位五大分类字典，带强类型校验、引用保护与安全级联。
+  - 指标与模型双向绑定（Metric-Model Bindings）：支持物理表/逻辑实体的时间戳、过滤条件、维度字段、度量事实字段四角色端点绑定与计算就绪判定。
+  - 跨层血缘分析与影响传播（Lineage & Impact Analysis）：可视化依赖网络与计算血缘图谱，支持声明来源穿透、传递影响计算、端点失效追踪与精准互跳。
+- **平台级 AI 智能辅助引擎（Platform AI）**：
+  - 双引擎安全架构：主进程安全 AI Broker 代理，支持流式 SSE、多厂商适配（OpenAI、Anthropic Claude、DeepSeek 等兼容协议）、本地安全代理与密钥脱敏保护。
+  - 智能辅助面板：画布与建模双面板集成，支持需求拆解、SQL DDL 语法智能解析提取表结构、字段推荐、质量规范自动巡检。
+  - 事务化变更执行（Execution Engine）：基于纯函数式 Plan-Preview-Apply 机制，支持严格 ReadSet 指纹校验、确定性 PlanHash、幂等回放与全量多步撤销（Undo）。
+- **终极合并与工程全平台闭环**：
+  - 依赖与构建闭环：集成 `node-sql-parser` 等必要运行时分析工具，优化 Webpack 生产构建管线与主进程 Host 资源拷贝。
+  - 全套集成自动化测试套件：内置 Enterprise Modeling、Platform AI 以及 Metric Platform 98+ 项端到端合同测试，保证核心功能 100% 通过。
+
 ## 0.4.0 (2026-11-10)
 
 - **Chen 专业画板（Chen ER Studio）**：

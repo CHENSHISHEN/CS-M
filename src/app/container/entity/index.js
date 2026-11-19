@@ -11,13 +11,14 @@ import {removeDataByTabId} from '../../../lib/cache';
 import {getPrefix} from '../../../lib/prefixUtil';
 import {subscribeEvent, unSubscribeEvent} from '../../../lib/subscribe';
 import CheckDetail from '../checkrule/CheckDetail';
-// 物理实体“指标关联”页签（ModelBinding 唯一事实源；原字段表不受影响）
+// M4B：物理实体“指标关联”页签（ModelBinding 唯一事实源；原字段表不受影响）
+import ModelMetricPanel from '../../metrics/ModelMetricPanel';
 
 const Entity = React.memo(({prefix, dataSource, entity, tabDataChange, tabKey,
                              group, BaseExtraCom, customerHeaders, type, getConfig, saveUserData,
                              FieldsExtraOpt, updateDataSource, param, hasRender, hasDestory,
                              getDataSource, openDict, openConfig, setMenuType,
-                             openCheckRuleConfig, jumpDetail, readOnly}) => {
+                             openCheckRuleConfig, jumpDetail, readOnly, openMetric}) => {
   const eventId = Math.uuid();
   const [key, setKey] = useState(Math.uuid());
   const [iniData, setInitData] = useState(getEntityOrViewByName(dataSource, entity) || {});
@@ -164,6 +165,18 @@ const Entity = React.memo(({prefix, dataSource, entity, tabDataChange, tabKey,
             isTab
             tabData={data}
             dataSource={dataSource}
+          />,
+        }] : []).concat(type === 'entity' ? [{
+          key: 'metricBindings',
+          title: FormatMessage.string({id: 'metrics.binding.tabTitle'}),
+          content: <ModelMetricPanel
+            collection='entities'
+            objectId={entity}
+            dataSource={dataSource}
+            getDataSource={getDataSource}
+            updateDataSource={updateDataSource}
+            readOnly={readOnly}
+            onOpenMetric={openMetric}
           />,
         }] : [])}
       />

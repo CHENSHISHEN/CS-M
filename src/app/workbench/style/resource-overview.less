@@ -1,0 +1,442 @@
+@import "~style";
+@import "./tokens";
+
+// S3 资源总览（menuType 10）独立样式：蓝白/蓝灰卡片 + 局部深蓝 hero。
+// 颜色优先复用工作台令牌（--wb-*，随昼夜主题切换），深蓝 hero 用 rail 同源深蓝。
+.chiner-home-wb .chiner-ro {
+  .workbench-light-tokens();
+  height: 100%;
+  overflow: auto;
+  padding: 18px 22px;
+  background: var(--wb-bg);
+  color: var(--wb-text);
+  font-size: 12px;
+
+  &-mono {
+    font-family: var(--mono-font, monospace);
+  }
+
+  &-hero {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 18px;
+    padding: 18px 22px;
+    border-radius: 10px;
+    color: var(--wb-primary-text);
+    // 局部深蓝 hero：与左轨同源的深蓝底 + 轻微渐层，仅此区域使用
+    background: linear-gradient(120deg, #233957 0%, #2c4a7c 60%, #3566af 100%);
+    box-shadow: var(--wb-shadow);
+
+    &-main {
+      min-width: 0;
+      h1 {
+        margin: 0 0 6px;
+        font-size: 18px;
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      p {
+        margin: 0;
+        opacity: .82;
+      }
+      p + p.chiner-ro-hero-sub {
+        margin-top: 4px;
+        opacity: .7;
+        font-size: 11px;
+      }
+    }
+  }
+
+  &-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+  }
+
+  &-card {
+    display: grid;
+    grid-template-columns: 30px 1fr auto;
+    grid-template-areas: 'icon count label' 'icon sub sub';
+    align-items: center;
+    column-gap: 10px;
+    padding: 14px 16px;
+    border: 1px solid var(--wb-line);
+    border-radius: 8px;
+    background: var(--wb-side);
+    color: var(--wb-text);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color .15s, background-color .15s;
+
+    &:hover {
+      border-color: var(--wb-blue);
+      background: var(--wb-accent);
+    }
+    &-active {
+      border-color: var(--wb-blue);
+      background: var(--wb-accent);
+    }
+    &-icon {
+      grid-area: icon;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      border-radius: 6px;
+      background: var(--wb-section-bg);
+      color: var(--wb-section-text);
+    }
+    > strong {
+      grid-area: count;
+      font-size: 22px;
+      font-weight: 600;
+      line-height: 1.1;
+    }
+    &-label {
+      grid-area: label;
+      font-weight: 600;
+    }
+    &-sub {
+      grid-area: sub;
+      color: var(--wb-muted);
+      font-size: 11px;
+    }
+    &-loading,
+    &-zero {
+      font-size: 12px;
+      color: var(--wb-muted);
+    }
+    &-error {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      color: var(--wb-danger);
+      button {
+        align-self: flex-start;
+        border: 1px solid var(--wb-danger);
+        border-radius: 4px;
+        background: var(--wb-danger-bg);
+        color: var(--wb-danger);
+        padding: 1px 8px;
+        cursor: pointer;
+      }
+    }
+  }
+
+  // S3整改2：面板两栏区——左（脉络+分层）右（数据库+治理）；窄于 1080px 单列
+  &-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    gap: 12px;
+    margin-top: 14px;
+    align-items: start;
+    @media (max-width: 1080px) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  &-col {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  &-panel {
+    border: 1px solid var(--wb-line);
+    border-radius: 8px;
+    background: var(--wb-bg);
+    overflow: hidden;
+    .chiner-ro-section-title {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 8px 14px;
+      background: var(--wb-section-bg);
+      color: var(--wb-section-text);
+      font-weight: 600;
+      small {
+        font-weight: 400;
+        font-size: 11px;
+        opacity: .75;
+      }
+    }
+  }
+  &-panel-guide,
+  &-panel-note {
+    margin: 10px 14px;
+    color: var(--wb-muted);
+    font-size: 11px;
+    line-height: 1.6;
+  }
+
+  // 三层模型脉络
+  &-flow {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 8px;
+    padding: 12px 14px 8px;
+    &-box {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--wb-line);
+      background: var(--wb-side);
+      small { color: var(--wb-muted); font-size: 11px; }
+      strong { font-size: 20px; line-height: 1.1; }
+    }
+    &-conceptual strong { color: #7c5cd6; }
+    &-logical strong { color: #2f6bd8; }
+    &-physical strong { color: #0e9688; }
+    &-arrow {
+      align-self: center;
+      flex: none;
+      color: var(--wb-muted);
+    }
+    &-coverage {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 14px;
+      align-items: center;
+      margin: 0 14px 12px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      background: var(--wb-section-bg);
+      color: var(--wb-section-text);
+      font-size: 11px;
+    }
+    &-invalid {
+      color: var(--wb-danger);
+    }
+  }
+
+  // 分层分布条形
+  &-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 14px 4px;
+  }
+  &-bar-row {
+    display: grid;
+    grid-template-columns: minmax(96px, 30%) minmax(0, 1fr) 36px;
+    gap: 8px;
+    align-items: center;
+    font-size: 11px;
+    strong { text-align: right; }
+  }
+  &-bar-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--wb-text);
+  }
+  &-bar-track {
+    height: 10px;
+    border-radius: 5px;
+    background: var(--wb-accent);
+    overflow: hidden;
+  }
+  &-bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: 5px;
+    background: var(--wb-blue);
+    &.muted { background: var(--wb-muted); }
+  }
+
+  // 数据库分布：总数 + 堆叠条 + 图例
+  &-db {
+    &-total {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 12px;
+      align-items: baseline;
+      padding: 12px 14px 6px;
+      strong { font-size: 22px; line-height: 1.1; }
+      span { color: var(--wb-muted); font-size: 11px; }
+    }
+    &-stack {
+      display: flex;
+      height: 14px;
+      margin: 4px 14px 8px;
+      border-radius: 7px;
+      overflow: hidden;
+      background: var(--wb-accent);
+    }
+    &-seg {
+      display: block;
+      min-width: 3px;
+      &.seg-0 { background: #2f6bd8; }
+      &.seg-1 { background: #7c5cd6; }
+      &.seg-2 { background: #0e9688; }
+      &.seg-3 { background: #d8863d; }
+      &.seg-4 { background: #8a97a8; }
+    }
+    &-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 14px;
+      padding: 0 14px 12px;
+      font-size: 11px;
+      color: var(--wb-text);
+      &-item {
+        display: inline-flex;
+        gap: 5px;
+        align-items: center;
+        i {
+          width: 9px;
+          height: 9px;
+          border-radius: 2px;
+          &.seg-0 { background: #2f6bd8; }
+          &.seg-1 { background: #7c5cd6; }
+          &.seg-2 { background: #0e9688; }
+          &.seg-3 { background: #d8863d; }
+          &.seg-4 { background: #8a97a8; }
+        }
+        strong { color: var(--wb-text); }
+      }
+    }
+  }
+
+  &-governance {
+    margin-top: 0;
+    border: 1px solid var(--wb-line);
+    border-radius: 8px;
+    background: var(--wb-bg);
+    overflow: hidden;
+
+    .chiner-ro-section-title {
+      padding: 8px 14px;
+      background: var(--wb-section-bg);
+      color: var(--wb-section-text);
+      font-weight: 600;
+    }
+    &-row {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 8px 14px;
+      border: none;
+      border-top: 1px solid var(--wb-line);
+      background: transparent;
+      color: var(--wb-text);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+      .chiner-ro-card-icon {
+        width: 24px;
+        height: 24px;
+      }
+      &:hover {
+        background: var(--wb-accent);
+      }
+      > span, > strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+    &-name {
+      flex: 0 0 88px;
+      font-weight: 600;
+    }
+    &-sub {
+      flex: 1;
+      color: var(--wb-muted);
+      font-size: 11px;
+    }
+    &-foot {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      border-top: 1px solid var(--wb-line);
+      color: var(--wb-muted);
+      strong {
+        color: var(--wb-text);
+      }
+    }
+  }
+
+  &-drill {
+    margin-top: 14px;
+    border: 1px solid var(--wb-line);
+    border-radius: 8px;
+    background: var(--wb-bg);
+    overflow: hidden;
+
+    &-title {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 14px;
+      background: var(--wb-section-bg);
+      color: var(--wb-section-text);
+      font-weight: 600;
+      button {
+        display: flex;
+        border: none;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        padding: 2px;
+      }
+    }
+    &-list {
+      max-height: 320px;
+      overflow: auto;
+      padding: 6px 8px;
+    }
+    &-empty {
+      margin: 10px 6px;
+      color: var(--wb-muted);
+    }
+    &-item {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 6px 8px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--wb-text);
+      text-align: left;
+      cursor: pointer;
+      &:hover {
+        background: var(--wb-accent);
+      }
+      > span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+  }
+
+  &-tag {
+    margin-left: auto;
+    flex: none;
+    padding: 0 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    background: var(--wb-section-bg);
+    color: var(--wb-section-text);
+  }
+}

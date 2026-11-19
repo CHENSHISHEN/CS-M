@@ -1,0 +1,2104 @@
+@import "~style";
+
+// 指标平台 M2：指标工作台样式（208px 二级导航 + 全宽页面区）。
+// 作用域：.chiner-metrics-*（嵌于新工作台网格的 metrics-area 内，继承 --wb-* 令牌）；
+// 蓝白工作台视觉：12–14px 层次、6–8px 圆角、1px 浅边框、主操作蓝底、统一线形图标。
+
+@metrics-nav-width: 208px;
+@metrics-primary: #4e6fb2;
+@metrics-link: #3566af;
+@metrics-page: #f4f7fb;
+@metrics-soft: #edf3fd;
+@metrics-border: #dce4ef;
+@metrics-text: #303c50;
+@metrics-muted: #65758c;
+
+.chiner-metrics-shell {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--wb-bg, #ffffff);
+  color: @metrics-text;
+  font-size: 13px;
+}
+
+// ---------- 二级导航（浅蓝 208px） ----------
+.chiner-metrics-nav {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 @metrics-nav-width;
+  width: @metrics-nav-width;
+  min-height: 0;
+  background: var(--wb-sidebar, @metrics-page);
+  border-right: 1px solid var(--wb-line, @metrics-border);
+  overflow-y: auto;
+  padding: 10px 8px;
+  box-sizing: border-box;
+}
+.chiner-metrics-nav-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: @metrics-text;
+  padding: 4px 8px 10px;
+}
+.chiner-metrics-nav-group {
+  margin-bottom: 12px;
+}
+.chiner-metrics-nav-group-label {
+  font-size: 11px;
+  color: @metrics-muted;
+  padding: 4px 8px;
+  letter-spacing: .4px;
+}
+.chiner-metrics-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  padding: 7px 8px;
+  font-size: 13px;
+  color: @metrics-text;
+  cursor: pointer;
+  text-align: left;
+  > span:first-child {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  &:hover {
+    background: var(--wb-accent, @metrics-soft);
+  }
+  &.active {
+    background: @metrics-soft;
+    color: @metrics-link;
+    font-weight: 600;
+  }
+  &:focus-visible {
+    outline: 2px solid @metrics-primary;
+    outline-offset: -2px;
+  }
+}
+.chiner-metrics-nav-count {
+  flex: none;
+  min-width: 18px;
+  height: 16px;
+  line-height: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: @metrics-soft;
+  color: @metrics-link;
+  font-size: 11px;
+  text-align: center;
+}
+.chiner-metrics-nav-pending {
+  flex: none;
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 3px;
+  border: 1px solid var(--wb-line, @metrics-border);
+  color: @metrics-muted;
+}
+.chiner-metrics-nav-foot {
+  margin-top: auto;
+  padding: 10px 8px 2px;
+  border-top: 1px solid var(--wb-line, @metrics-border);
+}
+.chiner-metrics-nav-foot-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: @metrics-muted;
+  margin-bottom: 8px;
+  span:first-child {
+    color: @metrics-text;
+  }
+}
+.chiner-metrics-nav-foot-tag {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid var(--wb-line, @metrics-border);
+  border-radius: 4px;
+  background: #ffffff;
+  color: @metrics-muted;
+}
+
+// ---------- 页面主体 ----------
+.chiner-metrics-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--wb-canvas, @metrics-page);
+}
+.chiner-metrics-dirtybar {
+  flex: none;
+  padding: 5px 24px;
+  font-size: 12px;
+  color: var(--wb-warning, #976612);
+  background: #fdf6e9;
+  border-bottom: 1px solid @metrics-border;
+}
+.chiner-metrics-page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 22px 26px 30px;
+}
+.chiner-metrics-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  h2 {
+    margin: 0 0 4px;
+    font-size: 22px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+}
+.chiner-metrics-page-sub {
+  margin: 0;
+  font-size: 12px;
+  color: @metrics-muted;
+  max-width: 720px;
+}
+
+// ---------- 统计卡 ----------
+.chiner-metrics-stat-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.chiner-metrics-stat-card {
+  background: var(--wb-bg, #ffffff);
+  border: 1px solid var(--wb-line, @metrics-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chiner-metrics-stat-num {
+  font-size: 24px;
+  font-weight: 600;
+  color: @metrics-text;
+}
+.chiner-metrics-stat-label {
+  font-size: 13px;
+  color: @metrics-text;
+}
+.chiner-metrics-stat-sub {
+  font-size: 11px;
+  color: @metrics-muted;
+}
+
+// ---------- 目录布局 ----------
+.chiner-metrics-catalog {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 1360px) {
+  .chiner-metrics-catalog {
+    grid-template-columns: 190px minmax(0, 1fr);
+  }
+}
+.chiner-metrics-catalog-domains {
+  background: var(--wb-bg, #ffffff);
+  border: 1px solid var(--wb-line, @metrics-border);
+  border-radius: 8px;
+  padding: 10px;
+}
+.chiner-metrics-catalog-domains-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 2px 4px 8px;
+}
+.chiner-metrics-concept-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  margin-bottom: 8px;
+  border: 1px dashed var(--wb-line, @metrics-border);
+  border-radius: 6px;
+}
+.chiner-metrics-domain-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  color: @metrics-text;
+  cursor: pointer;
+  text-align: left;
+  span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  &:hover {
+    background: var(--wb-accent, @metrics-soft);
+  }
+  &.active {
+    background: @metrics-soft;
+    color: @metrics-link;
+    font-weight: 600;
+  }
+}
+.chiner-metrics-domain-count {
+  flex: none;
+  font-size: 11px;
+  color: @metrics-muted;
+}
+.chiner-metrics-domains-empty {
+  font-size: 11.5px;
+  color: @metrics-muted;
+  margin: 6px 4px;
+}
+.chiner-metrics-catalog-domains-note {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--wb-line, @metrics-border);
+  font-size: 11px;
+  color: @metrics-muted;
+  line-height: 1.6;
+}
+.chiner-metrics-catalog-main {
+  min-width: 0;
+  background: var(--wb-bg, #ffffff);
+  border: 1px solid var(--wb-line, @metrics-border);
+  border-radius: 8px;
+  padding: 12px;
+}
+.chiner-metrics-catalog-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.chiner-metrics-search {
+  flex: 1 1 180px;
+  min-width: 140px;
+  max-width: 280px;
+}
+.chiner-metrics-seg {
+  display: inline-flex;
+  border: 1px solid var(--wb-line, @metrics-border);
+  border-radius: 6px;
+  overflow: hidden;
+  button {
+    border: none;
+    background: var(--wb-bg, #ffffff);
+    padding: 5px 12px;
+    font-size: 12.5px;
+    color: @metrics-text;
+    cursor: pointer;
+    & + button {
+      border-left: 1px solid var(--wb-line, @metrics-border);
+    }
+    &.active {
+      background: @metrics-soft;
+      color: @metrics-link;
+      font-weight: 600;
+    }
+  }
+}
+
+// ---------- 表格 ----------
+.chiner-metrics-table-wrap {
+  overflow-x: auto;
+}
+.chiner-metrics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  th {
+    text-align: left;
+    font-size: 12px;
+    color: @metrics-muted;
+    font-weight: 500;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--wb-line, @metrics-border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--wb-line, @metrics-border);
+    vertical-align: middle;
+  }
+  tbody tr {
+    cursor: pointer;
+    &:hover {
+      background: var(--wb-accent, @metrics-soft);
+    }
+    &:focus-visible {
+      outline: 2px solid @metrics-primary;
+      outline-offset: -2px;
+    }
+  }
+}
+.chiner-metrics-cell-name {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  strong {
+    font-size: 13px;
+    color: @metrics-text;
+  }
+  code {
+    font-size: 11px;
+    color: @metrics-muted;
+  }
+}
+.chiner-metrics-version-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.chiner-metrics-table-note {
+  margin: 8px 2px 0;
+  font-size: 11.5px;
+  color: @metrics-muted;
+}
+
+// ---------- 徽章 ----------
+.chiner-metrics-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  line-height: 18px;
+  background: @metrics-soft;
+  color: @metrics-link;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.chiner-metrics-tag-kind-atomic {
+  background: @metrics-soft;
+  color: @metrics-link;
+}
+.chiner-metrics-tag-kind-derived {
+  background: #e2f4f4;
+  color: #16766f;
+}
+.chiner-metrics-tag-kind-compound {
+  background: #efe8f8;
+  color: #7950a5;
+}
+.chiner-metrics-tag-public {
+  background: @metrics-soft;
+  color: @metrics-link;
+}
+.chiner-metrics-tag-dept {
+  background: #fdf0e4;
+  color: #976612;
+}
+.chiner-metrics-tag-draft {
+  background: #fdf6e9;
+  color: #976612;
+}
+.chiner-metrics-tag-status-published {
+  background: #e7f4ec;
+  color: #217656;
+}
+.chiner-metrics-tag-status-deprecated {
+  background: #fbedef;
+  color: #b23b4c;
+}
+.chiner-metrics-tag-status-draft {
+  background: #fdf6e9;
+  color: #976612;
+}
+.chiner-metrics-tag-warn {
+  background: #fdf6e9;
+  color: #976612;
+}
+
+// ---------- 空态 / 占位页 ----------
+.chiner-metrics-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 42px 20px;
+  text-align: center;
+  h3 {
+    margin: 0;
+    font-size: 15px;
+  }
+  p {
+    margin: 0;
+    font-size: 12.5px;
+    color: @metrics-muted;
+    max-width: 460px;
+  }
+}
+.chiner-metrics-empty-icon {
+  color: @metrics-muted;
+  opacity: .6;
+}
+.chiner-metrics-pending {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 60px 24px;
+  text-align: center;
+  h3 {
+    margin: 6px 0 0;
+    font-size: 16px;
+  }
+  p {
+    margin: 0;
+    font-size: 12.5px;
+    color: @metrics-muted;
+    max-width: 520px;
+  }
+}
+.chiner-metrics-pending-icon {
+  color: @metrics-muted;
+  opacity: .55;
+}
+.chiner-metrics-pending-phase {
+  color: @metrics-link;
+}
+.chiner-metrics-pending-note {
+  margin-top: 6px;
+  font-size: 11.5px;
+}
+
+// ---------- 类型卡 / 列表芯片 ----------
+.chiner-metrics-kindcards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.chiner-metrics-kindcard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--wb-bg, #ffffff);
+  border: 1px solid var(--wb-line, @metrics-border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  cursor: pointer;
+  text-align: left;
+  strong {
+    font-size: 14px;
+    color: @metrics-text;
+  }
+  span {
+    font-size: 12px;
+    color: @metrics-muted;
+  }
+  &:hover:not(:disabled) {
+    border-color: @metrics-primary;
+    background: @metrics-soft;
+  }
+  &:disabled {
+    cursor: not-allowed;
+    opacity: .55;
+  }
+}
+.chiner-metrics-group-title {
+  font-size: 13px;
+  color: @metrics-text;
+  margin: 14px 0 8px;
+}
+.chiner-metrics-chiplist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chiner-metrics-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--wb-bg, #ffffff);
+  border: 1px solid var(--wb-line, @metrics-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  cursor: pointer;
+  span {
+    color: @metrics-text;
+  }
+  code {
+    font-size: 11px;
+    color: @metrics-muted;
+  }
+  &:hover {
+    border-color: @metrics-primary;
+  }
+}
+
+// ---------- 编辑器布局 ----------
+.chiner-metrics-editor-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 1360px) {
+  .chiner-metrics-editor-layout {
+    grid-template-columns: minmax(0, 1fr) 260px;
+  }
+}
+.chiner-metrics-form-card {
+  background: var(--wb-bg, #ffffff);
+  border: 1px solid var(--wb-line, @metrics-border);
+  border-radius: 8px;
+  padding: 16px 18px;
+  min-width: 0;
+}
+.chiner-metrics-form-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  margin: 0 0 12px;
+}
+.chiner-metrics-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px 16px;
+}
+.chiner-metrics-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.chiner-metrics-field-span {
+  grid-column: 1 / -1;
+}
+.chiner-metrics-field-label {
+  font-size: 12px;
+  color: @metrics-muted;
+}
+.chiner-metrics-field-hint {
+  margin: 0;
+  font-size: 11px;
+  color: @metrics-muted;
+}
+.chiner-metrics-field input,
+.chiner-metrics-field select,
+.chiner-metrics-field textarea,
+.chiner-metrics-rows input,
+.chiner-metrics-rows select,
+.chiner-metrics-concept-form input,
+.chiner-metrics-dict-form input,
+.chiner-metrics-dict-form select,
+.chiner-metrics-catalog-filters select,
+.chiner-metrics-catalog-filters input {
+  border: 1px solid var(--wb-line, @metrics-border);
+  border-radius: 5px;
+  background: #ffffff;
+  color: @metrics-text;
+  font-size: 12.5px;
+  padding: 5px 8px;
+  min-width: 0;
+  box-sizing: border-box;
+  &:focus-visible {
+    outline: 2px solid @metrics-primary;
+    outline-offset: 0;
+  }
+  &:disabled {
+    background: var(--wb-disabled-bg, #f1f3f7);
+    color: var(--wb-disabled-text, #929dad);
+    cursor: not-allowed;
+  }
+}
+.chiner-metrics-inline {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.chiner-metrics-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.chiner-metrics-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  input {
+    margin: 0;
+  }
+}
+.chiner-metrics-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.chiner-metrics-row3 {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.2fr) minmax(90px, .8fr) minmax(120px, 1.2fr) 26px;
+  gap: 6px;
+  align-items: center;
+}
+.chiner-metrics-expression {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.chiner-metrics-expression-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.chiner-metrics-expression textarea {
+  width: 100%;
+  resize: vertical;
+}
+.chiner-metrics-expression-state {
+  font-size: 12px;
+  color: @metrics-muted;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  code {
+    color: @metrics-text;
+  }
+}
+.chiner-metrics-expression-error {
+  color: #b23b4c;
+}
+.chiner-metrics-zero-note {
+  color: #976612;
+}
+.chiner-metrics-muted {
+  font-size: 12px;
+  color: @metrics-muted;
+  margin: 0;
+}
+
+// ---------- 按钮 ----------
+.chiner-metrics-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid var(--wb-line, @metrics-border);
+  border-radius: 6px;
+  background: var(--wb-bg, #ffffff);
+  color: @metrics-text;
+  font-size: 12.5px;
+  padding: 5px 12px;
+  cursor: pointer;
+  &:hover:not(:disabled) {
+    border-color: @metrics-primary;
+    color: @metrics-link;
+  }
+  &:disabled {
+    cursor: not-allowed;
+    opacity: .55;
+  }
+  &:focus-visible {
+    outline: 2px solid @metrics-primary;
+    outline-offset: 1px;
+  }
+}
+.chiner-metrics-btn-primary {
+  background: @metrics-primary;
+  border-color: @metrics-primary;
+  color: #ffffff;
+  &:hover:not(:disabled) {
+    background: #44619c;
+    color: #ffffff;
+  }
+}
+.chiner-metrics-btn-danger {
+  border-color: #d8a7ae;
+  color: #b23b4c;
+  &:hover:not(:disabled) {
+    background: #fbedef;
+    border-color: #b23b4c;
+    color: #b23b4c;
+  }
+}
+.chiner-metrics-btn-ghost {
+  border-style: dashed;
+}
+.chiner-metrics-iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--wb-line, @metrics-border);
+  border-radius: 5px;
+  background: var(--wb-bg, #ffffff);
+  color: @metrics-muted;
+  font-size: 13px;
+  cursor: pointer;
+  &:hover:not(:disabled) {
+    border-color: @metrics-primary;
+    color: @metrics-link;
+  }
+  &:disabled {
+    cursor: not-allowed;
+    opacity: .55;
+  }
+}
+.chiner-metrics-mono {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+// ---------- 校验 / 错误 / 提示 ----------
+.chiner-metrics-field-errors {
+  margin-top: 12px;
+}
+.chiner-metrics-errors {
+  list-style: none;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid #d8a7ae;
+  border-radius: 6px;
+  background: #fbedef;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.chiner-metrics-errors-item {
+  button {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    border: none;
+    background: transparent;
+    color: #b23b4c;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}
+.chiner-metrics-errors-guide {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 11px;
+  color: rgba(120, 44, 56, .85);
+}
+.chiner-metrics-errors-tech {
+  margin-left: 8px;
+  font-size: 10.5px;
+  color: rgba(120, 44, 56, .75);
+  summary {
+    cursor: pointer;
+    user-select: none;
+  }
+}
+.chiner-metrics-errors-code {
+  flex: none;
+  font-size: 10.5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(178, 59, 76, .12);
+}
+.chiner-metrics-err-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.chiner-metrics-err-path {
+  font-size: 10.5px;
+  color: rgba(178, 59, 76, .8);
+}
+.chiner-metrics-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: @metrics-soft;
+  border: 1px solid var(--wb-line, @metrics-border);
+  font-size: 12px;
+  color: @metrics-text;
+}
+.chiner-metrics-notice-warn {
+  background: #fdf6e9;
+  border-color: #ecd9ae;
+}
+.chiner-metrics-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--wb-line, @metrics-border);
+}
+.chiner-metrics-form-buttons {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+// ---------- 右侧栏 ----------
+.chiner-metrics-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.chiner-metrics-side-card {
+  background: var(--wb-bg, #ffffff);
+  border: 1px solid var(--wb-line, @metrics-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  h3 {
+    margin: 0 0 8px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  p {
+    margin: 0 0 8px;
+    font-size: 12px;
+    color: @metrics-muted;
+    line-height: 1.6;
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+}
+.chiner-metrics-validation-ok {
+  color: #217656;
+  font-size: 13px;
+}
+.chiner-metrics-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chiner-metrics-fact {
+  display: flex;
+  gap: 10px;
+  font-size: 12.5px;
+  align-items: baseline;
+  > span:first-child {
+    flex: none;
+    width: 110px;
+    color: @metrics-muted;
+    font-size: 12px;
+  }
+  > strong, > div {
+    min-width: 0;
+    word-break: break-all;
+  }
+}
+.chiner-metrics-fact-span {
+  flex-direction: column;
+  gap: 4px;
+}
+.chiner-metrics-fact-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chiner-metrics-deplist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    code {
+      word-break: break-all;
+    }
+  }
+}
+.chiner-metrics-versionbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.chiner-metrics-version-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--wb-line, @metrics-border);
+  border-radius: 6px;
+  background: var(--wb-bg, #ffffff);
+  color: @metrics-text;
+  font-size: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
+  &.active {
+    border-color: @metrics-primary;
+    background: @metrics-soft;
+    color: @metrics-link;
+    font-weight: 600;
+  }
+}
+.chiner-metrics-header-actions {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+// ---------- 语义字典（M3A） ----------
+.chiner-metrics-dict-note {
+  margin: 0 0 10px;
+}
+.chiner-metrics-dict-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  margin-bottom: 10px;
+  border: 1px dashed var(--wb-line, @metrics-border);
+  border-radius: 6px;
+  input, select {
+    flex: 0 1 180px;
+    min-width: 130px;
+  }
+}
+.chiner-metrics-cell-actions {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+// ---------- 部门口径与版本治理（M3B） ----------
+.chiner-metrics-dept-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 1360px) {
+  .chiner-metrics-dept-layout {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+}
+.chiner-metrics-side-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.chiner-metrics-dept-patch {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--wb-line, @metrics-border);
+}
+.chiner-metrics-diff-table {
+  td, th {
+    vertical-align: top;
+  }
+  td:nth-child(2), td:nth-child(3) {
+    max-width: 260px;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+  }
+}
+.chiner-metrics-diff-field {
+  font-size: 12px;
+  font-weight: 600;
+  color: @metrics-text;
+}
+.chiner-metrics-diff-tech {
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: @metrics-muted;
+  summary {
+    cursor: pointer;
+    user-select: none;
+  }
+  code {
+    margin-right: 6px;
+    word-break: break-all;
+  }
+}
+.chiner-metrics-diff-value {
+  overflow-wrap: anywhere;
+}
+.chiner-metrics-diff-inherit {
+  background: #f1f4f9;
+  color: @metrics-muted;
+}
+.chiner-metrics-diff-add {
+  background: #e7f0fb;
+  color: #2c5aa0;
+}
+.chiner-metrics-diff-modify {
+  background: #fdf3e3;
+  color: #976612;
+}
+.chiner-metrics-diff-remove {
+  background: #f7ecee;
+  color: #b23b4c;
+}
+.chiner-metrics-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 14px;
+  border-left: 2px solid var(--wb-line, @metrics-border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  li {
+    position: relative;
+    font-size: 12.5px;
+    color: @metrics-text;
+    &::before {
+      content: '';
+      position: absolute;
+      left: -19px;
+      top: 5px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: @metrics-primary;
+    }
+    p {
+      margin: 3px 0 0;
+    }
+  }
+}
+
+// ---------- M4B 模型↔指标双向入口（模型编辑器面板 + 指标平台模型关联页） ----------
+.chiner-metrics-btn-mini {
+  padding: 3px 9px;
+  font-size: 12px;
+}
+
+.chiner-metrics-model-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 2px;
+  min-height: 0;
+}
+
+.chiner-metrics-model-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  h3 {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 16px;
+    color: @metrics-text;
+    .chiner-metrics-tag {
+      font-size: 11px;
+    }
+  }
+}
+
+.chiner-metrics-binding-banner {
+  display: block;
+  background: @metrics-soft;
+  border: 1px solid @metrics-border;
+  border-radius: 6px;
+  color: @metrics-text;
+  font-size: 12.5px;
+  line-height: 1.7;
+  padding: 8px 14px;
+}
+
+.chiner-metrics-binding-empty {
+  padding: 18px 0;
+}
+
+.chiner-metrics-binding-group {
+  border: 1px solid @metrics-border;
+  border-radius: 8px;
+  background: var(--wb-bg, #ffffff);
+  padding: 10px 14px 12px;
+}
+
+.chiner-metrics-binding-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid @metrics-border;
+  margin-bottom: 8px;
+}
+
+.chiner-metrics-binding-group-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: @metrics-text;
+}
+
+.chiner-metrics-binding-group-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: @metrics-soft;
+  color: @metrics-link;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.chiner-metrics-binding-group-dir {
+  font-size: 11.5px;
+  color: @metrics-muted;
+}
+
+.chiner-metrics-binding-group-empty {
+  margin: 2px 0;
+  font-size: 12px;
+  color: @metrics-muted;
+}
+
+// M5B 空分组紧凑化：有内容分组优先可见，空分组不再各占一块挤出真实来源
+.chiner-metrics-binding-group-compact {
+  margin: 0;
+  padding: 4px 10px;
+  border: 1px dashed @metrics-border;
+  border-radius: 6px;
+  font-size: 11.5px;
+  color: @metrics-muted;
+  background: transparent;
+}
+
+.chiner-metrics-binding-group-collapsed {
+  padding: 6px 14px;
+  .chiner-metrics-binding-group-head {
+    padding-bottom: 4px;
+    margin-bottom: 0;
+    border-bottom: none;
+  }
+}
+
+.chiner-metrics-binding-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chiner-metrics-binding-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid @metrics-border;
+  border-radius: 8px;
+  background: var(--wb-bg, #ffffff);
+  padding: 8px 12px;
+}
+
+.chiner-metrics-binding-row-missing {
+  border-style: dashed;
+  background: #fbfcfe;
+}
+
+.chiner-metrics-binding-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chiner-metrics-binding-row-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  strong {
+    font-size: 13px;
+    color: @metrics-text;
+  }
+  code {
+    background: @metrics-soft;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11.5px;
+    color: @metrics-link;
+  }
+}
+
+.chiner-metrics-binding-row-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: @metrics-muted;
+  code {
+    font-size: 11.5px;
+  }
+}
+
+.chiner-metrics-binding-field {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.chiner-metrics-binding-unresolved-reason {
+  color: #b23b4c;
+}
+
+.chiner-metrics-binding-row-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.chiner-metrics-binding-release:not(:disabled) {
+  border-color: #d8a7ae;
+  color: #b23b4c;
+}
+
+.chiner-metrics-binding-confirm {
+  p {
+    margin: 0 0 6px;
+    font-size: 12.5px;
+  }
+}
+
+.chiner-metrics-binding-impact-list {
+  margin: 0 0 6px;
+  padding-left: 18px;
+  li {
+    font-size: 12px;
+    color: @metrics-text;
+  }
+}
+
+.chiner-metrics-binding-confirm-note {
+  color: @metrics-muted;
+}
+
+.chiner-metrics-binding-state-suggested {
+  background: @metrics-soft;
+  color: @metrics-link;
+}
+.chiner-metrics-binding-state-confirmed {
+  background: #e7f3ea;
+  color: #2c7a4b;
+}
+.chiner-metrics-binding-state-unresolved {
+  background: #fbedef;
+  color: #b23b4c;
+}
+.chiner-metrics-binding-state-released {
+  background: #f1f2f5;
+  color: @metrics-muted;
+}
+
+.chiner-metrics-binding-role-COMPUTES_FROM {
+  background: #e8effa;
+  color: @metrics-link;
+}
+.chiner-metrics-binding-role-MATERIALIZES_INTO {
+  background: #e5f0f6;
+  color: #1f6f8b;
+}
+.chiner-metrics-binding-role-CONSUMED_BY {
+  background: #eef0f8;
+  color: #5b5f97;
+}
+.chiner-metrics-binding-role-SEMANTIC_MATCH {
+  background: #f0ebf8;
+  color: #6f5b97;
+}
+
+.chiner-metrics-binding-released {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chiner-metrics-binding-form {
+  border: 1px solid @metrics-border;
+  border-radius: 8px;
+  background: var(--wb-bg, #ffffff);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  h4 {
+    margin: 0;
+    font-size: 14px;
+    color: @metrics-text;
+  }
+}
+
+.chiner-metrics-binding-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px 16px;
+  label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: @metrics-text;
+    span {
+      color: @metrics-muted;
+    }
+  }
+  input, select {
+    border: 1px solid @metrics-border;
+    border-radius: 6px;
+    padding: 5px 8px;
+    font-size: 12.5px;
+    background: var(--wb-bg, #ffffff);
+    color: @metrics-text;
+    &:focus-visible {
+      outline: 2px solid @metrics-primary;
+      outline-offset: 1px;
+    }
+  }
+  input[readonly] {
+    background: @metrics-soft;
+  }
+}
+
+.chiner-metrics-binding-dir-preview {
+  margin: 0;
+  font-size: 12px;
+  color: @metrics-link;
+  background: @metrics-soft;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.chiner-metrics-binding-form-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.chiner-metrics-binding-fields-head {
+  h4 {
+    margin: 0 0 4px;
+    font-size: 14px;
+    color: @metrics-text;
+  }
+}
+
+.chiner-metrics-binding-field-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 6px 2px 0;
+  font-size: 12px;
+}
+
+.chiner-metrics-muted {
+  color: @metrics-muted;
+}
+
+.chiner-metrics-importdiag {
+  border: 1px solid @metrics-border;
+  border-radius: 8px;
+  background: var(--wb-bg, #ffffff);
+  padding: 10px 14px 12px;
+  margin-bottom: 14px;
+}
+
+// M5B 无诊断时简洁展示：仅一行说明，不占整块面板
+.chiner-metrics-importdiag-empty {
+  background: transparent;
+  border-style: dashed;
+  padding: 4px 10px;
+  .chiner-metrics-importdiag-empty-text {
+    margin: 0;
+    font-size: 11.5px;
+    color: @metrics-muted;
+  }
+}
+
+.chiner-metrics-importdiag-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  h3 {
+    margin: 0;
+    font-size: 14.5px;
+    color: @metrics-text;
+  }
+}
+
+.chiner-metrics-importdiag-empty-text {
+  margin: 8px 0 2px;
+  font-size: 12px;
+  color: @metrics-muted;
+}
+
+.chiner-metrics-importdiag-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  li {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+}
+
+.chiner-metrics-importdiag-detail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: @metrics-text;
+  code {
+    background: @metrics-soft;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11.5px;
+    color: @metrics-link;
+  }
+}
+
+.chiner-metrics-importdiag-message {
+  color: @metrics-muted;
+  font-size: 11.5px;
+}
+
+.chiner-metrics-binding-tree-node {
+  padding: 4px 0;
+}
+
+.chiner-metrics-binding-tree-concept-name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: @metrics-text;
+  padding: 4px 2px;
+}
+
+.chiner-metrics-binding-tree-def {
+  padding-left: 10px;
+  border-left: 2px solid @metrics-border;
+  margin: 4px 0 6px 4px;
+}
+
+.chiner-metrics-binding-tree-def-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: @metrics-text;
+  padding: 3px 2px;
+}
+
+.chiner-metrics-binding-tree-version {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin: 2px 0 2px 10px;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: @metrics-text;
+  font-size: 12px;
+  cursor: pointer;
+  &:hover {
+    background: @metrics-soft;
+  }
+  &.active {
+    background: @metrics-soft;
+    border-color: @metrics-primary;
+    color: @metrics-link;
+    font-weight: 600;
+  }
+}
+
+.chiner-metrics-binding-tree-version-none {
+  display: inline-block;
+  margin: 2px 0 2px 10px;
+  font-size: 11.5px;
+  color: @metrics-muted;
+}
+
+.chiner-metrics-models-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chiner-metrics-models-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  h3 {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 4px;
+    font-size: 15px;
+    color: @metrics-text;
+    code {
+      background: @metrics-soft;
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 11.5px;
+      color: @metrics-link;
+    }
+  }
+}
+
+@media (max-width: 1360px) {
+  .chiner-metrics-binding-form-grid {
+    grid-template-columns: 1fr;
+  }
+  .chiner-metrics-model-panel-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+// M4B 定义声明来源投影（只读标记：非绑定记录）
+.chiner-metrics-binding-role-DECLARED {
+  background: #e6f2ef;
+  color: #2f7d6d;
+}
+
+.chiner-metrics-declared-note {
+  margin: 0 0 8px;
+  line-height: 1.6;
+}
+
+.chiner-metrics-declared-row {
+  border-style: dashed;
+}
+
+// ---------- M5A 血缘与影响页（蓝白工作台，1280/1600 可读） ----------
+.chiner-metrics-lineage-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border: 1px solid var(--wb-line, @metrics-border);
+  border-radius: 8px;
+  background: var(--wb-bg, #ffffff);
+  > label {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 12px;
+    color: @metrics-muted;
+    select {
+      min-width: 180px;
+      padding: 4px 8px;
+      border: 1px solid var(--wb-line, @metrics-border);
+      border-radius: 6px;
+      background: #ffffff;
+      color: @metrics-text;
+      font-size: 12.5px;
+    }
+  }
+}
+
+.chiner-metrics-lineage-states {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: @metrics-muted;
+  > span {
+    color: @metrics-muted;
+  }
+  label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    color: @metrics-text;
+  }
+}
+
+.chiner-metrics-lineage-zoom {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+// M5A R1 范围筛选说明（独占一行，1280 控件区换行不溢出）
+.chiner-metrics-lineage-scope-note {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: @metrics-muted;
+}
+
+.chiner-metrics-lineage-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.chiner-metrics-lineage-graph-area {
+  min-width: 0;
+  border: 1px solid var(--wb-line, @metrics-border);
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.chiner-metrics-lineage-graph-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.chiner-metrics-lineage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--wb-line, @metrics-border);
+  background: var(--wb-sidebar, @metrics-page);
+  font-size: 11.5px;
+  color: @metrics-muted;
+}
+
+.chiner-metrics-ln-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  i {
+    display: inline-block;
+    width: 22px;
+    height: 0;
+    border-top: 2px solid @metrics-primary;
+    &.ln-baseline {
+      border-top-style: dashed;
+      border-top-color: #7d5bb2;
+    }
+    &.ln-semantic {
+      border-top-style: dotted;
+      border-top-color: @metrics-muted;
+    }
+    &.ln-consumption {
+      border-top-color: @metrics-muted;
+    }
+    &.ln-declared {
+      border-top-style: dashed;
+      border-top-color: #2f7d6d;
+    }
+    &.ln-invalid {
+      border-top-style: dashed;
+      border-top-color: #c0564f;
+    }
+  }
+}
+
+.chiner-metrics-ln-legend-cycle {
+  color: #c0564f;
+}
+
+.chiner-metrics-lineage-viewport {
+  flex: 1;
+  min-height: 320px;
+  max-height: 480px;
+  overflow: hidden;
+  cursor: grab;
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.chiner-metrics-ln-node {
+  cursor: pointer;
+  rect {
+    fill: #ffffff;
+    stroke: @metrics-primary;
+    stroke-width: 1.2;
+  }
+  &.chiner-metrics-ln-node-invalid rect {
+    fill: #fdf6f5;
+    stroke: #c0564f;
+    stroke-dasharray: 4 3;
+  }
+  &.chiner-metrics-ln-node-focus rect {
+    stroke-width: 2.2;
+    fill: @metrics-soft;
+  }
+  &.chiner-metrics-ln-node-selected rect {
+    stroke-width: 2;
+    stroke: @metrics-link;
+  }
+  &.chiner-metrics-ln-node-metric rect {
+    fill: #f7faff;
+  }
+  text {
+    font-family: inherit;
+    fill: @metrics-text;
+  }
+  .chiner-metrics-ln-node-name {
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+  .chiner-metrics-ln-node-sub {
+    font-size: 10.5px;
+    fill: @metrics-muted;
+  }
+  .chiner-metrics-ln-node-tags {
+    font-size: 10.5px;
+    fill: @metrics-link;
+  }
+  &.chiner-metrics-ln-node-invalid .chiner-metrics-ln-node-tags {
+    fill: #c0564f;
+  }
+}
+
+.chiner-metrics-ln-expand {
+  rect {
+    fill: @metrics-soft;
+    stroke: @metrics-primary;
+  }
+  text {
+    font-size: 14px;
+    font-weight: 700;
+    text-anchor: middle;
+    fill: @metrics-link;
+  }
+  &:hover rect {
+    fill: @metrics-primary;
+  }
+  &:hover text {
+    fill: #ffffff;
+  }
+}
+
+.chiner-metrics-ln-edge {
+  cursor: pointer;
+  .chiner-metrics-ln-edge-hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 10;
+    pointer-events: stroke;
+  }
+  .chiner-metrics-ln-edge-stroke {
+    fill: none;
+    stroke: @metrics-primary;
+    stroke-width: 1.5;
+    pointer-events: none;
+  }
+  &.chiner-metrics-ln-edge-dependency .chiner-metrics-ln-edge-stroke {
+    stroke: #3566af;
+  }
+  &.chiner-metrics-ln-edge-materialization .chiner-metrics-ln-edge-stroke {
+    stroke: #4e6fb2;
+    stroke-width: 1.8;
+  }
+  &.chiner-metrics-ln-edge-consumption .chiner-metrics-ln-edge-stroke {
+    stroke: @metrics-muted;
+    stroke-width: 1.2;
+  }
+  &.chiner-metrics-ln-edge-declared-source .chiner-metrics-ln-edge-stroke {
+    stroke: #2f7d6d;
+    stroke-dasharray: 6 4;
+  }
+  &.chiner-metrics-ln-edge-baseline .chiner-metrics-ln-edge-stroke {
+    stroke: #7d5bb2;
+    stroke-dasharray: 6 4;
+  }
+  &.chiner-metrics-ln-edge-semantic .chiner-metrics-ln-edge-stroke {
+    stroke: @metrics-muted;
+    stroke-dasharray: 2 4;
+  }
+  &.chiner-metrics-ln-edge-released .chiner-metrics-ln-edge-stroke {
+    stroke: #b9c2d0;
+    stroke-dasharray: 3 5;
+  }
+  &.chiner-metrics-ln-edge-invalid .chiner-metrics-ln-edge-stroke {
+    stroke: #c0564f;
+    stroke-dasharray: 5 4;
+  }
+  &.chiner-metrics-ln-edge-selected .chiner-metrics-ln-edge-stroke {
+    stroke-width: 2.6;
+  }
+  .chiner-metrics-ln-edge-label {
+    font-size: 10px;
+    fill: #2f7d6d;
+    text-anchor: middle;
+  }
+}
+
+.chiner-metrics-lineage-detail {
+  border: 1px solid var(--wb-line, @metrics-border);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px 12px;
+  overflow-y: auto;
+  h3 {
+    margin: 0 0 8px;
+    font-size: 13.5px;
+  }
+}
+
+.chiner-metrics-lineage-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  h4 {
+    margin: 0;
+    font-size: 13px;
+    color: @metrics-text;
+  }
+  code {
+    background: @metrics-soft;
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 11px;
+    color: @metrics-link;
+  }
+}
+
+.chiner-metrics-ln-detail-sub {
+  margin: 0;
+  font-size: 11.5px;
+  color: @metrics-muted;
+  word-break: break-all;
+}
+
+.chiner-metrics-ln-detail-path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12.5px;
+  i {
+    color: @metrics-link;
+    font-style: normal;
+  }
+}
+
+.chiner-metrics-ln-detail-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  color: @metrics-text;
+}
+
+.chiner-metrics-ln-detail-invalid {
+  margin: 0;
+  padding: 5px 8px;
+  border: 1px dashed #c0564f;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #c0564f;
+  background: #fdf6f5;
+}
+
+.chiner-metrics-ln-detail-note {
+  margin: 0;
+  font-size: 11.5px;
+  color: @metrics-muted;
+  line-height: 1.6;
+}
+
+.chiner-metrics-ln-snapshot {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+}
+
+.chiner-metrics-ln-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.chiner-metrics-ln-role {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: @metrics-soft;
+  font-size: 11px;
+  color: @metrics-link;
+}
+
+.chiner-metrics-lineage-impact {
+  margin-top: 10px;
+  border: 1px solid var(--wb-line, @metrics-border);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px 12px;
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    h3 {
+      margin: 0;
+      font-size: 13.5px;
+    }
+  }
+}
+
+.chiner-metrics-lineage-impact-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.chiner-metrics-lineage-impact-col {
+  min-width: 0;
+  h4 {
+    margin: 0 0 6px;
+    font-size: 12.5px;
+    color: @metrics-muted;
+  }
+}
+
+.chiner-metrics-lineage-impact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--wb-line, @metrics-border);
+  border-radius: 6px;
+  margin-bottom: 6px;
+  > div {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    strong {
+      font-size: 12.5px;
+    }
+    code {
+      background: @metrics-soft;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 11px;
+      color: @metrics-link;
+    }
+  }
+}
+
+.chiner-metrics-ln-path {
+  font-size: 11px;
+  color: @metrics-muted;
+}
+
+.chiner-metrics-lineage-caliber {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 11.5px;
+  color: @metrics-muted;
+  line-height: 1.7;
+}
+
+.chiner-metrics-models-detail-actions {
+  display: flex;
+  gap: 8px;
+}
+
+// M5B-R1：删除前指标影响（Modal message 窄组件，蓝白工作台风格）
+.chiner-metrics-delete-impact {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.8;
+  .chiner-metrics-delete-impact-title {
+    margin: 0 0 4px;
+    font-weight: 600;
+    color: #b4531f;
+  }
+  .chiner-metrics-delete-impact-seg {
+    margin: 0;
+    span {
+      color: @metrics-muted;
+      margin-right: 6px;
+    }
+  }
+  .chiner-metrics-delete-impact-note {
+    margin: 4px 0 0;
+    font-size: 11.5px;
+    color: @metrics-muted;
+  }
+}
+
+@media (max-width: 1360px) {
+  .chiner-metrics-lineage-main {
+    grid-template-columns: 1fr;
+  }
+  .chiner-metrics-lineage-impact-cols {
+    grid-template-columns: 1fr;
+  }
+}

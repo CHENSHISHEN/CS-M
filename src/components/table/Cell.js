@@ -335,7 +335,7 @@ export default React.memo(({f, name, remarkChange, onKeyDown, currentPrefix,
       <span><Component.FormatMessage id='tableHeaders.ext'/></span><span style={{marginLeft: 5}}>{Object.keys(f[name] || {}).length || ''}</span>
     </a>;
   } else if (name === 'type') {
-    // Table 已解析 db（实体已定库 = 目标方言 physicalDbTypeId）显式传入，
+    // S2 整改F3：Table 已解析 db（实体已定库 = 目标方言 physicalDbTypeId）显式传入，
     // 类型下拉仅列目标映射；旧调用无 prop 保持全局默认库行为，自由输入仍保留
     const db = typeDb != null && typeDb !== ''
       ? typeDb : getDataSource().profile?.default?.db;
@@ -439,7 +439,7 @@ export default React.memo(({f, name, remarkChange, onKeyDown, currentPrefix,
     return !((pre?.extAttrProps !== next?.extAttrProps)
         || (pre.f[pre.name] !== next.f[next.name]));
   } else if (pre.name === 'type') {
-    // 类型下拉依赖实际 db（目标方言），memo 比较需包含
+    // 整改F3：类型下拉依赖实际 db（目标方言），memo 比较需包含
     return !((pre?.mapping !== next?.mapping)
         || (pre.f[pre.name] !== next.f[next.name])
         || (pre.typeDb !== next.typeDb));

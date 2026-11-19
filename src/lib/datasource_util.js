@@ -1,3 +1,4 @@
+import {drawingPersistence} from './drawing_persistence';
 import * as _ from 'lodash/object';
 import moment from 'moment';
 import {FormatMessage} from 'components';
@@ -18,7 +19,10 @@ import {
   _transform,
   _mergeId, _remapModelCatalog, demoTable
 } from './utils';
+import {remapConceptLogicalLinksForReduce} from './concept_logical_links';
 import {postWorkerFuc} from './event_tool';
+import {remapProjectMetadataForReduce} from './quality/projectMetadata';
+import {remapMetricPlatformForReduce} from './metrics/persistence';
 
 export const allType = [
   { type: 'conceptEntity', name: 'conceptEntities', defKey: 'defKey' },
@@ -1428,7 +1432,7 @@ export  const calcNodeData = ({data: preData, needTransform = true, ...rest},
             }
         });
     };
-  // 已定库物理对象（physicalDbTypeId）按目标方言解析域映射类型，
+  // S2 整改F4：已定库物理对象（physicalDbTypeId）按目标方言解析域映射类型，
   // 不再被全局默认方言改写；无该键（概念/逻辑/旧实体）保持旧行为不变
   const physicalDbTypeId = nodeData?.physicalDbTypeId != null
       && nodeData.physicalDbTypeId !== '' ? nodeData.physicalDbTypeId : undefined;
@@ -2079,6 +2083,11 @@ export const validateNeedSave = (dataSource) => {
   if (Object.keys(cacheData).filter(c => !cacheData[c].isInit).length > 0) {
     return true;
   } else if (dataSource !== getMemoryCache('data')) {
+    if (drawingPersistence.isSaved(dataSource?.drawings)) {
+      const {drawings: currentDrawings, ...current} = dataSource || {};
+      const {drawings: savedDrawings, ...saved} = getMemoryCache('data') || {};
+      if (JSON.stringify(current) === JSON.stringify(saved)) return false;
+    }
     return true;
   }
   return false;
@@ -2170,6 +2179,38 @@ export const calcEntityOrView = (data = [], dicts, domains, uiHint, entities, ty
   })
 };
 
+// S3 公共合同：导入重构时企业首页 homeCanvas 仅重映射 diagram 节点的 diagramId 引用
+// （old 标记直连 / defKey 回退，均未命中则撤引用防同号误绑，节点退化为普通图形）；
+// 节点/边自身 ID 与其余 enterpriseModeling 元数据保持原样——rect/text/group 是
+// 基础组件节点不是模型实体，不参与任何实体 ID 映射；另存/读不写默认。
+const resolveReducedId = (collections, markerSource, id) => {
+  if (id == null) return null;
+  const hit = (collections || []).filter(item => item.old === id)[0];
+  if (hit) return hit.id;
+  const origin = (markerSource || []).filter(item => item.id === id)[0];
+  if (origin && origin.defKey) {
+    const byKey = (collections || []).filter(item => item.old === origin.defKey)[0];
+    if (byKey) return byKey.id;
+  }
+  return null;
+};
+
+export const remapEnterpriseHomeCanvas = (enterpriseModeling, diagrams, sourceDiagrams) => {
+  const homeCanvas = enterpriseModeling?.homeCanvas;
+  if (!homeCanvas || !Array.isArray(homeCanvas.nodes)) return enterpriseModeling;
+  const nodes = homeCanvas.nodes.map((node) => {
+    if (node.kind !== 'diagram' || node.diagramId == null) return node;
+    const mapped = resolveReducedId(diagrams, sourceDiagrams, node.diagramId);
+    if (mapped == null) {
+      const next = {...node};
+      delete next.diagramId;
+      return next;
+    }
+    return {...node, diagramId: mapped};
+  });
+  return {...enterpriseModeling, homeCanvas: {...homeCanvas, nodes}};
+};
+
 export const reduceProject = (emptyProject, type) => {
   const dataTypeSupports = emptyProject?.profile?.dataTypeSupports?.map(d => {
       return {
@@ -2231,9 +2272,11 @@ export const reduceProject = (emptyProject, type) => {
       }),
     };
   }) || [];
+  // S1 R6：物理模型库随导入重构同步换 id（分类/类型引用在 _remapModelCatalog 内重映射）
   const catalog = emptyProject.profile?.modelCatalog;
   const databases = (catalog?.physicalDatabases || []).map(db =>
     ({...db, old: db.id, [type]: db.id, id: Math.uuid()}));
+  // 导入侧对象上的库归属引用随上述映射重建；未命中保留原值，由分组/合并阶段回收兜底
   const remapReducedPhysical = (obj) => {
     if (obj.physicalDatabaseId == null && obj.physicalDbTypeId == null) return obj;
     const next = {...obj};
@@ -2254,6 +2297,30 @@ export const reduceProject = (emptyProject, type) => {
     id: Math.uuid(), type: 'C', fields: [], headers: [],
   }));
   const logicEntities = calcEntityOrView(emptyProject.logicEntities || [], dicts, domains, uiHint, null, type);
+  // S2 G07：来源逻辑溯源键随导入重建——源逻辑实体（及其字段）随导入则换新 id；
+  // 源没随导入（或 defKey 模式无法按 id 匹配）一律清除可选来源，
+  // 不保留可能碰巧指向目标项目同号对象的旧 id
+  const remapLogicOrigin = (obj) => {
+    if (obj.logicalEntityId == null && obj.logicalFieldId == null) return obj;
+    const next = {...obj};
+    if (next.logicalEntityId != null) {
+      const hit = logicEntities.filter(l => l.old === next.logicalEntityId)[0];
+      if (!hit) {
+        delete next.logicalEntityId;
+        delete next.logicalFieldId;
+        return next;
+      }
+      next.logicalEntityId = hit.id;
+      if (next.logicalFieldId != null) {
+        const fieldHit = (hit.fields || []).filter(f => f.old === next.logicalFieldId)[0];
+        if (fieldHit) next.logicalFieldId = fieldHit.id;
+        else delete next.logicalFieldId;
+      }
+    } else {
+      delete next.logicalFieldId;
+    }
+    return next;
+  };
   const layers = (catalog?.layers || []).map(layer => ({...layer, old: layer.id, [type]: layer.id, id: Math.uuid()}));
   const categories = (catalog?.categories || []).map(category => ({...category, old: category.id, [type]: category.id, id: Math.uuid()}));
   const viewGroups = (emptyProject.viewGroups || []).map(group => ({...group,
@@ -2277,7 +2344,8 @@ export const reduceProject = (emptyProject, type) => {
   });
   const getFieldId = (c, cells, name) => {
     const cell = cells.filter(ce => ce.id === c[name]?.cell)[0];
-    const objects = cell?.type === 'L' ? logicEntities : entities.concat(views);
+    const objects = cell?.type === 'C' ? conceptEntities
+      : (cell?.type === 'L' ? logicEntities : entities.concat(views));
     const entity = objects.find(e => e[type] === cell?.originKey);
     if (entity) {
       const field = entity?.fields?.filter(f => f[type] === c[name]?.port?.split(separator)[0])[0];
@@ -2317,8 +2385,10 @@ export const reduceProject = (emptyProject, type) => {
         })
       }
     };
-  }) || [];
+  }).map(remapReducedPhysical) || [];
   const db = (dataTypeSupports || []).filter(d => d[type] === emptyProject.profile?.default?.db)[0]?.id || ''
+  // METADATA：标准字段库随导入换 id（分组/字段补 old 标记供 AI 质量引用重映射，
+  // 输出时剔除，行为与原内联映射一致）
   const standardFields = (emptyProject?.standardFields || []).map(g => {
     return {
       ...g,
@@ -2328,6 +2398,39 @@ export const reduceProject = (emptyProject, type) => {
         return calcField(f, entities, dicts, domains, uiHint, type);
       })
     };
+  });
+  // METADATA：AI 质量/词元元数据随导入重构同步重映射（scope/标准引用按真实
+  // old→新映射、词元 baseType 换绑）；缺映射不伪造绑定——受影响规则集禁用并
+  // 留可定位诊断；无该元数据不产出键
+  const remappedMetadata = remapProjectMetadataForReduce(emptyProject, {
+    entities, logicEntities, conceptEntities,
+    standardFieldGroups: standardFields, mappings,
+  });
+  // S3-LINKS：概念-逻辑关联边随导入重映射（端点 old 标记直连/defKey 回退、缺来源置
+  // null+unresolved 最小身份、边 ID 重新分配）；无关联数据不新增空数组
+  const remapCatalogLinks = (remappedCatalog) => {
+    const links = catalog?.conceptLogicalLinks;
+    if (!links || !links.length) return remappedCatalog;
+    return {...remappedCatalog, conceptLogicalLinks: remapConceptLogicalLinksForReduce(links, {
+      concepts: conceptEntities,
+      logics: logicEntities,
+      sourceConcepts: emptyProject.conceptEntities || [],
+      sourceLogics: emptyProject.logicEntities || [],
+    })};
+  };
+  // S3 公共合同：homeCanvas 的 diagramId 引用随导入重映射，其余元数据保持
+  const enterpriseModeling = emptyProject.profile?.enterpriseModeling;
+  const remappedEnterpriseModeling = enterpriseModeling
+    ? remapEnterpriseHomeCanvas(enterpriseModeling, diagrams, emptyProject.diagrams || [])
+    : null;
+  // M4A：指标存储（profile.metricPlatform）随导入重构重映射——原子 spec.source 与
+  // 绑定端点/mapping 字段按 old→新 id 重绑（defKey 模式经源集合回退），缺映射转
+  // unresolved（不伪造绑定）；无指标数据或未知 schema 返回 null，原样透传（含未知键）
+  const remappedMetricPlatform = remapMetricPlatformForReduce(emptyProject, {
+    entities, logicEntities, conceptEntities,
+    sourceEntities: emptyProject.entities || [],
+    sourceLogicEntities: emptyProject.logicEntities || [],
+    sourceConceptEntities: emptyProject.conceptEntities || [],
   });
   return {
     ...emptyProject,
@@ -2341,12 +2444,17 @@ export const reduceProject = (emptyProject, type) => {
             return calcField(f, entities, dicts, domains, uiHint, type);
           }).map(f => _.omit(f, 'old'))
       },
-      ...(catalog ? {modelCatalog: _remapModelCatalog(catalog, {
+      ...(catalog ? {modelCatalog: remapCatalogLinks(_remapModelCatalog(catalog, {
         layer: layers, category: categories, legacyGroup: viewGroups,
         conceptEntity: conceptEntities, logicEntity: logicEntities, entity: entities,
         diagram: diagrams, view: views, dict: dicts,
         database: databases, dataTypeSupport: dataTypeSupports,
-      }, type)} : {}),
+      }, type))} : {}),
+      ...(remappedEnterpriseModeling ? {enterpriseModeling: remappedEnterpriseModeling} : {}),
+      ...(remappedMetadata?.quality ? {quality: remappedMetadata.quality} : {}),
+      ...(remappedMetadata?.fieldRecommendation
+        ? {fieldRecommendation: remappedMetadata.fieldRecommendation} : {}),
+      ...(remappedMetricPlatform ? {metricPlatform: remappedMetricPlatform} : {}),
       dataTypeSupports: dataTypeSupports.map(d => _.omit(d, 'old')),
       codeTemplates,
       uiHint: uiHint.map(u => _.omit(u, 'old')),
@@ -2357,17 +2465,29 @@ export const reduceProject = (emptyProject, type) => {
       fields: (entity.fields || []).map(field => _.omit(field, 'old')),
     })),
     entities: entities.map(d => {
+      // S2 整改F2：字段来源随实体同一源逻辑上下文重映射（源逻辑及其字段
+      // 随导入换新 id）；源逻辑未随导入（或 defKey 模式无法按 id 匹配）时
+      // 连同字段来源一并清除，不保留可能误绑同号对象的旧 id
+      const originLogic = d.logicalEntityId != null
+        ? logicEntities.filter(l => l.old === d.logicalEntityId)[0] : null;
       return {
-        ..._.omit(d, ['old', 'nameTemplate']),
+        ..._.omit(remapLogicOrigin(d), ['old', 'nameTemplate']),
         type: d.type || 'P',
         sysProps: {
           nameTemplate: d.nameTemplate
         },
         fields: (d.fields || []).map(f => {
-          return {
+          const next = {
             ..._.omit(f, 'old'),
             baseType: getFieldBaseType(f, domains, mappings, db)
+          };
+          if (f.logicalFieldId != null) {
+            const fieldHit = originLogic
+              && (originLogic.fields || []).filter(x => x.old === f.logicalFieldId)[0];
+            if (fieldHit) next.logicalFieldId = fieldHit.id;
+            else delete next.logicalFieldId;
           }
+          return next;
         })
       };
     }),
@@ -2717,6 +2837,7 @@ export const getUnGroup = (dataSource, defKey) => {
     refEntities: calcUnGroupDefKey(dataSource || {}, 'entities'),
     refViews: calcUnGroupDefKey(dataSource || {}, 'views'),
     refLogicEntities: calcUnGroupDefKey(dataSource || {}, 'logicEntities'),
+    refConceptEntities: calcUnGroupDefKey(dataSource || {}, 'conceptEntities'),
     id: '__ungroup',
     defKey: defKey || '__ungroup',
   }
