@@ -6,7 +6,9 @@ import { FormatMessage, Input, Text, Table, MultipleSelect, Radio, Checkbox, Fie
 import './style/index.less';
 import {getPrefix} from '../../../lib/prefixUtil';
 import {emptyField, getDefaultLogicSys, getLogicHeaders} from '../../../lib/datasource_util';
-// 逻辑实体字段删除前指标影响确认（无影响不阻扰）
+import {getCatalogCategories, categoryObjects, readCatalog} from '../../../lib/model_catalog';
+// M5B-R1：逻辑实体字段删除前指标影响确认（无影响不阻扰）
+import {makeFieldsDeleteCheck} from '../../metrics/deleteImpact';
 
 export default React.memo(({prefix, dataSource, data, dataChange, getDataSource,
                                hasRender, hasDestory, param, isTab, group}) => {
@@ -88,6 +90,9 @@ export default React.memo(({prefix, dataSource, data, dataChange, getDataSource,
             };
         });
     };
+    const catalogGroups = getCatalogCategories(dataSource).filter(category =>
+        !category.legacyGroupId && categoryObjects(dataSource, category).logicEntity
+            .some(entity => entity.id === data.id));
     const headers = getLogicHeaders();
     const search = useCallback((f, value) => {
       const reg = new RegExp((value || '')
@@ -146,6 +151,11 @@ export default React.memo(({prefix, dataSource, data, dataChange, getDataSource,
         tableType='logicEntity'
         dataSource={dataSource}
         tableDataChange={fields => _dataChange(fields, 'fields')}
+        // M5B-R1：逻辑实体字段删除前指标影响确认（新建未保存实体无 id 不阻扰）
+        checkFieldsDelete={data && data.id
+          ? makeFieldsDeleteCheck(() => (getDataSource ? getDataSource() : dataSource),
+            'logicEntities', data.id)
+          : undefined}
       />;
     };
     const renderTabFields = () => {
@@ -257,6 +267,22 @@ export default React.memo(({prefix, dataSource, data, dataChange, getDataSource,
           </MultipleSelect>
         </span>
       </div>
+      {catalogGroups.length > 0 && <div className={`${currentPrefix}-form-item`}>
+        <span className={`${currentPrefix}-form-item-label`}>
+          <FormatMessage id='modelCatalog.categoryMembership'/>
+        </span>
+        <span
+          className={`${currentPrefix}-form-item-component`}
+          title={FormatMessage.string({id: 'modelCatalog.manageMembership'})}>
+          {catalogGroups.map((category) => {
+              const layer = readCatalog(dataSource).layers
+                  .find(item => item.id === category.layerId);
+              return <span key={category.id} style={{display: 'inline-block', marginRight: 12}}>
+                {[layer?.defName || layer?.defKey, category.defName || category.defKey].filter(Boolean).join(' / ')}
+              </span>;
+          })}
+        </span>
+      </div>}
       <div className={`${currentPrefix}-form-item`}>
         <span
           className={`${currentPrefix}-form-item-label`}

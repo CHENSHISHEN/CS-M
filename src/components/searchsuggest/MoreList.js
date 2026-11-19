@@ -12,7 +12,7 @@ export default React.memo(({getItemList, filterData, currentPrefix,
       setData(allData.map((d) => {
         return {
           ...d,
-          data: ['entities', 'logicEntities'].includes(d.key)
+          data: ['entities', 'logicEntities', 'conceptEntities'].includes(d.key)
               ? getFilterRefData(d.data, value.current)
               : getFilterData(d.data, value.current),
         };

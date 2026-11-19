@@ -3,6 +3,7 @@ import {FormatMessage, Modal} from 'components';
 import CheckList from './CkeckList';
 import CheckDetail from './CheckDetail';
 import CheckEdit from './CheckEdit';
+import QualityRulesPanel from '../../ai/integration/QualityRulesPanel';
 import './style/index.less';
 import { getPrefix } from '../../../lib/prefixUtil';
 import {postWorkerFuc} from '../../../lib/event_tool';
@@ -10,7 +11,7 @@ import {postWorkerFuc} from '../../../lib/event_tool';
 export default React.memo(forwardRef(({prefix, dataSource, updateDataSource,
                                jumpEntity, validateTableStatus, tabDataChange, setMenuType,
                                save, openDict, getDataSource, common, configOpen, readOnly,
-}, ref) => {
+                               onRequestAiFix}, ref) => {
     const statusRef = useRef(true);
     const checkListRef = useRef(null);
     const currentPrefix = getPrefix(prefix);
@@ -21,6 +22,7 @@ export default React.memo(forwardRef(({prefix, dataSource, updateDataSource,
     const [currentRule, setCurrentRule] = useState(null);
     const [type, setType] = useState(configOpen ? 'config' : 'result');
     // 模型质量规则（profile.quality）：独立分区入口，原脚本规则入口不受影响
+    const [qualityOpen, setQualityOpen] = useState(false);
     const typeRef = useRef('');
     typeRef.current = type;
     useImperativeHandle(ref, () => {
@@ -178,6 +180,22 @@ export default React.memo(forwardRef(({prefix, dataSource, updateDataSource,
                   ruleData={currentRule}
                   setType={setType}/>
               </div>
+              {qualityOpen && <QualityRulesPanel
+                dataSource={dataSource}
+                updateDataSource={updateDataSource}
+                getDataSource={getDataSource}
+                readOnly={readOnly}
+                jumpEntity={jumpEntity}
+                onRequestAiFix={onRequestAiFix}
+                onClose={() => setQualityOpen(false)}
+              />}
+              <button
+                type='button'
+                className={`${currentPrefix}-check-rule-quality-entry`}
+                aria-expanded={qualityOpen ? 'true' : 'false'}
+                onClick={() => setQualityOpen(pre => !pre)}>
+                <FormatMessage id='quality.title'/>
+              </button>
             </> : <CheckEdit
               updateDataSource={updateDataSource}
               dataSource={dataSource}

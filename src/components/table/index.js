@@ -48,7 +48,7 @@ const Table = React.memo(forwardRef(({ prefix, data = {}, disableHeaderSort, sea
                                disableDragRow = true, freeze = false, reading = false,
                                fixHeader = true, openDict, defaultGroups, info, searchRef,
                                openConfig, isEntity, needHideInGraph, virtual = true,
-                               allFieldOptions, autoWidth},
+                               allFieldOptions, autoWidth, checkFieldsDelete},
                                      refInstance) => {
   const { lang } = useContext(ConfigContent);
   const { valueContext, valueSearch } = useContext(TableContent);
@@ -62,7 +62,7 @@ const Table = React.memo(forwardRef(({ prefix, data = {}, disableHeaderSort, sea
   const domains = _.get(dataSource, 'domains', []);
   const mapping = _.get(dataSource, 'dataTypeMapping.mappings', []);
   const uiHint =  _.get(dataSource, 'profile.uiHint', []);
-  // 已定库实体（physicalDbTypeId）优先按目标方言解析类型/长度；
+  // S2：已定库实体（physicalDbTypeId）优先按目标方言解析类型/长度；
   // 旧调用（字典/逻辑实体/未定库表）无该键，保持全局默认库行为不变
   const entityDbId = data && data.physicalDbTypeId != null && data.physicalDbTypeId !== ''
     ? data.physicalDbTypeId : '';
@@ -619,6 +619,12 @@ const Table = React.memo(forwardRef(({ prefix, data = {}, disableHeaderSort, sea
       const selectField = newFields[(minIndex - 1) < 0 ? 0 : minIndex - 1];
       updateSelectedFields((selectField && [selectField.id]) || empty);
     };
+    // M5B-R1 指标影响接缝：调用方（指标绑定目标实体/逻辑实体的字段表）传入检查时，
+    // 有影响先确认（确认才 applyDelete，取消零变更），无影响直接放行；其余调用不受影响
+    if (checkFieldsDelete
+      && checkFieldsDelete((fields || []).filter(f => selectedFields.includes(f.id)), applyDelete)) {
+      return;
+    }
     applyDelete();
   };
   const tableKeyDown = (e) => {

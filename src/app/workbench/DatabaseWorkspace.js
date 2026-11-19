@@ -9,7 +9,7 @@ import {
 
 const t = (key) => FormatMessage.string({id: `dbWorkspace.${key}`});
 
-// 数据库管理工作区（左轨“数据库”进入，替代顶栏入口）。
+// DATA-WB-FEAT-001 整改 F1：数据库管理工作区（左轨“数据库”进入，替代顶栏入口）。
 // 连接编辑改为本地草稿事务：DbConnect 的全部连续回调（新增/复制/删除/改名/切默认）
 // 只积累进草稿、不写项目源；点“保存连接配置”时经 validateDbConnDraft 校验
 // （名称完整唯一、非空默认连接属于列表）后由 applyDbConnDraft 将 dbConn 与

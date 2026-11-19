@@ -1,0 +1,1247 @@
+// AI 面板样式：作用域限定 chiner-ai-*；
+// 优先读取工作台 --wb-* token（含暗色主题），无 token 时回退浅色基准值。
+// 容器宽度（检查器 352/320、绘图浮层 330/310）由宿主容器控制，本文件不自定宽度。
+@ai-prefix: chiner;
+@ai-blue: #3566af;
+@ai-primary: #4e6fb2;
+
+// UI-R2：共享 token 定义（沿 --wb-* 工作台 token，无 token 时回退浅色基准）。
+// --ai-* 原先只定义在 .chiner-ai-assistant 上，而 ChangeReview 遮罩/弹窗、
+// ProviderSettings、ContextPicker 是其兄弟/独立表面（不在 .chiner-ai-assistant
+// DOM 子树内），var(--ai-*) 无 fallback 时取不到值 → 背景透明/原生样式。
+// 这里把同一份 token 应用到每个独立挂载的表面根节点（沿 DOM 继承 --wb-*）。
+.ai-surface-tokens() {
+  --ai-line: var(--wb-line, #dce4ef);
+  --ai-text: var(--wb-text, #303746);
+  --ai-muted: var(--wb-muted, #667080);
+  --ai-blue: var(--wb-blue, @ai-blue);
+  --ai-primary: var(--wb-primary, @ai-primary);
+  --ai-bg: var(--wb-bg, #ffffff);
+  --ai-side: var(--wb-side, #f3f6fb);
+  --ai-section: var(--wb-section-bg, #eaf1fb);
+  --ai-section-text: var(--wb-section-text, #365a89);
+  --ai-accent: var(--wb-accent, #e2ecfc);
+  --ai-warn: var(--wb-warning, #976612);
+  --ai-danger: var(--wb-danger, #b23b4c);
+  --ai-overlay: var(--wb-overlay, rgba(20, 36, 59, .35));
+  --ai-shadow: var(--wb-shadow, 0 12px 36px rgba(20, 36, 59, .18));
+}
+
+.@{ai-prefix}-ai-assistant {
+  .ai-surface-tokens();
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--ai-bg);
+  color: var(--ai-text);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow: hidden;
+}
+
+// ---------- 服务条 / 上下文条 ----------
+.@{ai-prefix}-ai-servicebar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px 8px;
+  font-size: 10px;
+  color: var(--ai-muted);
+  flex: none;
+}
+.@{ai-prefix}-ai-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ai-blue);
+  flex: none;
+  &.is-warn { background: var(--ai-warn); }
+  &.is-error { background: var(--ai-danger); }
+}
+.@{ai-prefix}-ai-servicename {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.@{ai-prefix}-ai-serviceactions { display: flex; gap: 8px; margin-left: auto; }
+.@{ai-prefix}-ai-end { margin-left: auto; }
+
+.@{ai-prefix}-ai-contextbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 3px 14px 11px;
+  border-bottom: 1px solid var(--ai-line);
+  flex: none;
+}
+.@{ai-prefix}-ai-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  border-radius: 3px;
+  padding: 4px 6px;
+  background: #f5f8fd;
+  color: #5e7394;
+  border: 1px solid var(--ai-line);
+  max-width: 100%;
+  &.is-off { opacity: .55; text-decoration: line-through; }
+}
+.@{ai-prefix}-ai-pill-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.@{ai-prefix}-ai-pill-add {
+  cursor: pointer;
+  color: var(--ai-blue);
+  background: transparent;
+  border-style: dashed;
+  &:hover { border-color: var(--ai-blue); }
+}
+.@{ai-prefix}-ai-pill-remove {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  display: inline-flex;
+  color: inherit;
+  cursor: pointer;
+  &:hover { color: var(--ai-danger); }
+}
+
+// ---------- 对话区 ----------
+.@{ai-prefix}-ai-chat {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 14px;
+}
+.@{ai-prefix}-ai-emptyhint {
+  border: 1px dashed var(--ai-line);
+  border-radius: 5px;
+  color: var(--ai-muted);
+  font-size: 11px;
+  padding: 12px;
+  margin: 8px 0;
+  background: var(--ai-side);
+}
+.@{ai-prefix}-ai-message {
+  background: var(--ai-section);
+  border: 1px solid var(--ai-line);
+  border-radius: 5px;
+  padding: 10px 11px;
+  font-size: 12px;
+  line-height: 1.85;
+  margin-left: 18px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.@{ai-prefix}-ai-attachment {
+  border: 1px solid var(--ai-line);
+  background: var(--ai-side);
+  border-radius: 3px;
+  padding: 6px 7px;
+  margin-top: 8px;
+  font-size: 10px;
+  color: #526984;
+  summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    list-style: none;
+  }
+}
+.@{ai-prefix}-ai-attach-name { font-family: Menlo, Consolas, monospace; font-size: 11px; }
+.@{ai-prefix}-ai-attach-meta { margin-left: auto; color: var(--ai-muted); }
+.@{ai-prefix}-ai-attach-preview {
+  margin: 6px 0 0;
+  max-height: 160px;
+  overflow: auto;
+  font-family: Menlo, Consolas, monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.@{ai-prefix}-ai-reply {
+  margin-top: 16px;
+  font-size: 12px;
+  line-height: 1.9;
+  &.chiner-ai-reply-error {
+    border-left: 2px solid var(--ai-danger);
+    padding-left: 8px;
+    color: var(--ai-danger);
+  }
+}
+.@{ai-prefix}-ai-by {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--ai-muted);
+  margin-bottom: 7px;
+  .@{ai-prefix}-ai-icon { color: var(--ai-blue); }
+}
+.@{ai-prefix}-ai-replytext { white-space: pre-wrap; word-break: break-word; }
+.@{ai-prefix}-ai-steps {
+  color: var(--ai-muted);
+  font-size: 11px;
+  line-height: 2.2;
+  padding-top: 8px;
+}
+.@{ai-prefix}-ai-step {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  .@{ai-prefix}-ai-icon { color: var(--ai-blue); flex: none; }
+  &.is-active .@{ai-prefix}-ai-icon { color: var(--ai-warn); }
+  &.is-pending { opacity: .55; }
+}
+.@{ai-prefix}-ai-statusline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--ai-muted);
+  &.is-error { color: var(--ai-danger); }
+}
+
+// ---------- 方案卡 ----------
+.@{ai-prefix}-ai-plancard {
+  margin-top: 12px;
+  border: 1px solid var(--ai-line);
+  border-radius: 5px;
+  overflow: hidden;
+  &.is-stale { border-color: #ead7b6; }
+}
+.@{ai-prefix}-ai-planhead {
+  height: 33px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--ai-section);
+  border-bottom: 1px solid var(--ai-line);
+  font-size: 11px;
+  color: var(--ai-section-text);
+}
+.@{ai-prefix}-ai-planstate { font-size: 10px; }
+.@{ai-prefix}-ai-planbody { padding: 10px; }
+.@{ai-prefix}-ai-planbody strong { font-size: 12px; font-weight: 600; }
+.@{ai-prefix}-ai-planbody dl {
+  margin: 8px 0 11px;
+  font-size: 11px;
+  color: var(--ai-muted);
+  & > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    line-height: 2.2;
+  }
+  dd { margin: 0; color: var(--ai-text); text-align: right; }
+}
+.@{ai-prefix}-ai-explain {
+  font-size: 10px;
+  color: var(--ai-muted);
+  line-height: 1.8;
+  margin-top: 8px;
+}
+.@{ai-prefix}-ai-assumption {
+  background: #fffaf1;
+  border-left: 2px solid #d6b476;
+  color: #8d6a31;
+  font-size: 10px;
+  line-height: 1.8;
+  padding: 7px 8px;
+  margin-top: 11px;
+}
+.@{ai-prefix}-ai-stalenote {
+  background: #fffaf0;
+  border: 1px solid #ead7b6;
+  border-radius: 3px;
+  color: #8f692a;
+  font-size: 10px;
+  line-height: 1.8;
+  padding: 7px 8px;
+  margin-bottom: 8px;
+}
+
+// ---------- 输入区（固定在面板底部） ----------
+.@{ai-prefix}-ai-composer {
+  padding: 11px 12px 9px;
+  border-top: 1px solid var(--ai-line);
+  flex: none;
+}
+.@{ai-prefix}-ai-composebox {
+  border: 1px solid var(--ai-line);
+  border-radius: 5px;
+  padding: 9px;
+  background: #fafcff;
+}
+.@{ai-prefix}-ai-composebox textarea {
+  border: 0;
+  outline: 0;
+  resize: none;
+  background: transparent;
+  width: 100%;
+  display: block;
+  height: 44px;
+  min-height: 28px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--ai-text);
+}
+.@{ai-prefix}-ai-composeactions {
+  display: flex;
+  align-items: center;
+  color: var(--ai-muted);
+  font-size: 10px;
+  margin-top: 7px;
+  gap: 6px;
+}
+.@{ai-prefix}-ai-hint { font-size: 9px; color: var(--ai-muted); }
+.@{ai-prefix}-ai-sendbtn {
+  padding: 2px;
+  min-height: 25px;
+  width: 25px;
+  margin-left: auto;
+  border-radius: 4px;
+  border: 1px solid var(--ai-line);
+  background: var(--ai-bg);
+  color: var(--ai-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  &:disabled { opacity: .5; cursor: default; }
+}
+.@{ai-prefix}-ai-composenote {
+  font-size: 9px;
+  color: var(--ai-muted);
+  margin-top: 7px;
+  line-height: 1.5;
+}
+
+// ---------- 通用小控件 ----------
+.@{ai-prefix}-ai-icon { flex-shrink: 0; vertical-align: -3px; }
+button.@{ai-prefix}-ai-linkbtn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--ai-blue);
+  cursor: pointer;
+  font-size: 10px;
+  min-height: auto;
+}
+button.@{ai-prefix}-ai-minibtn {
+  border: 1px solid var(--ai-line);
+  background: var(--ai-bg);
+  color: var(--ai-text);
+  border-radius: 4px;
+  min-height: 25px;
+  padding: 3px 10px;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  &:disabled { opacity: .5; cursor: default; }
+}
+button.@{ai-prefix}-ai-blockbtn {
+  width: 100%;
+  font-size: 11px;
+  min-height: 28px;
+  border-radius: 4px;
+  border: 1px solid var(--ai-line);
+  background: var(--ai-bg);
+  color: var(--ai-text);
+  cursor: pointer;
+  &:disabled { opacity: .55; cursor: default; }
+}
+button.@{ai-prefix}-ai-minibtn.@{ai-prefix}-ai-primary,
+button.@{ai-prefix}-ai-blockbtn.@{ai-prefix}-ai-primary,
+button.@{ai-prefix}-ai-sendbtn.@{ai-prefix}-ai-primary {
+  background: var(--ai-primary);
+  border-color: var(--ai-primary);
+  color: #fff;
+}
+button.@{ai-prefix}-ai-iconbtn {
+  width: 25px;
+  min-height: 25px;
+  padding: 3px;
+  border: 0;
+  background: transparent;
+  color: var(--ai-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 4px;
+  &:hover { color: var(--ai-blue); }
+  &:disabled { opacity: .5; cursor: default; }
+}
+.@{ai-prefix}-ai-muted { color: var(--ai-muted); }
+.@{ai-prefix}-ai-blue { color: var(--ai-blue); }
+.@{ai-prefix}-ai-tiny { font-size: 10px; }
+.@{ai-prefix}-ai-mono { font-family: Menlo, Consolas, monospace; font-size: 11px; }
+.@{ai-prefix}-ai-tag {
+  font-size: 10px;
+  padding: 2px 5px;
+  background: var(--ai-section);
+  color: var(--ai-blue);
+  border: 1px solid var(--ai-line);
+  border-radius: 3px;
+  white-space: nowrap;
+  &.@{ai-prefix}-ai-tagwarn {
+    color: var(--ai-warn);
+    background: #fff7e8;
+    border-color: #ead7b6;
+  }
+}
+
+// ---------- 浮层变体（绘图辅助浮层 330/310，由容器给宽） ----------
+.@{ai-prefix}-ai-assistant.@{ai-prefix}-ai-floating {
+  border: 1px solid var(--ai-line);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(31, 48, 78, .07);
+  background: var(--ai-bg);
+  .@{ai-prefix}-ai-message,
+  .@{ai-prefix}-ai-reply { font-size: 11px; }
+  .@{ai-prefix}-ai-planbody dl { font-size: 10px; }
+  .@{ai-prefix}-ai-planhead { font-size: 10px; }
+}
+
+// ---------- ContextPicker / ProviderSettings 浮层 ----------
+// UI-R2：独立表面自带 --ai-* token（原只在 .chiner-ai-assistant 定义，
+// 兄弟挂载时 var(--ai-bg/line/shadow) 无值 → 透明/原生外观）
+.@{ai-prefix}-ai-picker,
+.@{ai-prefix}-ai-provider {
+  .ai-surface-tokens();
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  left: 8px;
+  max-height: calc(100% - 24px);
+  display: flex;
+  flex-direction: column;
+  background: var(--ai-bg);
+  border: 1px solid var(--ai-line);
+  border-radius: 5px;
+  box-shadow: var(--ai-shadow);
+  z-index: 5;
+  outline: none;
+}
+.@{ai-prefix}-ai-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--ai-line);
+  font-size: 11px;
+  strong { font-size: 12px; }
+  .@{ai-prefix}-ai-icon { color: var(--ai-blue); }
+}
+.@{ai-prefix}-ai-picker-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+  h4 {
+    font-size: 10px;
+    color: var(--ai-muted);
+    font-weight: 600;
+    margin: 8px 0 6px;
+  }
+}
+.@{ai-prefix}-ai-picker-scope { display: flex; flex-wrap: wrap; gap: 5px; }
+.@{ai-prefix}-ai-picker-note,
+.@{ai-prefix}-ai-picker-empty {
+  font-size: 10px;
+  color: var(--ai-muted);
+  line-height: 1.7;
+  margin: 6px 0;
+}
+.@{ai-prefix}-ai-picker-group { margin-bottom: 8px; }
+.@{ai-prefix}-ai-picker-grouptitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ai-section-text);
+  background: var(--ai-section);
+  border-left: 2px solid var(--ai-blue);
+  padding: 4px 6px;
+  margin-bottom: 5px;
+}
+.@{ai-prefix}-ai-picker-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 6px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  cursor: pointer;
+  line-height: 1.5;
+  input { accent-color: var(--ai-blue); margin-top: 2px; }
+  &.is-selected { background: var(--ai-accent); color: var(--ai-blue); }
+  &.is-disabled { cursor: default; opacity: .55; }
+}
+.@{ai-prefix}-ai-picker-itemlabel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  small { color: var(--ai-muted); font-size: 10px; }
+}
+.@{ai-prefix}-ai-picker-reason { font-style: italic; }
+.@{ai-prefix}-ai-picker-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--ai-line);
+}
+
+.@{ai-prefix}-ai-fieldrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 11px;
+}
+.@{ai-prefix}-ai-fieldlabel { width: 64px; flex: none; color: var(--ai-muted); }
+.@{ai-prefix}-ai-fieldrow input,
+.@{ai-prefix}-ai-fieldrow select {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  border: 1px solid var(--ai-line);
+  border-radius: 3px;
+  padding: 0 7px;
+  font-size: 11px;
+  background: var(--ai-bg);
+  color: var(--ai-text);
+}
+.@{ai-prefix}-ai-fieldblock {
+  border: 1px solid var(--ai-line);
+  border-radius: 5px;
+  padding: 9px;
+  margin-bottom: 8px;
+  input[type="password"] {
+    width: 100%;
+    height: 26px;
+    border: 1px solid var(--ai-line);
+    border-radius: 3px;
+    padding: 0 7px;
+    font-size: 11px;
+    margin-top: 6px;
+  }
+  p { margin: 6px 0 0; }
+}
+.@{ai-prefix}-ai-fieldblockhead {
+  display: flex;
+  align-items: center;
+  .@{ai-prefix}-ai-fieldlabel { width: auto; margin-right: auto; }
+}
+.@{ai-prefix}-ai-fielderror { color: var(--ai-danger); font-size: 10px; margin: -4px 0 8px 72px; }
+.@{ai-prefix}-ai-stored-disabled { opacity: .6; text-decoration: line-through; }
+.@{ai-prefix}-ai-testresult {
+  font-size: 11px;
+  margin-top: 6px;
+  &.is-ok { color: #217656; }
+  &.is-fail { color: var(--ai-danger); }
+}
+.@{ai-prefix}-ai-caps { display: flex; flex-direction: column; gap: 3px; margin-top: 8px; }
+.@{ai-prefix}-ai-cap {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--ai-muted);
+  b { font-weight: 400; }
+  &.is-yes b { color: #217656; }
+  &.is-no b { color: var(--ai-danger); }
+  &.is-unknown b { color: var(--ai-muted); }
+}
+
+// ---------- 变更审阅弹窗（1120×690，视口-60/-70 上限；≤1350px 缩栏） ----------
+// UI-R2：审阅遮罩/弹窗通常渲染在 .chiner-ai-assistant 之外（SqlImportPanel/
+// ModelingAiPanel/DrawingAiPanel 的兄弟节点，position:fixed），必须自带 token，
+// 否则 --ai-overlay/--ai-bg/--ai-shadow 无值 → 背景透明、表头与下层内容交错
+.@{ai-prefix}-ai-review-overlay {
+  .ai-surface-tokens();
+  position: fixed;
+  inset: 0;
+  background: var(--ai-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.@{ai-prefix}-ai-review-dialog {
+  width: 1120px;
+  max-width: calc(100vw - 60px);
+  height: 690px;
+  max-height: calc(100vh - 70px);
+  background: var(--ai-bg);
+  border: 1px solid var(--ai-line);
+  box-shadow: var(--ai-shadow);
+  border-radius: 5px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  outline: none;
+  color: var(--ai-text);
+  font-size: 12px;
+}
+.@{ai-prefix}-ai-dialoghead {
+  height: 43px;
+  border-bottom: 1px solid var(--ai-line);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  flex: none;
+  strong { font-size: 13px; }
+  .@{ai-prefix}-ai-icon { color: var(--ai-blue); }
+}
+.@{ai-prefix}-ai-dialogmeta {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--ai-line);
+  font-size: 11px;
+  background: #fafbfd;
+  flex: none;
+}
+.@{ai-prefix}-ai-stalebanner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  font-size: 11px;
+  color: #8f692a;
+  background: #fffaf0;
+  border-bottom: 1px solid #ead7b6;
+  flex: none;
+}
+// UI-R2：阻断问题清单（真实 code/message/opId，随审阅弹窗展示）
+.@{ai-prefix}-ai-blockinglist {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 16px;
+  font-size: 11px;
+  color: var(--ai-danger, #b23b4c);
+  background: #fdf6f7;
+  border-bottom: 1px solid #f0d4d8;
+  flex: none;
+  .@{ai-prefix}-ai-icon { color: var(--ai-danger, #b23b4c); margin-top: 2px; }
+  b { display: block; margin-bottom: 2px; }
+  ul {
+    margin: 0;
+    padding-left: 16px;
+    li { line-height: 1.8; word-break: break-all; }
+  }
+  .@{ai-prefix}-ai-blockingat {
+    margin-left: 8px;
+    color: var(--ai-muted, #667080);
+    font-size: 10px;
+    white-space: nowrap;
+  }
+}
+.@{ai-prefix}-ai-reviewbody {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.@{ai-prefix}-ai-changelist {
+  width: 208px;
+  flex: none;
+  background: var(--ai-side);
+  border-right: 1px solid var(--ai-line);
+  padding: 13px 8px;
+  overflow: auto;
+  h3 {
+    font-size: 11px;
+    color: var(--ai-muted);
+    font-weight: 400;
+    margin: 0 0 9px;
+    padding: 0 8px;
+  }
+}
+.@{ai-prefix}-ai-changeitem {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 9px 8px;
+  border-radius: 3px;
+  margin-bottom: 3px;
+  line-height: 1.6;
+  font-size: 11px;
+  cursor: pointer;
+  input { accent-color: var(--ai-blue); width: 12px; height: 12px; margin: 3px 0; flex: none; }
+  small { display: block; font-size: 10px; color: var(--ai-muted); margin-top: 2px; }
+  .@{ai-prefix}-ai-tag { margin-left: auto; font-size: 9px; padding: 0 3px; }
+  &.is-active { background: var(--ai-accent); color: var(--ai-blue); }
+  &.has-warn .@{ai-prefix}-ai-tag { align-self: center; }
+}
+.@{ai-prefix}-ai-changeitem-text { min-width: 0; flex: 1; }
+.@{ai-prefix}-ai-explain {
+  font-size: 10px;
+  color: var(--ai-muted);
+  line-height: 1.8;
+  margin-top: 8px;
+}
+.@{ai-prefix}-ai-depnotice {
+  font-size: 10px;
+  color: #8f692a;
+  background: #fffaf0;
+  border: 1px solid #ead7b6;
+  border-radius: 3px;
+  padding: 7px 8px;
+  margin: 8px 8px 0;
+}
+.@{ai-prefix}-ai-diff {
+  flex: 1;
+  min-width: 0;
+  padding: 16px 18px;
+  overflow: auto;
+}
+.@{ai-prefix}-ai-difftitle {
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.@{ai-prefix}-ai-difftabs {
+  display: flex;
+  gap: 22px;
+  border-bottom: 1px solid var(--ai-line);
+  margin: 15px 0 12px;
+  span {
+    padding: 0 0 9px;
+    font-size: 11px;
+    color: var(--ai-muted);
+    cursor: pointer;
+    &.is-active {
+      color: var(--ai-blue);
+      border-bottom: 2px solid var(--ai-blue);
+    }
+  }
+}
+.@{ai-prefix}-ai-difftable {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 11px;
+  th {
+    text-align: left;
+    background: var(--ai-section);
+    font-weight: 600;
+    color: var(--ai-section-text);
+  }
+  th, td {
+    border: 1px solid var(--ai-line);
+    padding: 8px 9px;
+    height: 34px;
+  }
+}
+.@{ai-prefix}-ai-cell-new { background: #f0f5fe; color: var(--ai-blue); }
+.@{ai-prefix}-ai-cell-modified { background: #fafbfd; }
+.@{ai-prefix}-ai-cell-deleted { background: #fdf1f2; color: var(--ai-danger); text-decoration: line-through; }
+.@{ai-prefix}-ai-cell-warning { background: #fff8eb; color: var(--ai-warn); }
+.@{ai-prefix}-ai-kind-deleted { color: var(--ai-danger); border-color: #f0d4d8; }
+.@{ai-prefix}-ai-warning {
+  border: 1px solid #ead7b6;
+  border-left: 2px solid #bf934d;
+  padding: 9px 10px;
+  background: #fffaf0;
+  font-size: 11px;
+  line-height: 1.9;
+  color: #8f692a;
+  margin-top: 14px;
+  border-radius: 3px;
+}
+.@{ai-prefix}-ai-dependencies { font-size: 11px; margin-top: 17px; }
+.@{ai-prefix}-ai-depchips { display: flex; gap: 5px; margin-top: 9px; flex-wrap: wrap; }
+.@{ai-prefix}-ai-diffnotes { font-size: 11px; line-height: 1.9; white-space: pre-wrap; }
+.@{ai-prefix}-ai-reviewinfo {
+  width: 242px;
+  flex: none;
+  border-left: 1px solid var(--ai-line);
+  padding: 16px 14px;
+  background: #fcfdff;
+  font-size: 11px;
+  overflow: auto;
+  h3 {
+    font-size: 11px;
+    margin: 0 0 10px;
+    color: var(--ai-section-text);
+    background: var(--ai-section);
+    border-left: 2px solid var(--ai-blue);
+    padding: 6px;
+    font-weight: 600;
+  }
+}
+.@{ai-prefix}-ai-inforow {
+  padding: 8px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--ai-muted);
+  border-bottom: 1px solid #edf1f7;
+  b { color: var(--ai-text); font-weight: 400; text-align: right; }
+}
+.@{ai-prefix}-ai-infosection { margin-top: 20px; }
+.@{ai-prefix}-ai-mapping {
+  margin-bottom: 8px;
+  label { display: block; margin-bottom: 3px; }
+  select {
+    border: 1px solid #d3b984;
+    padding: 5px;
+    width: 100%;
+    background: var(--ai-bg);
+    border-radius: 3px;
+    font-size: 11px;
+    color: var(--ai-text);
+  }
+}
+.@{ai-prefix}-ai-reviewinfo p { font-size: 10px; line-height: 1.85; color: var(--ai-muted); margin: 8px 0; }
+.@{ai-prefix}-ai-dialogfoot {
+  height: 58px;
+  flex: none;
+  border-top: 1px solid var(--ai-line);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 8px;
+}
+.@{ai-prefix}-ai-savehint {
+  font-size: 10px;
+  color: var(--ai-muted);
+  strong { color: var(--ai-text); font-size: 11px; display: block; font-weight: 400; margin-bottom: 4px; }
+}
+
+// ---------- 候选预览 ----------
+.@{ai-prefix}-ai-candidate {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.@{ai-prefix}-ai-previewflag {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 7px;
+  background: var(--ai-bg, #fff);
+  border: 1px solid var(--ai-line, #dce4ef);
+  border-radius: 3px;
+  font-size: 10px;
+  color: var(--ai-blue, @ai-blue);
+  margin-bottom: 8px;
+  flex: none;
+}
+.@{ai-prefix}-ai-previewtag {
+  position: absolute;
+  right: 0;
+  top: 4px;
+  font-size: 10px;
+  padding: 2px 6px;
+  border: 1px dashed #98afd3;
+  background: #f7faff;
+  color: var(--ai-blue, @ai-blue);
+  border-radius: 3px;
+}
+.@{ai-prefix}-ai-previewgraph {
+  flex: 1;
+  min-height: 200px;
+  border: 1px solid var(--ai-line, #dce4ef);
+  background: #f8f9fb;
+  background-image: radial-gradient(#cdd8e7 .65px, transparent .65px);
+  background-size: 18px 18px;
+  overflow: auto;
+  position: relative;
+}
+.@{ai-prefix}-ai-norenderer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: var(--ai-muted, #667080);
+  font-size: 11px;
+}
+.@{ai-prefix}-ai-previewcounts {
+  display: flex;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--ai-muted, #667080);
+  margin-top: 8px;
+  flex: none;
+}
+.@{ai-prefix}-ai-candidatesep { color: var(--ai-muted, #667080); }
+.@{ai-prefix}-ai-summarystrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 10px;
+  padding-top: 8px;
+  color: var(--ai-muted, #667080);
+  span {
+    padding: 4px 7px;
+    border: 1px solid var(--ai-line, #dce4ef);
+    background: var(--ai-side, #f3f6fb);
+    border-radius: 3px;
+  }
+}
+.@{ai-prefix}-ai-graphnote {
+  font-size: 10px;
+  color: var(--ai-muted, #667080);
+  margin: 8px 0 0;
+}
+
+// 1280/窄窗口：审阅左右栏收窄（弹窗仍 1120×690，受 max-width/max-height 约束）
+@media (max-width: 1350px) {
+  .@{ai-prefix}-ai-changelist { width: 190px; }
+  .@{ai-prefix}-ai-reviewinfo { width: 222px; }
+}
+
+// ============================================================
+// INTEGRATION 集成面板（建模/SQL/质量/候选页/绘图浮层）
+// ============================================================
+
+// ---------- 建模面板（检查器 AI 页签） ----------
+.@{ai-prefix}-ai-modeling-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.@{ai-prefix}-ai-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--ai-line, #dce4ef);
+  background: var(--ai-side, #f3f6fb);
+  // 对话 / 从DDL导入 分段切换按钮（msg_cc08cbfb50cb）：对齐工作台 token、
+  // 字号与高度，替换浏览器原生灰按钮外观
+  > .@{ai-prefix}-ai-tabbtn {
+    appearance: none;
+    height: 22px;
+    min-height: 22px;
+    padding: 0 10px;
+    border: 1px solid var(--ai-line, #dce4ef);
+    border-radius: 5px;
+    background: var(--ai-bg, #fff);
+    color: var(--ai-muted, #667080);
+    font-size: 12px;
+    line-height: 20px;
+    cursor: pointer;
+    transition: background .12s ease, color .12s ease, border-color .12s ease;
+    &:hover:not(.active) {
+      color: var(--ai-text, #303746);
+      border-color: var(--ai-blue, #2f6fed);
+    }
+    &.active {
+      background: var(--ai-section, #eaf1fb);
+      border-color: var(--ai-blue, #2f6fed);
+      color: var(--ai-section-text, #365a89);
+      font-weight: 600;
+    }
+    &:focus-visible {
+      outline: 2px solid var(--ai-blue, #2f6fed);
+      outline-offset: 1px;
+    }
+  }
+}
+
+// ---------- 应用后状态条（建模/SQL/绘图共用） ----------
+.@{ai-prefix}-ai-appliedbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--ai-line, #dce4ef);
+  background: var(--ai-section, #eaf1fb);
+  color: var(--ai-section-text, #365a89);
+  > span:first-of-type {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+// ---------- SQL DDL 导入面板 ----------
+.@{ai-prefix}-ai-sql-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+}
+.@{ai-prefix}-ai-sql-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  > select {
+    padding: 2px 6px;
+    border: 1px solid var(--ai-line, #dce4ef);
+    border-radius: 3px;
+    background: var(--ai-bg, #fff);
+    color: var(--ai-text, #303746);
+  }
+}
+.@{ai-prefix}-ai-sql-input {
+  width: 100%;
+  min-height: 130px;
+  resize: vertical;
+  padding: 6px 8px;
+  font-family: Consolas, Menlo, monospace;
+  font-size: 12px;
+  border: 1px solid var(--ai-line, #dce4ef);
+  border-radius: 4px;
+  background: var(--ai-bg, #fff);
+  color: var(--ai-text, #303746);
+}
+.@{ai-prefix}-ai-sql-error {
+  margin: 0;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--ai-danger, #b23b4c);
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  background: var(--ai-bg, #fff);
+  word-break: break-all;
+}
+.@{ai-prefix}-ai-sql-blocked {
+  padding: 6px 8px;
+  border: 1px solid var(--ai-danger, #b23b4c);
+  border-radius: 4px;
+  background: var(--ai-side, #f3f6fb);
+  ul {
+    margin: 4px 0 6px;
+    padding-left: 18px;
+    font-size: 11px;
+    color: var(--ai-danger, #b23b4c);
+  }
+}
+.@{ai-prefix}-ai-sql-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--ai-line, #dce4ef);
+  border-radius: 4px;
+  background: var(--ai-side, #f3f6fb);
+}
+.@{ai-prefix}-ai-sql-warn {
+  margin: 0;
+  font-size: 11px;
+  color: var(--ai-warn, #976612);
+}
+.@{ai-prefix}-ai-sql-pending {
+  padding: 6px 8px;
+  border: 1px dashed var(--ai-line, #dce4ef);
+  border-radius: 4px;
+  ul {
+    margin: 4px 0 0;
+    padding-left: 16px;
+    font-size: 11px;
+    color: var(--ai-muted, #667080);
+  }
+}
+.@{ai-prefix}-ai-sql-note {
+  margin: 4px 0 0;
+  font-size: 10px;
+  color: var(--ai-muted, #667080);
+}
+.@{ai-prefix}-ai-blockbtn {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 4px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+// ---------- 质量面板薄挂载（本体样式随 AiModelQualityPanel 专属 less） ----------
+.@{ai-prefix}-ai-quality-mount {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  background: var(--ai-bg, #fff);
+}
+// UI-R2（msg_2e4d0e0c2eff）：关闭按钮独立顶栏（普通流）——absolute 顶栏会
+// 盖住面板头部右侧的“运行检查”按钮；本体不改，挂载层留出空间
+.@{ai-prefix}-ai-quality-mountbar {
+  flex: none;
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--ai-line, #dce4ef);
+}
+.@{ai-prefix}-ai-quality-mountbody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+// ---------- 候选临时页（ai-candidate tab） ----------
+.@{ai-prefix}-ai-candidate-tab {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+.@{ai-prefix}-ai-candidate-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--ai-line, #dce4ef);
+  background: var(--ai-side, #f3f6fb);
+  > span:nth-child(2) {
+    flex: 1;
+    min-width: 0;
+  }
+}
+.@{ai-prefix}-ai-candidate-badge {
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  background: var(--ai-accent, #e2ecfc);
+  color: var(--ai-section-text, #365a89);
+}
+.@{ai-prefix}-ai-candidate-hash {
+  font-family: Consolas, Menlo, monospace;
+  font-size: 10px;
+  color: var(--ai-muted, #667080);
+}
+.@{ai-prefix}-ai-candidate-tables {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.@{ai-prefix}-ai-candidate-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--ai-line, #dce4ef);
+  border-radius: 4px;
+}
+.@{ai-prefix}-ai-candidate-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.@{ai-prefix}-ai-candidate-fields {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  th, td {
+    padding: 3px 8px;
+    border: 1px solid var(--ai-line, #dce4ef);
+    text-align: left;
+  }
+  th {
+    background: var(--ai-side, #f3f6fb);
+    font-weight: 600;
+  }
+}
+.@{ai-prefix}-ai-candidate-line {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--ai-muted, #667080);
+}
+// UI-R2：候选页真实 ER 投影（离屏真实渲染 → data URI 图像）
+.@{ai-prefix}-ai-candidate-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.@{ai-prefix}-ai-candidate-er {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.@{ai-prefix}-ai-candidate-er-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--ai-line, #dce4ef);
+  border-radius: 4px;
+}
+.@{ai-prefix}-ai-candidate-er-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.@{ai-prefix}-ai-candidate-er-svg {
+  display: block;
+  max-width: 100%;
+  background: #fff;
+  border: 1px solid var(--ai-line, #dce4ef);
+  border-radius: 3px;
+}
+.@{ai-prefix}-ai-candidate-er-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  color: var(--ai-muted, #667080);
+}
+.@{ai-prefix}-ai-candidate-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  color: var(--ai-muted, #667080);
+}
+
+// ---------- 绘图浮层（陈氏 AI 面板） ----------
+.@{ai-prefix}-ai-drawing-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.@{ai-prefix}-ai-drawing-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--ai-line, #dce4ef);
+  border-radius: 4px;
+  background: var(--ai-side, #f3f6fb);
+}

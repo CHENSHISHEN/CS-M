@@ -585,7 +585,7 @@ const generateIncreaseSql = (dataSource, group, dataTable, code, templateShow) =
   }
   return getTemplateString(template, templateData);
 };
-// 审阅8：可抛错的建表 DDL 渲染——同一 generateIncreaseSql 成功路径，
+// S2 审阅8：可抛错的建表 DDL 渲染——同一 generateIncreaseSql 成功路径，
 // 不吞模板异常、不弹全局 Message；仅供前向工程预览/提交前逐产物校验使用，
 // 既有 getCodeByDataTable 包装语义保持不变
 export const renderCreateTableDDLStrict = (dataSource, group, dataTable, code) => {

@@ -8,7 +8,7 @@
 .@{prefix}-home.@{prefix}-home-wb {
   .workbench-light-tokens();
   display: grid;
-  // 资源树列宽由 --wb-sidebar-w 变量驱动（根元素内联设置，含窗口钳制），
+  // WB-003①：资源树列宽由 --wb-sidebar-w 变量驱动（根元素内联设置，含窗口钳制），
   // 默认 240px；拖动分隔条只改该变量，不再使用互相冲突的固定 !important
   grid-template-columns: 64px var(--wb-sidebar-w, 240px) minmax(0, 1fr) var(--wb-inspector-w, 320px);
   grid-template-rows: 58px minmax(0, 1fr) 26px;
@@ -38,8 +38,26 @@
     grid-column: 4;
     grid-row: 2;
   }
+  > .@{prefix}-home-drawing-area,
+  > .@{prefix}-home-business-area {
+    grid-column: ~"2 / -1";
+    grid-row: 2;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+  // M2：指标平台整页。仅 menuType 11 可见（hidden 属性切换，首访后保活不卸载）；
+  // 固定落第 2 列（no-sidebar 网格下为弹性主区；AI 强制打开属性面板时为 3 列中
+  // 的中间列，不与右侧面板重叠）
+  > .@{prefix}-home-metrics-area {
+    grid-column: 2;
+    grid-row: 2;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
   > .@{prefix}-wb-statusbar {
-    // Less 会把裸 1 / -1 当除法求值成 -1，必须转义保留 CSS 字面跨列值
+    // 同上：转义避免 Less 数学求值，保持跨全部四列
     grid-column: ~"1 / -1";
     grid-row: 3;
   }
@@ -49,6 +67,31 @@
   grid-template-columns: 64px var(--wb-sidebar-w, 240px) minmax(0, 1fr);
   > .@{prefix}-wb-inspector {
     display: none;
+  }
+}
+
+// S3整改：资源总览（menuType 10）收起模型资源栏——该栏在总览只有标题无资源内容。
+// 网格收为 64px 左轨 + 弹性主区，资源树容器（含拖宽器）整体隐藏，总览利用释放的
+// 宽度（1440 下五张指标卡同行，1280 不横向溢出）。--wb-sidebar-w 与本机偏好不动，
+// 返回模型域自动按原宽度恢复；本块在 no-inspector 之后声明，两者叠加时以本块为准。
+.@{prefix}-home.@{prefix}-home-wb.@{prefix}-home-wb-no-sidebar {
+  grid-template-columns: 64px minmax(0, 1fr);
+  > .@{prefix}-home-resize-container {
+    display: none;
+  }
+  > .@{prefix}-home-resize-other {
+    grid-column: 2;
+  }
+}
+// 更多→AI 强制打开（INTEGRATION-R1）：资源总览收起资源栏但 AI 面板强制可见时，
+// 网格收为三列（64px 左轨 + 弹性主区 + 属性/AI 面板列），面板实际可见可交互。
+.@{prefix}-home.@{prefix}-home-wb.@{prefix}-home-wb-no-sidebar:not(.@{prefix}-home-wb-no-inspector) {
+  grid-template-columns: 64px minmax(0, 1fr) var(--wb-inspector-w, 320px);
+  > .@{prefix}-home-resize-other {
+    grid-column: 2;
+  }
+  > .@{prefix}-wb-inspector {
+    grid-column: 3;
   }
 }
 
@@ -110,7 +153,7 @@
   }
 }
 
-// 仅新工作台作用域内，实体工具栏（列设置/推荐/Excel 等）在编辑区较窄时
+// WB-003②返工：仅新工作台作用域内，实体工具栏（列设置/推荐/Excel 等）在编辑区较窄时
 // 受控换行，避免推荐入口被单行横向滚动裁剪出视口。
 .@{prefix}-home.@{prefix}-home-wb .@{prefix}-table-opt-container {
   flex-wrap: wrap;
@@ -320,7 +363,7 @@
     gap: 8px;
   }
 }
-// 顶栏命令组按钮：与 .chiner-wb-btn 同基线，附下拉箭头
+// 顶栏命令组按钮（WB-004C）：与 .chiner-wb-btn 同基线，附下拉箭头
 .@{prefix}-wb-menubtn {
   height: 28px;
   display: inline-flex;
@@ -348,7 +391,7 @@
     cursor: not-allowed;
   }
 }
-// 工作台局部下拉菜单（锚定触发器 + 视口钳制 + 键盘导航）。
+// WB-004 返工：工作台局部下拉菜单（锚定触发器 + 视口钳制 + 键盘导航）。
 // 项不换行保证菜单宽度足够；超高内部滚动；激活项键盘高亮
 .@{prefix}-wb-menu {
   position: absolute;
@@ -632,7 +675,7 @@
   }
 }
 
-// ---------- 资源树拖宽分隔条（视觉1px / 命中约7px / col-resize） ----------
+// ---------- WB-003①：资源树拖宽分隔条（视觉1px / 命中约7px / col-resize） ----------
 // 命中区必须完全位于 overflow:hidden 的资源容器内侧：越界部分会被裁剪而不响应命中
 .@{prefix}-home.@{prefix}-home-wb > .@{prefix}-home-resize-container > .@{prefix}-wb-sidebar-resizer {
   position: absolute;
@@ -675,7 +718,7 @@
     height: 30px;
     font-size: 12px;
   }
-  // 树叶子恢复经典 12px/400；主题域/分类 12px/500（层级用字重与颜色表达），
+  // WB-004A：树叶子恢复经典 12px/400；主题域/分类 12px/500（层级用字重与颜色表达），
   // 行高保持 30px 与虚拟滚动一致；辅助计数 11px/400（Menu 计数 span，见 menu/index.js）
   .@{prefix}-menu-container-fold-item-name-parent {
     font-size: 12px;
@@ -876,7 +919,7 @@
   background: var(--wb-line);
   margin: 0 6px;
 }
-// 图上下文工具按钮（拖入新表/逻辑实体/分组/思维导图/形状/对齐/缩放）
+// 图上下文工具按钮（WB-004C：拖入新表/逻辑实体/分组/思维导图/形状/对齐/缩放）
 .@{prefix}-wb-toolbtn {
   width: 28px;
   height: 28px;
@@ -969,7 +1012,8 @@
     overflow-y: auto;
     padding: 20px 18px;
   }
-  // 非激活 pane 只隐藏不卸载，面板状态跨页签切换保留
+  // 保活双 pane（INTEGRATION-R1）：非激活 pane 只隐藏不卸载，
+  // AI 面板/属性面板状态跨页签切换保留
   &-pane {
     &[hidden] {
       display: none !important;
@@ -1110,7 +1154,7 @@
   line-height: 1.8;
   margin: 8px 0;
 }
-// ---------- 模型关联分区（基本信息之后、关系图引用之前） ----------
+// ---------- WB-004B：模型关联分区（基本信息之后、关系图引用之前） ----------
 .@{prefix}-wb-assoc-row {
   padding: 8px 0;
   border-bottom: 1px dashed var(--wb-line);
@@ -1294,7 +1338,7 @@
 }
 
 // ---------- 表编辑/表单接缝（新工作台作用域：轻输入框 + 紧凑表格） ----------
-// 字体沿用全局字体栈（src/style/detault.less 的 * 规则）；
+// WB-004A：字体沿用全局字体栈（src/style/detault.less 的 * 规则）；
 // 正文/字段正文/标签 12px/400，分区标题与字段表头 12px/500。
 // 不覆盖图标字体与代码编辑器等宽字体（ace_editor 全局规则仍在）。
 .@{prefix}-home.@{prefix}-home-wb {
@@ -1383,7 +1427,7 @@
     background: var(--wb-bg);
     border-radius: 5px;
   }
-  // 表单正文（输入/下拉/文本域，含自定义属性表与字段表单元格）12px/400
+  // WB-004A：表单正文（输入/下拉/文本域，含自定义属性表与字段表单元格）12px/400
   .@{prefix}-entity-base input,
   .@{prefix}-entity-base textarea,
   .@{prefix}-entity-base select,
@@ -1462,6 +1506,15 @@ body[theme=themeNigh] .@{prefix}-home.@{prefix}-home-wb {
   .@{prefix}-home.@{prefix}-home-wb.@{prefix}-home-wb-no-inspector {
     grid-template-columns: 64px var(--wb-sidebar-w, 240px) minmax(0, 1fr);
   }
+  // S3整改：≤1280 时总览收起资源栏的两列网格不被上方 no-inspector 规则复活
+  // （1280 下总览不横向溢出），源顺序在其后生效
+  .@{prefix}-home.@{prefix}-home-wb.@{prefix}-home-wb-no-sidebar {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+  // AI 强制打开（INTEGRATION-R1）：≤1280 总览同样保留面板列
+  .@{prefix}-home.@{prefix}-home-wb.@{prefix}-home-wb-no-sidebar:not(.@{prefix}-home-wb-no-inspector) {
+    grid-template-columns: 64px minmax(0, 1fr) var(--wb-inspector-w, 320px);
+  }
   .@{prefix}-wb-topbar {
     gap: 8px;
     &-namegroup {
@@ -1493,26 +1546,7 @@ body[theme=themeNigh] .@{prefix}-home.@{prefix}-home-wb {
   }
 }
 
-.chiner-db-workspace { height: 100%; overflow-y: auto; padding: 22px 26px; background: var(--wb-canvas); color: var(--wb-text); font-size: 12px; box-sizing: border-box; }
-.chiner-dbw-header { margin-bottom: 16px;
-  h2 { display: flex; gap: 8px; align-items: center; margin: 0 0 6px; font-size: 16px; }
-  p { margin: 0 0 12px; color: var(--wb-muted); max-width: 720px; line-height: 1.6; } }
-.chiner-dbw-entries { display: flex; gap: 8px; flex-wrap: wrap;
-  button { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--wb-line); border-radius: 4px; background: var(--wb-side); color: inherit; font: inherit; padding: 6px 12px; cursor: pointer;
-    &:hover { color: var(--wb-blue); border-color: var(--wb-blue); } } }
-.chiner-dbw-body { border: 1px solid var(--wb-line); border-radius: 6px; background: var(--wb-side); overflow: hidden; }
-// 连接配置草稿操作行（本地草稿 + 明确保存/取消）
-.chiner-dbw-draftbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; border: 1px solid var(--wb-line); border-radius: 6px; background: var(--wb-side); padding: 8px 12px; margin-bottom: 12px; }
-.chiner-dbw-draft-state { color: var(--wb-muted);
-  &.dirty { color: var(--wb-blue); } }
-.chiner-dbw-draft-actions { display: flex; gap: 8px; }
-
-body[data-ui="workbench"] {
-  .workbench-light-tokens();
-  color: var(--wb-text); background: var(--wb-bg); font-size: 12px;
-}
-body[data-ui="workbench"][theme="themeNigh"] { .workbench-dark-tokens(); }
-
+// WB-006：数仓目录与三层模型，固定30px行与正文12px。
 .chiner-model-catalog { height: 100%; overflow-y: auto; overflow-x: hidden; outline: none; color: var(--wb-text); font-size: 12px; }
 .chiner-catalog-row { display: flex; align-items: center; height: 30px; padding-right: 5px;
   width: 100%; box-sizing: border-box;
@@ -1548,6 +1582,7 @@ body[data-ui="workbench"][theme="themeNigh"] { .workbench-dark-tokens(); }
     }
   }
 }
+// DATA-WB-FEAT-001：企业首页行 = 组件面板开关（S3：四种基础组件，点击/拖拽添加）+ 文字按钮（打开首页文档）
 .chiner-catalog-home { display: flex; align-items: stretch; width: 100%; height: 34px; border-bottom: 1px solid var(--wb-line); background: var(--wb-side); color: var(--wb-text); font: inherit; }
 .chiner-catalog-home-toggle { flex: 0 0 24px; border: 0; background: transparent; color: var(--wb-muted); cursor: pointer;
   .chiner-catalog-chevron.open { color: var(--wb-blue); }
@@ -1555,6 +1590,18 @@ body[data-ui="workbench"][theme="themeNigh"] { .workbench-dark-tokens(); }
 .chiner-catalog-home-open { display: flex; flex: 1; gap: 8px; align-items: center; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; padding-right: 12px; cursor: pointer;
   &:hover, &:focus-visible { color: var(--wb-blue); }
   &:focus-visible { outline: 2px solid var(--wb-blue); outline-offset: -2px; } }
+// S3 企业首页组件面板：点击经 onHomeAdd 请求添加；拖拽携带公共合同 MIME
+.chiner-catalog-home-palette { border-bottom: 1px solid var(--wb-line); background: var(--wb-side); padding: 8px 10px 10px; }
+.chiner-catalog-home-palette-hint { margin: 0 0 6px; font-size: 11px; color: var(--wb-muted); }
+.chiner-catalog-home-palette-items { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.chiner-catalog-home-palette-item { display: flex; gap: 6px; align-items: center; border: 1px solid var(--wb-line); border-radius: 6px; background: transparent; color: var(--wb-text); font: inherit; font-size: 12px; padding: 7px 8px; cursor: grab; text-align: left;
+  i { color: var(--wb-blue); }
+  &:hover, &:focus-visible { border-color: var(--wb-blue); color: var(--wb-blue); }
+  &:focus-visible { outline: none; }
+  &:active { cursor: grabbing; } }
+// S3 删除确认中的概念/逻辑关联影响提示
+.chiner-catalog-impact { margin-top: 8px; padding: 6px 8px; border-left: 3px solid var(--wb-warn, #d8951d); background: #f5f7fa; font-size: 12px; text-align: left; }
+// 数据库类型节点行内图标与"未指定/未知"弱化
 .chiner-home-wb .chiner-catalog-row[data-catalog-kind='dbType'] {
   .chiner-catalog-name { color: var(--wb-text); }
   > button:first-child > i { color: var(--wb-model-color, var(--wb-blue)); }
@@ -1574,5 +1621,127 @@ body[data-ui="workbench"][theme="themeNigh"] { .workbench-dark-tokens(); }
   label { max-width: 800px; }
   textarea { min-height: 160px; resize: vertical; }
 }
+
+// DATA-WB-FEAT-001 阶段A：企业级首页（home 文档）。真实计数与概览图卡片网格；
+// 窄屏卡片自动换列（auto-fill + minmax），无固定三栏假布局。
+.chiner-enterprise-home { height: 100%; overflow-y: auto; padding: 26px 30px; background: var(--wb-canvas); color: var(--wb-text); font-size: 12px; box-sizing: border-box; }
+.chiner-eh-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.chiner-eh-header-main { display: flex; flex-direction: column; gap: 6px; min-width: 0;
+  h1 { margin: 0; font-size: 20px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60vw; }
+  p { margin: 0; color: var(--wb-muted); max-width: 640px; line-height: 1.6; } }
+.chiner-eh-edit { display: inline-flex; gap: 6px; align-items: center; width: fit-content; border: 1px solid var(--wb-line); border-radius: 4px; background: transparent; color: inherit; font: inherit; padding: 4px 10px; cursor: pointer;
+  &:hover { color: var(--wb-blue); border-color: var(--wb-blue); } }
+.chiner-eh-cover { display: inline-flex; gap: 6px; align-items: center; border: 0; border-radius: 4px; background: var(--wb-side); color: inherit; font: inherit; padding: 6px 12px; cursor: pointer;
+  &:hover { color: var(--wb-blue); } }
+.chiner-eh-stats { display: flex; gap: 12px; flex-wrap: wrap; margin: 22px 0; }
+.chiner-eh-stat { flex: 1 1 150px; min-width: 150px; max-width: 260px; border: 1px solid var(--wb-line); border-radius: 6px; background: var(--wb-side); padding: 14px 16px; display: flex; flex-direction: column; gap: 4px;
+  strong { font-size: 20px; } span { color: var(--wb-muted); } }
+.chiner-eh-section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0 12px; font-weight: 600; }
+.chiner-eh-section-actions { display: flex; gap: 8px; font-weight: 400;
+  button { display: inline-flex; gap: 5px; align-items: center; border: 1px solid var(--wb-line); border-radius: 4px; background: transparent; color: inherit; font: inherit; padding: 4px 10px; cursor: pointer;
+    &:hover { color: var(--wb-blue); border-color: var(--wb-blue); } } }
+.chiner-eh-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.chiner-eh-card { display: flex; flex-direction: column; border: 1px solid var(--wb-line); border-radius: 6px; background: var(--wb-side); overflow: hidden; cursor: pointer; position: relative;
+  &:hover, &:focus-visible { border-color: var(--wb-blue); outline: none; } }
+.chiner-eh-card-add { align-items: center; justify-content: center; gap: 8px; min-height: 160px; color: var(--wb-muted); border-style: dashed; background: transparent; font: inherit; cursor: pointer;
+  &:hover { color: var(--wb-blue); } }
+.chiner-eh-thumb { height: 96px; padding: 6px; background: var(--wb-canvas); border-bottom: 1px solid var(--wb-line);
+  svg { width: 100%; height: 100%; display: block; } }
+.chiner-eh-thumb-node { fill: var(--wb-side); stroke: var(--wb-blue); stroke-width: 1; }
+.chiner-eh-thumb-line { stroke: var(--wb-muted); stroke-width: 1; }
+.chiner-eh-thumb-empty { height: 100%; display: flex; flex-direction: column; gap: 6px; align-items: center; justify-content: center; color: var(--wb-muted); }
+.chiner-eh-card-info { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px 2px; }
+.chiner-eh-card-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chiner-eh-card-level { flex: none; font-size: 10px; color: var(--wb-muted); border: 1px solid var(--wb-line); border-radius: 3px; padding: 0 4px; }
+.chiner-eh-card-actions { display: flex; gap: 4px; justify-content: flex-end; padding: 4px 8px 8px;
+  button { display: inline-flex; border: 0; background: transparent; color: var(--wb-muted); cursor: pointer; padding: 3px;
+    &:hover { color: var(--wb-blue); } } }
+.chiner-eh-empty { color: var(--wb-muted); }
+.chiner-eh-form { color: @font-color;
+  label { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; font-size: 12px; }
+  em { color: @danger-color; font-style: normal; }
+  input, select, textarea { border: 1px solid @primary-border-color; border-radius: 4px; padding: 7px 8px; width: 100%; box-sizing: border-box; font: inherit; color: @font-color; background: @background-color; }
+  textarea { min-height: 90px; resize: vertical; }
+  input:focus, textarea:focus, select:focus { outline: 1px solid @primary-color; } }
+
+// DATA-WB-FEAT-001 阶段A：数据库管理工作区（menuType 9 编辑区）
+.chiner-db-workspace { height: 100%; overflow-y: auto; padding: 22px 26px; background: var(--wb-canvas); color: var(--wb-text); font-size: 12px; box-sizing: border-box; }
+.chiner-dbw-header { margin-bottom: 16px;
+  h2 { display: flex; gap: 8px; align-items: center; margin: 0 0 6px; font-size: 16px; }
+  p { margin: 0 0 12px; color: var(--wb-muted); max-width: 720px; line-height: 1.6; } }
+.chiner-dbw-entries { display: flex; gap: 8px; flex-wrap: wrap;
+  button { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--wb-line); border-radius: 4px; background: var(--wb-side); color: inherit; font: inherit; padding: 6px 12px; cursor: pointer;
+    &:hover { color: var(--wb-blue); border-color: var(--wb-blue); } } }
+.chiner-dbw-body { border: 1px solid var(--wb-line); border-radius: 6px; background: var(--wb-side); overflow: hidden; }
+// 整改 F1：连接配置草稿操作行（本地草稿 + 明确保存/取消）
+.chiner-dbw-draftbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; border: 1px solid var(--wb-line); border-radius: 6px; background: var(--wb-side); padding: 8px 12px; margin-bottom: 12px; }
+.chiner-dbw-draft-state { color: var(--wb-muted);
+  &.dirty { color: var(--wb-blue); } }
+.chiner-dbw-draft-actions { display: flex; gap: 8px; }
+
+// S2：逻辑 → 物理正向生成向导（全屏模态内，浅色卡片 + 蓝色步骤条）
+.chiner-forward { display: flex; flex-direction: column; height: 100%; overflow: hidden; color: var(--wb-text); font-size: 12px;
+  .is-error, .is-error-text { color: var(--wb-danger, #d43030); } }
+.chiner-forward-steps { display: flex; gap: 24px; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--wb-line); }
+.chiner-forward-step { display: inline-flex; gap: 8px; align-items: center; color: var(--wb-muted);
+  em { display: inline-flex; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--wb-line); align-items: center; justify-content: center; font-style: normal; font-size: 11px; }
+  &.is-current { color: var(--wb-blue);
+    em { background: var(--wb-blue); border-color: var(--wb-blue); color: #fff; } } }
+.chiner-forward-body { flex: 1; overflow: auto; padding: 16px 20px; }
+// 整改F5：原 .chiner-forward-card { grid-column: 1 / -1 } 的裸斜杠会被 Less 当
+// 算术算出 -1，卡片落到隐式第三列（第二步主区被挤 ~164px、第三步竖排）。
+// 现改为：基础 grid 只定骨架，每步挂 step class 定列模板；布局位仅以单值（无斜杠）
+// 声明在直接子元素上，side 有明确布局位，杜绝隐式第三列
+.chiner-forward-grid { display: grid; gap: 12px; align-items: start; min-width: 0; }
+.chiner-forward-grid-step2 { grid-template-columns: minmax(0, 1fr) 300px;
+  > .chiner-forward-card { grid-column: 1; }
+  > .chiner-forward-side { grid-column: 2; grid-row: 1; } }
+.chiner-forward-grid-step3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  > .chiner-forward-card:nth-child(1) { grid-column: 1; }
+  > .chiner-forward-card:nth-child(2) { grid-column: 2; } }
+.chiner-forward-side { min-width: 0; }
+.chiner-forward-card { border: 1px solid var(--wb-line); border-radius: 6px; background: var(--wb-side); padding: 12px 14px; margin-bottom: 12px; min-width: 0; }
+.chiner-forward-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  > span:first-child { font-weight: 600; }
+  small { color: var(--wb-muted); } }
+.chiner-forward-list { max-height: 300px; overflow: auto; }
+.chiner-forward-source-row { display: flex; align-items: center; gap: 8px; padding: 5px 4px; }
+.chiner-forward-source-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px; }
+.chiner-forward-empty { padding: 18px; color: var(--wb-muted);
+  &.is-error { color: var(--wb-danger, #d43030); } }
+.chiner-forward-badge { display: inline-block; border: 1px solid var(--wb-line); border-radius: 3px; padding: 0 5px; color: var(--wb-blue); background: rgba(78, 117, 253, 0.06);
+  &.is-error { color: var(--wb-danger, #d43030); border-color: var(--wb-danger, #d43030); background: transparent; } }
+.chiner-forward-table { display: flex; flex-direction: column; border: 1px solid var(--wb-line); border-radius: 4px; overflow-x: auto; overflow-y: hidden; }
+.chiner-forward-tr { display: grid; gap: 8px; padding: 6px 10px; align-items: center; border-bottom: 1px solid var(--wb-line);
+  &:last-child { border-bottom: none; }
+  > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  &.is-active { background: rgba(78, 117, 253, 0.08); } }
+.chiner-forward-th { background: var(--wb-bg); color: var(--wb-muted); font-weight: 600; }
+.chiner-forward-entity-table .chiner-forward-tr { grid-template-columns: minmax(140px, 1.4fr) 50px 130px minmax(120px, 1fr); }
+.chiner-forward-field-table .chiner-forward-tr { grid-template-columns: minmax(120px, 1.2fr) minmax(90px, 1fr) minmax(100px, 1fr) 80px 70px minmax(110px, 1fr); }
+// 整改F5：第三步产物列表四列明确定义（目标表 / 字段数 / 关联数 / 源逻辑）
+.chiner-forward-preview-table .chiner-forward-tr { grid-template-columns: minmax(140px, 1.4fr) 56px 70px minmax(110px, 1fr); }
+.chiner-forward-override input { width: 100%; }
+.chiner-forward-mapbar { display: flex; gap: 4px; align-items: center; padding: 8px 2px 0; color: var(--wb-muted);
+  &::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--wb-blue); } }
+.chiner-forward-form-item { display: flex; flex-direction: column; gap: 5px; margin: 10px 0; font-size: 12px; }
+.chiner-forward-form-static { display: flex; justify-content: space-between; gap: 8px; margin: 10px 0; color: var(--wb-muted);
+  > span:last-child { color: var(--wb-text);
+    &.is-error { color: var(--wb-danger, #d43030); } } }
+.chiner-forward-note { border: 1px solid var(--wb-line); border-radius: 4px; background: var(--wb-bg); color: var(--wb-muted); padding: 8px 10px; margin: 10px 0; line-height: 1.6; }
+.chiner-forward-summary { margin-top: 8px; color: var(--wb-blue); }
+.chiner-forward-error-item { display: flex; justify-content: space-between; gap: 8px; padding: 4px 2px; color: var(--wb-danger, #d43030); }
+.chiner-forward-ddl { display: flex; flex-direction: column; min-height: 200px;
+  .chiner-forward-card-head { flex: 0 0 auto; } }
+.chiner-forward-footer { display: flex; gap: 8px; align-items: center; justify-content: flex-end; padding: 10px 20px; border-top: 1px solid var(--wb-line); flex: 0 0 auto; }
+.chiner-forward-block-hint { margin-right: auto; color: var(--wb-muted); }
+.chiner-forward-err-item { display: flex; justify-content: space-between; gap: 8px; }
+
+// 工作台页及body portal共用同一主题令牌。
+body[data-ui="workbench"] {
+  .workbench-light-tokens();
+  color: var(--wb-text); background: var(--wb-bg); font-size: 12px;
+}
+body[data-ui="workbench"][theme="themeNigh"] { .workbench-dark-tokens(); }
 
 @import "./shared-ui";

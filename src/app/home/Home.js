@@ -85,6 +85,20 @@ const ModuleIllustrations = {
       <line x1='142' y1='17' x2='154' y2='17' stroke='#faad14' strokeWidth='1' strokeLinecap='round' />
     </svg>
   ),
+  // M2 指标平台：与数据建模共享同一项目（坐标轴 + 三类指标趋势）
+  [MODULE_IDS.METRICS]: () => (
+    <svg width='180' height='70' viewBox='0 0 180 70' fill='none' xmlns='http://www.w3.org/2000/svg'>
+      <line x1='18' y1='12' x2='18' y2='56' stroke='#4e6fb2' strokeWidth='1.5' strokeLinecap='round' />
+      <line x1='18' y1='56' x2='166' y2='56' stroke='#4e6fb2' strokeWidth='1.5' strokeLinecap='round' />
+      <rect x='34' y='40' width='10' height='16' rx='2' fill='#4e6fb2' />
+      <rect x='52' y='30' width='10' height='26' rx='2' fill='#7f9bd0' />
+      <rect x='70' y='36' width='10' height='20' rx='2' fill='#4e6fb2' />
+      <rect x='88' y='22' width='10' height='34' rx='2' fill='#7f9bd0' />
+      <rect x='106' y='28' width='10' height='28' rx='2' fill='#4e6fb2' />
+      <path d='M126 44 L140 34 L154 40' stroke='#7950a5' strokeWidth='1.6' strokeLinecap='round' strokeLinejoin='round' />
+      <circle cx='140' cy='34' r='2.2' fill='#7950a5' />
+    </svg>
+  ),
 };
 
 export default React.memo(({
@@ -95,6 +109,7 @@ export default React.memo(({
   renameProject,
   updateHistory,
   deleteProject,
+  openMetricsProject,
   lang,
   config,
 }) => {
@@ -204,6 +219,20 @@ export default React.memo(({
   };
 
   const handleModuleAction = (mod) => {
+    // M5B 指标平台真实入口：与数据建模共享同一项目（module 保持 data，不创建
+    // 第二份指标文件）。从最近数据项目或系统文件选择进入同一数据项目，打开成功
+    // 后由 Main 消费一次性意图直达指标工作台；取消不跳任何模块。
+    if (mod.sharedProject) {
+      if (!openMetricsProject) {
+        Modal.info({
+          title: FormatMessage.string({ id: mod.nameKey }),
+          message: FormatMessage.string({ id: 'home.metricPlatformEntry' }),
+        });
+        return;
+      }
+      openMetricsPicker();
+      return;
+    }
     if (mod.isReady) {
       openCreateModal(mod.id);
     } else {
@@ -212,6 +241,70 @@ export default React.memo(({
         message: `${FormatMessage.string({ id: mod.nameKey })}: ${FormatMessage.string({ id: 'home.underDevTip' })}`,
       });
     }
+  };
+
+  // 指标平台项目选择：最近数据项目（module=data 或旧项目无 module）+ 系统文件选择；
+  // 业务/画图项目不出现在候选中（入口只共享数据项目），误选由 Main 明确提示
+  const openMetricsPicker = () => {
+    let modal = null;
+    const dataProjects = (config?.data[0]?.projectHistories || [])
+      .filter(p => (p.module || 'data') === 'data');
+    const pick = (project) => {
+      modal && modal.close();
+      openMetricsProject(project ? project.path : undefined);
+    };
+    modal = openModal(
+      <div className='chiner-home-metrics-picker' data-testid='home-metrics-picker'>
+        <p className='chiner-home-metrics-picker-desc'>
+          <FormatMessage id='home.metricPickerDesc'/>
+        </p>
+        {dataProjects.length === 0 ? <p className='chiner-home-metrics-picker-empty'>
+          <FormatMessage id='home.metricPickerEmpty'/>
+        </p> : <ul className='chiner-home-metrics-picker-list'
+          data-testid='home-metrics-picker-list'>
+          {dataProjects.slice(0, 8).map(p => <li key={p.path}>
+            <button
+              type='button'
+              className='chiner-home-metrics-picker-item'
+              data-testid='home-metrics-picker-item'
+              title={p.path}
+              onClick={() => pick(p)}
+            >
+              <span className='chiner-home-metrics-picker-name'>{p.name}</span>
+              <span className='chiner-home-metrics-picker-path'>{p.path}</span>
+            </button>
+          </li>)}
+        </ul>}
+        {/*
+          M5B-R1：picker 浏览/取消改本地原生 button（通用 Button 实际渲染 span，
+          不透传 data-testid/aria，键盘与 DOM 契约不成立）；蓝白样式/焦点态见
+          home/style/index.less，全局 Button 组件不动
+        */}
+        <button
+          type='button'
+          className='chiner-home-metrics-picker-browse'
+          data-testid='home-metrics-picker-browse'
+          onClick={() => pick(null)}
+        >
+          <Icon type='fa-folder-open' />
+          <FormatMessage id='home.metricPickerBrowse'/>
+        </button>
+      </div>,
+      {
+        title: FormatMessage.string({id: 'home.metricPickerTitle'}),
+        buttons: [
+          <button
+            type='button'
+            key='cancel'
+            className='chiner-home-metrics-picker-cancel'
+            data-testid='home-metrics-picker-cancel'
+            onClick={() => modal && modal.close()}
+          >
+            <FormatMessage id='button.cancel'/>
+          </button>,
+        ],
+      }
+    );
   };
 
   const handleTemplateFeatureClick = (type) => {
@@ -326,9 +419,9 @@ export default React.memo(({
       {/* 1. 顶部 Header (高 56px) */}
       <div className={`${currentPrefix}-project-center-header`}>
         <div className={`${currentPrefix}-project-center-brand`}>
-          <div className='brand-icon'>P</div>
+          <div className='brand-icon'>C</div>
           <div className='brand-title'>
-            <span className='brand-name'>PDManer</span>
+            <span className='brand-name'>CS-M</span>
             <span className='brand-sub'>
               <FormatMessage id='home.projectCenter' />
             </span>
@@ -402,7 +495,7 @@ export default React.memo(({
             <Tooltip placement='right' title={<CodeImg currentPrefix={currentPrefix} />} force>
               <div
                 className={`sidebar-footer-item ${currentPrefix}-home-container-body-right-nav-type-unselected`}
-                onClick={() => openUrl('https://www.yuque.com/pdmaner/docs')}
+                onClick={() => openUrl('https://github.com/CHENSHISHEN/CS-M#readme')}
                 title={FormatMessage.string({ id: 'home.jumpOptBook' })}
               >
                 <Icon type='fa-book' />
@@ -413,7 +506,7 @@ export default React.memo(({
             </Tooltip>
             <div
               className={`sidebar-footer-item ${currentPrefix}-home-container-body-right-nav-type-unselected`}
-              onClick={() => openUrl('http://pdmaas.pdmaner.com/')}
+              onClick={() => openUrl('https://github.com/CHENSHISHEN/CS-M')}
               title={FormatMessage.string({ id: 'home.page' })}
             >
               <Icon type='fa-globe' />

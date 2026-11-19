@@ -36,6 +36,12 @@ if (platform === 'json') {
     from: path.resolve(__dirname, '../src/main.js'),
     to: path.resolve(__dirname, '../app/build')
   });
+  // AI Host（主进程 CommonJS，不打包进 renderer）：src/host/ai -> build/host/ai，
+  // 与 src/main.js 的 require('./host/ai') 在开发/成品路径保持一致
+  cpDir.push({
+    from: path.resolve(__dirname, '../src/host/ai'),
+    to: path.resolve(__dirname, '../app/build/host/ai')
+  });
 }
 
 module.exports = {

@@ -59,7 +59,7 @@ export default React.memo(({placeholder, prefix, dataSource,
   useEffect(() => {
     sourceChangeRef.current = true;
   }, [dataSource.entities, dataSource.views,
-    dataSource.logicEntities,
+    dataSource.logicEntities, dataSource.conceptEntities, dataSource.profile?.modelCatalog,
     dataSource.diagrams, dataSource.dicts,
     dataSource.viewGroups, dataSource.standardFields]);
   const calcSuggest = (suggest, search) => {
@@ -83,6 +83,7 @@ export default React.memo(({placeholder, prefix, dataSource,
   const getOpt = (d, key) => {
     let opt = '';
     switch (key){
+      case 'conceptEntities':
       case 'entities':
         opt = <>[<a
           onClick={() => _jumpPosition(d, key)}
@@ -129,7 +130,7 @@ export default React.memo(({placeholder, prefix, dataSource,
   };
   const Node = useMemo(() => ({data: {aData, node, parent, search}, style}) => {
     if(parent) {
-      if(['entities', 'logicEntities'].includes(parent.key)) {
+      if(['entities', 'logicEntities', 'conceptEntities'].includes(parent.key)) {
         return <div
           style={style}
           className={`${currentPrefix}-search-suggest-list-item ${currentPrefix}-search-suggest-list-item-refs`}
@@ -175,7 +176,7 @@ export default React.memo(({placeholder, prefix, dataSource,
     const suggestRect = suggestRef.current.getBoundingClientRect();
     const finalData = data.filter(d => d.data.length > 0);
     const currentLength = finalData.reduce((p, n) => {
-      const childLength = ['entities', 'logicEntities'].includes(n.key)
+      const childLength = ['entities', 'logicEntities', 'conceptEntities'].includes(n.key)
           ? n.data.length + n.data.reduce((a, b) => a + (b.diagramRefs?.length || 0), 0)
           : n.data?.length || 0;
       return p + childLength;
@@ -206,7 +207,7 @@ export default React.memo(({placeholder, prefix, dataSource,
         for (let i = 0; i < parentData.length; i += 1) {
           const node = parentData[i];
           yield getNodeData(node, parent.nestingLevel + 1, parent.node);
-          if (['entities', 'logicEntities'].includes(parent.node.key)) {
+          if (['entities', 'logicEntities', 'conceptEntities'].includes(parent.node.key)) {
             for (let j = 0; j < (node.diagramRefs || []).length; j += 1) {
               const refNode = {
                 ...node.diagramRefs[j],
@@ -288,7 +289,7 @@ export default React.memo(({placeholder, prefix, dataSource,
       const filterData = allData.map((d) => {
         return {
           ...d,
-          data: ['entities', 'logicEntities'].includes(d.key)
+          data: ['entities', 'logicEntities', 'conceptEntities'].includes(d.key)
               ? getFilterRefData(d.data, searchValue)
               : getFilterData(d.data, searchValue),
         };

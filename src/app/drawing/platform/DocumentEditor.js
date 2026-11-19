@@ -2,6 +2,8 @@ import React, {useEffect, useRef, useState, useMemo} from 'react';
 import DrawingDocument from '../../../../public/drawing-document';
 import {validateDrawing, treeFind} from '../../../lib/drawing_platform';
 import {drawingPersistence} from '../../../lib/drawing_persistence';
+import {getAiRuntime} from '../../../app/ai/integration/aiRuntime';
+import DrawingAiPanel from '../../../app/ai/integration/DrawingAiPanel';
 import GraphEditor from './GraphEditor';
 import GraphThumbnail from './GraphThumbnail';
 import TreeEditor from './TreeEditor';
@@ -49,6 +51,37 @@ export default ({doc: original, onChange, onBack, readOnly, source, onOpenAsset,
   const [error,setError]=useState(''),[aux,setAux]=useState(''),[menu,setMenu]=useState(''),[rename,setRename]=useState(null),[name,setName]=useState('');
   const [saveState,setSaveState]=useState(drawingPersistence.getState()),[versions,setVersions]=useState([]),[preview,setPreview]=useState(null),[commentEditing,setCommentEditing]=useState(null),[comment,setComment]=useState(''),[commentLocate,setCommentLocate]=useState(null),[query,setQuery]=useState('');
   const [grid,setGrid]=useState(true),[snap,setSnap]=useState(true),[versionName,setVersionName]=useState(null),[findCount,setFindCount]=useState(null),[repairing,setRepairing]=useState(false);
+  // AI 辅助层平移隐藏：GraphEditor 真实平移（>=3px 滚动累计）时临时隐藏 AI
+  // 面板（不卸载对话、不触发请求/写入），释放即恢复
+  const [aiPanHidden,setAiPanHidden]=useState(false);
+  // R2 候选主画布临时投影（msg_28850767e7a3）：DrawingAiPanel 上报审阅中的候选
+  // 文档；投影为只读 GraphEditor（复用 Chen 投影），原画布保活只隐藏——原页/
+  // 选区/视口原样，关闭/返回即恢复。候选不改 original/latest/history/drawings/
+  // 自动保存；确认应用仍走 GATEWAY 单次 history.apply。
+  const [aiCandidate,setAiCandidate]=useState(null);
+  const [aiCandidatePreviewOn,setAiCandidatePreviewOn]=useState(false);
+  const aiCandidateSeen=useRef(null);
+  useEffect(()=>{if(aiCandidate!==aiCandidateSeen.current){aiCandidateSeen.current=aiCandidate;setAiCandidatePreviewOn(Boolean(aiCandidate&&DrawingDocument.isChen(aiCandidate.document)));}},[aiCandidate]);
+  // UI-R2：候选投影按真实受影响页选择——deriveCandidatePreview 携带 GATEWAY
+  // 按操作顺序收集的 affectedPages；createPage 把内容放第二页时投影目标页，
+  // 不再固定 pages[0] 预览旧空页。找不到受影响页（历史候选）回退第一页。
+  const aiCandidateAffectedPages=aiCandidate&&Array.isArray(aiCandidate.affectedPages)?aiCandidate.affectedPages:[];
+  const aiCandidatePage=aiCandidate&&DrawingDocument.isChen(aiCandidate.document)
+    ?((aiCandidate.document.pages||[]).find(page=>aiCandidateAffectedPages.includes(page.id))||aiCandidate.document.pages[0]||null)
+    :null;
+  const aiCandidateCanvas=useMemo(()=>aiCandidatePage?DrawingDocument.project(aiCandidatePage):null,[aiCandidatePage]);
+  const aiCandidateViewDoc=aiCandidatePage&&aiCandidateCanvas?{...aiCandidate.document,id:`${aiCandidate.document.id}:ai:${aiCandidate.planId}`,schemaVersion:1,pageLayers:aiCandidatePage.scene.layers,canvasData:aiCandidateCanvas,treeData:aiCandidatePage.treeData,sequenceData:aiCandidatePage.sequenceData,pageColor:aiCandidatePage.scene.pageStyle?.background||'#ffffff'}:null;
+  const aiApplyCandidate=next=>{
+    // 单次 history.apply：候选经 DocumentEditor.apply（clone+validate+一次历史）
+    return apply(d=>Object.assign(d,next));
+  };
+  const aiGetSelection=()=>{
+    const ids=commands.current.selection?.() || [];
+    if(!chen || !ids.length) return null;
+    const semanticIds=new Set(DrawingDocument.semantic(p).map(v=>v.id));
+    const picked=ids.filter(id=>semanticIds.has(id));
+    return picked.length?picked:null;
+  };
   const text=(zh,english)=>en()?english:zh;
   // CHEN-UAT-009 P0: readable Chinese copy for damaged-journal recovery errors;
   // the raw code (DAMAGED_JOURNAL, …) always stays visible as details.
@@ -140,7 +173,7 @@ export default ({doc: original, onChange, onBack, readOnly, source, onOpenAsset,
       else if(key==='fullScreen'){if(document.fullscreenElement)await document.exitFullscreen();else await document.querySelector('.pv-document-shell')?.requestFullscreen();}
       else if(key==='history'){setAux('history');setVersions(await drawingPersistence.versions());}
       else if(key==='savePanel')setAux('save');
-      else if(key==='comments'||key==='layers')setAux(aux===key?'':key);
+      else if(key==='comments'||key==='layers'||key==='ai')setAux(aux===key?'':key);
       else if(key==='svg'||key==='png'){if(p.kind==='graph')commands.current.export?.(key);else {const svg=document.querySelector('.pv-tree-svg,.pv-sequence-preview svg');await exportVector(svg,doc.defName,key==='png');}}
       else if(key==='find')setAux('find');else if(key.startsWith('align:'))commands.current.align?.(key.split(':')[1]);
       else commands.current[key]?.();
@@ -188,6 +221,8 @@ export default ({doc: original, onChange, onBack, readOnly, source, onOpenAsset,
       ['insertText','文本','Text'],['insertNote','便笺','Note'],['image','本机图片','Local image'],['link','设置链接','Set link'],['openLink','打开链接','Open link'],
       ['@manage','管理','Manage'],
       ['insertReference','模型引用','Model reference'],['saveShape','保存为项目组件','Save as project component'],['favoriteSelection','收藏选中图形','Favorite selected shapes'],['libraries','管理图形库','Shape libraries'],['comments','批注','Comments'],
+      // V5-R3→集成：AI 绘图入口在插入菜单（design 交互契约 #9），仅陈氏文档适配
+      ['ai','AI 绘图','AI drawing'],
     ],
     canvas: [
       ['@canvas','画布','Canvas'],
@@ -299,30 +334,57 @@ export default ({doc: original, onChange, onBack, readOnly, source, onOpenAsset,
           })}</div>}
         </div>
       </div> : <div className='pv-document-tabs-right'>
-        {[['properties','属性','Properties'],['layers','图层','Layers'],['comments','批注','Comments'],['history','历史','History']].map(([key,zh,english])=>(
+        {[['properties','属性','Properties'],['layers','图层','Layers'],['comments','批注','Comments'],['history','历史','History'],['ai','AI','AI']].map(([key,zh,english])=>(
           <Action key={key} className={`pv-tab-btn${aux===key?' active':''}`} onClick={()=>menuCommand(key)}>
+            {key==='ai' && <span className='pv-ai-spark' aria-hidden='true'>✨</span>}
             {text(zh,english)}
           </Action>
         ))}
       </div>}
     </header>
     {(error || ['conflict','error','damaged'].includes(saveState.status))&&<div role='alert' className='pv-error'>{isDamaged && !error ? text('本机恢复日志已损坏，自动保存已暂停：可恢复日志并继续保存，或先导出恢复副本。','The local recovery journal is damaged and autosave paused: repair the journal to continue saving, or export a recovery copy first.') : (error || saveState.error || text('项目文件发生外部修改，已停止覆盖。','External changes detected; project writes stopped.'))}{isDamaged?<small> · {text('详情','details')}: {saveState.error || 'DAMAGED_JOURNAL'}</small>:null}<Action onClick={()=>{setError('');setAux('save');}}>{text('查看恢复','Recovery')}</Action></div>}
-    {p.kind==='tree'?<TreeEditor key={p.id} doc={viewDoc} onChange={commitView} readOnly={readOnly} onCommands={next=>{commands.current=next;}}/>:p.kind==='sequence'?<SequenceEditor key={p.id} doc={viewDoc} onChange={commitView} readOnly={readOnly} onCommands={next=>{commands.current=next;}}/>:<div className='pv-main-editor'>
-      <GraphEditor key={p.id} doc={viewDoc} source={source} readOnly={readOnly} onChange={commitView} onOpenAsset={onOpenAsset} onLocate={onLocate} locateId={commentLocate || locateId} chenPage={chen?p:null} onChenEdit={editPage} onChenAdd={addSemantic} onChenPaste={payload=>editPage(page=>Object.assign(page,DrawingDocument.duplicateSemantic(payload.chenPage,payload.ids,page)))} externalHistory={history} onCommands={next=>{commands.current=next;}} onExportDocument={exportDocument} aux={aux} onAuxCommand={key=>menuCommand(key)}/>
-    </div>}
-    <footer className={`pv-pages${chen ? ' pv-chen-pages' : ''}`} role='tablist' aria-label={text('画布','Canvases')}>{chen && <span className='pv-pages-icon' aria-hidden='true'><IconLayers size={14}/></span>}{doc.pages.map(page=><button type='button' key={page.id} role='tab' aria-selected={page.id===p.id} onClick={()=>{document.activeElement?.blur();setActive(page.id);}} onDoubleClick={()=>{setRename('page');setName(page.name);}}>{page.name}</button>)}<Action disabled={readOnly||p.kind!=='graph'} title={p.kind!=='graph'?text('此编辑器本期仅单画布','Single canvas for this editor'):text('新增画布','New canvas')} onClick={newPage}>＋</Action><Action onClick={()=>setMenu(menu==='canvas'?'':'canvas')}>⋯</Action>{chen ? <span className='pv-pages-stats'>{DrawingDocument.semantic(p).length} {text('个语义对象','semantic objects')} · {p.scene.layers[0]?.name || text('主图层','Main layer')} · {text('概念 ER','Conceptual ER')}{DrawingDocument.warnings(p).length ? <Action onClick={()=>setAux('validation')}>{DrawingDocument.warnings(p).length} {text('条提示','warnings')}</Action> : null}</span> : <span>{text('本机项目','Local project')}</span>}</footer>
-    {aux && <aside className={`pv-document-aux${chen ? ' pv-chen-aux' : ''}`}><header><strong>{text(({layers:'图层',comments:'本机批注',history:'本机版本',save:'保存与恢复',find:'查找文本',validation:'模型检查'})[aux] || aux,aux)}</strong><Action onClick={()=>setAux('')}>×</Action></header>
+    {p.kind==='tree'?<TreeEditor key={p.id} doc={viewDoc} onChange={commitView} readOnly={readOnly} onCommands={next=>{commands.current=next;}}/>:p.kind==='sequence'?<SequenceEditor key={p.id} doc={viewDoc} onChange={commitView} readOnly={readOnly} onCommands={next=>{commands.current=next;}}/>:<>
+      {/* 原主画布：候选临时投影期间保活只隐藏（原页/选区/视口原样保留） */}
+      <div className={`pv-main-editor${aiCandidatePreviewOn&&aiCandidateViewDoc?' pv-main-editor-hidden':''}`}>
+        <GraphEditor key={p.id} doc={viewDoc} source={source} readOnly={readOnly} onChange={commitView} onOpenAsset={onOpenAsset} onLocate={onLocate} locateId={commentLocate || locateId} chenPage={chen?p:null} onChenEdit={editPage} onChenAdd={addSemantic} onChenPaste={payload=>editPage(page=>Object.assign(page,DrawingDocument.duplicateSemantic(payload.chenPage,payload.ids,page)))} externalHistory={history} onCommands={next=>{commands.current=next;}} onExportDocument={exportDocument} aux={aux} onAuxCommand={key=>menuCommand(key)} onPanCollapse={setAiPanHidden}/>
+      </div>
+      {/* R2 候选只读投影：复用真实 GraphEditor/Chen 投影，独立 commands，绝不
+          触碰真实文档/历史/自动保存；随候选清除或页签关闭而卸载 */}
+      {aiCandidatePreviewOn&&aiCandidateViewDoc&&<GraphEditor key={`ai-preview:${aiCandidate.planId}`} doc={aiCandidateViewDoc} source={source} readOnly onChange={()=>false} chenPage={aiCandidatePage} onCommands={()=>{}} onPanCollapse={()=>{}}/>}
+    </>}
+    <footer className={`pv-pages${chen ? ' pv-chen-pages' : ''}`} role='tablist' aria-label={text('画布','Canvases')}>{chen && <span className='pv-pages-icon' aria-hidden='true'><IconLayers size={14}/></span>}{doc.pages.map(page=><button type='button' key={page.id} role='tab' aria-selected={page.id===p.id&&!aiCandidatePreviewOn} onClick={()=>{setAiCandidatePreviewOn(false);document.activeElement?.blur();setActive(page.id);}} onDoubleClick={()=>{setRename('page');setName(page.name);}}>{page.name}</button>)}{aiCandidateViewDoc&&aiCandidate&&<button type='button' role='tab' className='pv-ai-candidate-tab' aria-selected={aiCandidatePreviewOn} title={text('AI 候选预览（未应用，不改动当前文档）；点击可返回原画布','AI candidate preview (not applied; the current document is unchanged). Click again to return.')} onClick={()=>setAiCandidatePreviewOn(v=>!v)}>{aiCandidate.document.defName}{aiCandidatePage&&aiCandidateAffectedPages.length?` · ${aiCandidatePage.name}`:''} · {text('未应用','not applied')}</button>}<Action disabled={readOnly||p.kind!=='graph'} title={p.kind!=='graph'?text('此编辑器本期仅单画布','Single canvas for this editor'):text('新增画布','New canvas')} onClick={newPage}>＋</Action><Action onClick={()=>setMenu(menu==='canvas'?'':'canvas')}>⋯</Action>{chen ? <span className='pv-pages-stats'>{DrawingDocument.semantic(p).length} {text('个语义对象','semantic objects')} · {p.scene.layers[0]?.name || text('主图层','Main layer')} · {text('概念 ER','Conceptual ER')}{DrawingDocument.warnings(p).length ? <Action onClick={()=>setAux('validation')}>{DrawingDocument.warnings(p).length} {text('条提示','warnings')}</Action> : null}</span> : <span>{text('本机项目','Local project')}</span>}</footer>
+    {/* 保活（INTEGRATION-R1）：陈氏文档的 AI 辅助 aside 常驻挂载，切 aux 页签/临时关闭
+        只切换 pv-aux-closed 隐藏类，不 unmount——对话/候选/服务状态往返保留；
+        清理只随文档/项目切换（组件重挂载），候选不写入项目。其余 aux 保持按需挂载。 */}
+    {aux && !(chen && aux==='ai') && <aside className={`pv-document-aux${chen ? ' pv-chen-aux' : ''}${aiPanHidden ? ' pv-ai-pan-hidden' : ''}`}><header><strong>{text(({layers:'图层',comments:'本机批注',history:'本机版本',ai:'AI 绘图',save:'保存与恢复',find:'查找文本',validation:'模型检查'})[aux] || aux,aux)}</strong><Action onClick={()=>setAux('')}>×</Action></header>
       {aux==='layers'&&<>{p.scene.layers.map((l,index)=><div className='pv-layer-card' key={l.id}><input aria-label={text('图层名称','Layer name')} value={l.name} disabled={readOnly} onChange={e=>editPage(page=>{page.scene.layers[index].name=e.target.value;})}/><label><input type='checkbox' disabled={readOnly} checked={l.visible!==false} onChange={e=>editPage(page=>{page.scene.layers[index].visible=e.target.checked;})}/>{text('显示','Visible')}</label><label><input type='checkbox' disabled={readOnly} checked={Boolean(l.locked)} onChange={e=>editPage(page=>{page.scene.layers[index].locked=e.target.checked;})}/>{text('锁定','Locked')}</label><Action disabled={readOnly||index===0} onClick={()=>editPage(page=>{[page.scene.layers[index-1],page.scene.layers[index]]=[page.scene.layers[index],page.scene.layers[index-1]];})}>↑</Action><Action disabled={readOnly||index===p.scene.layers.length-1} onClick={()=>editPage(page=>{[page.scene.layers[index+1],page.scene.layers[index]]=[page.scene.layers[index],page.scene.layers[index+1]];})}>↓</Action><Action disabled={readOnly||p.scene.layers.length===1} title={text('删除图层，内容移至其他图层','Delete layer and move its content')} onClick={()=>{if(!window.confirm(text('删除此图层，所有内容移至剩余图层？','Delete this layer and move all content to another layer?')))return;editPage(page=>{const target=page.scene.layers.find(v=>v.id!==l.id).id;Object.values(page.scene.nodes).forEach(n=>{if(n.layerId===l.id)n.layerId=target;});[...(page.scene.annotations || []),...(page.scene.cells || [])].forEach(n=>{if(n.data?.layer===l.id)n.data.layer=target;});page.scene.layers=page.scene.layers.filter(v=>v.id!==l.id);});}}>×</Action></div>)}<Action disabled={readOnly} onClick={()=>editPage(page=>{page.scene.layers.push({id:DrawingDocument.id('layer'),name:text('新图层','New layer'),visible:true,locked:false});})}>＋ {text('图层','Layer')}</Action></>}
       {aux==='comments'&&<><textarea aria-label={text('批注内容','Comment')} disabled={readOnly} value={comment} onChange={e=>setComment(e.target.value)}/><Action disabled={readOnly||!comment.trim()} onClick={()=>{editPage(page=>page.comments.push({id:DrawingDocument.id('comment'),text:comment.trim(),objectId:commands.current.selection?.()[0] || null,resolved:false,createdAt:Date.now()}));setComment('');}}>{text('添加批注','Add comment')}</Action>{p.comments.map(c=><div className='pv-role' key={c.id}><p>{c.text}</p><Action disabled={readOnly} onClick={()=>setCommentEditing({...c})}>{text('编辑','Edit')}</Action>{c.objectId&&<small>{chen?!DrawingDocument.semantic(p).some(n=>n.id===c.objectId)&&text('对象已删除','Object deleted'):p.kind==='tree'?!treeFind(p.treeData,c.objectId)&&text('对象已删除','Object deleted'):p.kind==='sequence'?![...(p.sequenceData.participants || []),...(p.sequenceData.messages || [])].some(n=>n.id===c.objectId)&&text('对象已删除','Object deleted'):!(p.scene.cells || []).some(n=>n.id===c.objectId)&&text('对象已删除','Object deleted')}</small>}{c.objectId&&p.kind==='graph'&&<Action onClick={()=>setCommentLocate({id:c.objectId,nonce:Date.now()})}>{text('定位对象','Locate object')}</Action>}<Action disabled={readOnly} onClick={()=>editPage(page=>{const comment=page.comments.find(v=>v.id===c.id);comment.resolved=!comment.resolved;})}>{c.resolved?text('重新打开','Reopen'):text('解决','Resolve')}</Action></div>)}</>}
       {aux==='history'&&<><Action disabled={readOnly} onClick={()=>setVersionName('')}>{text('创建命名版本','Create named version')}</Action><p className='pv-note'>{text('恢复会创建新的修改，不覆盖其他模型编辑。','Restoring creates a new revision and preserves other model edits.')}</p>{versions.map(v=><div className='pv-role' key={v.id}><strong>{v.name || new Date(v.time).toLocaleString()}</strong>{v.named&&<Action disabled={readOnly} onClick={async()=>{try{await drawingPersistence.deleteVersion(v.id);setVersions(await drawingPersistence.versions());}catch(e){setError(humanError(e));}}}>×</Action>}<Action onClick={async()=>{try{const project=await drawingPersistence.version(v.id);setPreview(project.drawings?.find(v=>v.id===doc.id) || null);}catch(e){setError(humanError(e));}}}>{t('preview')}</Action></div>)}{!versions.length&&<p>{text('首次写入项目后生成本机版本。','Local versions appear after the first checkpoint.')}</p>}{preview&&<><p>{preview.defName}</p>{(!preview.pages||preview.pages[0].kind==='graph')&&<GraphThumbnail doc={preview} cacheKey={`history:${preview.id}:${preview.revision}`} title={preview.defName}/>}<Action disabled={readOnly} onClick={()=>{apply(d=>Object.assign(d,preview,{revision:d.revision}));setPreview(null);}}>{text('恢复为新版本','Restore as new revision')}</Action></>}</>}
+      {aux==='ai'&&!chen&&<div className='pv-empty'><h2>{text('AI 绘图 · 未适配','AI drawing · Not adapted')}</h2><p>{text('当前图种暂未接入 AI 绘图；仅陈氏 ER 文档支持。','This notation is not adapted yet; only Chen ER documents are supported.')}</p><Action onClick={()=>setAux('')}>{text('返回','Back')}</Action></div>}
       {aux==='find'&&<><Field label={text('查找文本','Find text')}><input autoFocus value={query} onChange={e=>{setQuery(e.target.value);setFindCount(null);}}/></Field><Action onClick={()=>setFindCount(commands.current.find?.(query) || 0)}>{text('查找','Find')}</Action>{findCount!==null&&<p role='status'>{text(`找到 ${findCount} 个对象`,`Found ${findCount} objects`)}</p>}</>}
       {aux==='validation'&&<>{DrawingDocument.warnings(p).map(w=><div className='pv-role' key={`${w.id}:${w.code}`}><p>{text(({unnamed:'对象尚未命名','roles-required':'联系至少需要两个角色','identification-required':'弱实体尚缺标识联系','duplicate-attribute-name':'同一所属对象下属性重名'})[w.code],w.code)}</p><Action onClick={()=>setCommentLocate({id:w.id,nonce:Date.now()})}>{text('定位对象','Locate object')}</Action></div>)}{!DrawingDocument.warnings(p).length&&<p>{text('当前没有语义提示。','No semantic warnings.')}</p>}</>}
       {aux==='save'&&<><p>{text(saveLabel,englishSave)}</p><p className='pv-note'>{saveState.error}</p><p className='pv-note'>{text('状态：正在连接 → 保存中 → 已写入项目；未持久确认前不会显示“已保存”。','Status: connecting → saving → written to project. “Saved” appears only after durable confirmation.')}</p><p className='pv-note'>{text('自动保存只覆盖绘图。正常关闭等待落盘；强杀可恢复已确认的日志前缀。','Drawing-only autosave. Normal close waits for persistence; acknowledged operations can be recovered after a crash.')}</p>
       {isDamaged&&<><p className='pv-note'>{text('恢复日志损坏：恢复会先完整备份原始日志文件（anchor、commands.log、previous 引用）与当前完整草稿，再以当前绘图内容重建恢复记录并写入项目；无法证明的损坏尾部不保证恢复。','Damaged recovery journal: repair first fully backs up the original log files (anchor, commands.log, previous references) and the complete current draft, then rebuilds the record from the current drawing content and writes the project; an unprovable damaged tail is not guaranteed.')}{saveState.error?` (${saveState.error})`:''}</p><Action disabled={readOnly||repairing} onClick={repairJournal}>{repairing?text('正在恢复日志……','Repairing journal…'):text('恢复日志并继续保存','Repair journal and continue saving')}</Action></>}
       <Action onClick={()=>drawingPersistence.flush().catch(e=>setError(humanError(e)))}>{text('重试写入','Retry checkpoint')}</Action><Action onClick={async()=>{try{const recovery=await drawingPersistence.recovery();download('drawing-recovery.pdma.json',JSON.stringify(recovery,null,2));}catch(e){setError(humanError(e));}}}>{text('导出可编辑恢复副本','Export editable recovery copy')}</Action></>}
     </aside>}
-
-
+    {/* 陈氏文档的 AI 辅助：常驻挂载（保活），aux!=='ai' 仅 CSS 隐藏（pv-aux-closed）；
+        平移隐藏继续复用 pv-ai-pan-hidden。对话/候选/服务状态跨 aux 切换与临时关闭保留。 */}
+    {chen && <aside
+      className={`pv-document-aux pv-chen-aux pv-ai-aux${aux==='ai' ? '' : ' pv-aux-closed'}${aiPanHidden ? ' pv-ai-pan-hidden' : ''}`}
+      data-ai-keep='drawing'
+      aria-hidden={aux==='ai' ? 'false' : 'true'}>
+      <header><strong>{text('AI 绘图','AI drawing')}</strong><Action onClick={()=>setAux('')}>×</Action></header>
+      <DrawingAiPanel
+        runtime={getAiRuntime()}
+        doc={doc}
+        readOnly={readOnly}
+        getDocuments={()=>((source && source.drawings) || [doc]).filter(Boolean)}
+        getSelection={aiGetSelection}
+        applyCandidate={aiApplyCandidate}
+        onCreateDocument={next=>onCreateDrawing && onCreateDrawing(next)}
+        undoLast={()=>history.undo()}
+        onCandidateChange={setAiCandidate}/>
+    </aside>}
     {commentEditing&&<Dialog title={text('编辑批注','Edit comment')} onClose={()=>setCommentEditing(null)}><div className='pv-picker'><textarea aria-label={text('编辑批注内容','Edit comment text')} value={commentEditing.text} onChange={e=>setCommentEditing({...commentEditing,text:e.target.value})}/><Action primary disabled={readOnly||!commentEditing.text.trim()} onClick={()=>{editPage(page=>{const c=page.comments.find(v=>v.id===commentEditing.id);if(c)c.text=commentEditing.text.trim();});setCommentEditing(null);}}>{t('confirm')}</Action></div></Dialog>}
     {versionName!==null&&<Dialog title={text('创建命名版本','Create named version')} onClose={()=>setVersionName(null)}><div className='pv-picker'><Field label={text('版本名称','Version name')}><input autoFocus maxLength={80} aria-label={text('版本名称','Version name')} value={versionName} onChange={e=>setVersionName(e.target.value)}/></Field><Action primary disabled={readOnly||!versionName.trim()} onClick={async()=>{try{await drawingPersistence.saveVersion(versionName);setVersions(await drawingPersistence.versions());setVersionName(null);}catch(e){setError(humanError(e));}}}>{t('confirm')}</Action></div></Dialog>}
     {upgrading&&<LegacyUpgrade doc={doc} page={p} onClose={()=>setUpgrading(false)} onCreate={onCreateDrawing}/>}

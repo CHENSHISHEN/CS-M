@@ -247,6 +247,9 @@
         box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
       }
     }
+    .pv-ai-spark {
+      font-size: 11px;
+    }
   }
 
   // Command Menu Popover with Shortcuts
@@ -1281,7 +1284,23 @@
   .pv-chen-editor.pv-pan-collapse {
     > .pv-sidebar, > .pv-chen-libstrip, > .pv-chen-inspector, > .pv-splitter {display: none !important;}
   }
+  // AI 集成：真实平移时同层隐藏 AI 辅助面板（aux 是 DocumentEditor 的兄弟层，
+  // GraphEditor 的折叠状态经 onPanCollapse 上抛为该类）——只隐藏不卸载对话、
+  // 不触发请求/写入；释放/中断即恢复。
+  .pv-document-aux.pv-ai-pan-hidden {display: none !important;}
+  // AI 辅助保活（INTEGRATION-R1）：aux 关闭/切其他页签时只隐藏不卸载，
+  // 对话/候选/服务状态保留；重新打开即恢复
+  .pv-document-aux.pv-ai-aux.pv-aux-closed {display: none !important;}
+  // R2 候选主画布临时投影（msg_28850767e7a3）：原画布保活只隐藏（原页/选区/
+  // 视口原样），候选只读投影复用 GraphEditor 接管主区；页脚虚线临时页签明示
+  // “未应用”，点击临时页签/真实页签即返回原画布
   .pv-document-shell .pv-main-editor {flex:1;min-height:0;display:flex;flex-direction:column;position:relative;overflow:hidden;}
+  .pv-document-shell .pv-main-editor.pv-main-editor-hidden {display:none !important;}
+  .pv-pages .pv-ai-candidate-tab {
+    border:1px dashed var(--er-ui-accent);background:transparent;
+    color:var(--er-ui-accent);font-style:italic;
+    &[aria-selected=true] {background:var(--er-ui-accent-soft);font-style:normal;font-weight:600;}
+  }
   .pv-drop-ghost {display:none;position:fixed;z-index:90;width:26px;height:18px;border:1.5px dashed var(--pv-accent);border-radius:6px;pointer-events:none;background:rgba(37, 99, 235, 0.12);}
   .pv-drop-owner {outline:2px solid #10b981;outline-offset:2px;}
   textarea.pv-inline-chen {background:transparent;border:1px dashed #7d90ab;box-shadow:none;padding:2px 4px;line-height:1.25;overflow:auto;outline:none;min-height:0;min-width:0;resize:none;}

@@ -33,15 +33,15 @@ const check = (name, fn) => {
   console.log('PASS', ++n, name);
 };
 
-check('9 distinct types; 24 actual editable templates', () => {
+check('9 distinct types; 27 actual editable templates', () => {
   assert.equal(p.DRAWING_TYPES.length, 9);
-  assert.equal(p.PLATFORM_TEMPLATES.length, 24);
+  assert.equal(p.PLATFORM_TEMPLATES.length, 27);
   p.PLATFORM_TEMPLATES.filter(t => t.module === 'drawing').forEach(t => {
     const a = p.instantiateTemplate({}, t);
     const d = a.source.drawings[0];
     assert.equal(d.diagramType, t.typeId);
     assert.deepEqual(p.validateDrawing(d), []);
-    assert(d.treeData || d.sequenceData || d.canvasData.cells.length);
+    assert(d.treeData || d.sequenceData || (d.canvasData && d.canvasData.cells && d.canvasData.cells.length) || (d.pages && d.pages.length));
   });
 });
 

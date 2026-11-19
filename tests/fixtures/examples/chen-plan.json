@@ -1,0 +1,94 @@
+{
+  "protocolVersion": "1.0",
+  "planId": "synthetic-plan-drawing",
+  "scope": {
+    "platform": "drawing",
+    "projectSessionId": "synthetic-project-session",
+    "documentId": "synthetic-drawing"
+  },
+  "baseVersion": "synthetic-snapshot-1",
+  "contextDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+  "readSet": [
+    {
+      "resource": "synthetic-current-target",
+      "fingerprint": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ],
+  "expiresAt": "2026-11-26T00:00:00Z",
+  "summary": "合成示例：仅展示设计协议，不可直接执行到真实项目",
+  "assumptions": [
+    "所有existing引用均为合成，需运行时解析校验"
+  ],
+  "operations": [
+    {
+      "opId": "create-page",
+      "command": "drawing.chen.createPage",
+      "dependsOn": [],
+      "args": {
+        "localKey": "page-customer-order",
+        "name": "客户与订单",
+        "graph": {
+          "entities": [
+            {
+              "localKey": "customer",
+              "name": "客户",
+              "kind": "strong"
+            },
+            {
+              "localKey": "order",
+              "name": "订单",
+              "kind": "strong"
+            }
+          ],
+          "relationships": [
+            {
+              "localKey": "places",
+              "name": "提交",
+              "kind": "ordinary",
+              "roles": [
+                {
+                  "localKey": "customer-role",
+                  "entityKey": "customer",
+                  "cardinality": "one",
+                  "participation": "partial"
+                },
+                {
+                  "localKey": "order-role",
+                  "entityKey": "order",
+                  "cardinality": "many",
+                  "participation": "total",
+                  "manyLabel": "N"
+                }
+              ]
+            }
+          ],
+          "attributes": [
+            {
+              "localKey": "customer-id",
+              "name": "客户编号",
+              "kind": "simple",
+              "key": "primary",
+              "owner": {
+                "type": "entity",
+                "key": "customer"
+              }
+            },
+            {
+              "localKey": "order-id",
+              "name": "订单编号",
+              "kind": "simple",
+              "key": "primary",
+              "owner": {
+                "type": "entity",
+                "key": "order"
+              }
+            }
+          ]
+        },
+        "themeId": "fresh",
+        "styleId": "standard"
+      }
+    }
+  ],
+  "planHash": "40f0bde9ab6d306c3050ab022dc37dc3b43ec51bee6aea38439f090868d382e0"
+}

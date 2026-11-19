@@ -13,7 +13,7 @@ export const DRAWING_TYPES = [
   {id: 'uml-usecase', family: 'graph', name: 'UML 用例图', en: 'UML use case', color: '#596579', icon: 'fa-user-o', packs: ['basic', 'usecase'], templates: ['商城用户用例', '订单后台用例']},
   {id: 'uml-class', family: 'graph', name: 'UML 类图', en: 'UML class', color: '#596579', icon: 'fa-list-alt', packs: ['basic', 'class'], templates: ['订单领域类图', '权限角色类图']},
   {id: 'sequence', family: 'sequence', name: 'UML 时序图', en: 'Sequence', color: '#a46524', icon: 'fa-exchange', packs: [], templates: ['下单与库存扣减', '登录鉴权']},
-  {id: 'er-sketch', family: 'graph', name: 'ER 概念图', en: 'Chen ER', color: '#3568b5', icon: 'fa-table', packs: ['er', 'basic'], templates: ['读者借阅', '学生选课']},
+  {id: 'er-sketch', family: 'graph', name: 'ER 概念图', en: 'Chen ER', color: '#3568b5', icon: 'fa-table', packs: ['chen', 'basic'], templates: ['电商订单', '图书借阅', '课程选修', '员工与家属', '供应协作']},
 ];
 export const drawingType = id => DRAWING_TYPES.find(t => t.id === id) || DRAWING_TYPES[2];
 export const SHAPE_PACKS = [
@@ -70,6 +70,7 @@ export const edgeCell = (source, target, label = '', relation = 'flow') => {
 const treeNode = (name, children = []) => ({id: platformId('topic'), name, children, collapsed: false});
 export const newDrawing = (typeId, name, sample = false, variant = 0) => {
   const type = drawingType(typeId);
+  if (typeId === 'er-sketch') return DrawingDocument.newChen(name || type.name, sample, variant);
   const doc = {id: platformId('drawing'), defKey: platformId('diagram'), defName: name || type.name,
     type: 'drawing', schemaVersion: 1, revision: 0, diagramType: type.id, canvasData: {cells: []}, enabledPacks: type.packs.slice()};
   if (type.family === 'tree') {
