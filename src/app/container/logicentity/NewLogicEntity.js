@@ -11,7 +11,8 @@ import {getCatalogCategories, categoryObjects, readCatalog} from '../../../lib/m
 import {makeFieldsDeleteCheck} from '../../metrics/deleteImpact';
 
 export default React.memo(({prefix, dataSource, data, dataChange, getDataSource,
-                               hasRender, hasDestory, param, isTab, group}) => {
+                               hasRender, hasDestory, param, isTab, group,
+                               updateDataSource}) => {
     const CheckboxGroup = Checkbox.CheckboxGroup;
     const Option = MultipleSelect.Option;
     const RadioGroup = Radio.RadioGroup;
@@ -151,10 +152,11 @@ export default React.memo(({prefix, dataSource, data, dataChange, getDataSource,
         tableType='logicEntity'
         dataSource={dataSource}
         tableDataChange={fields => _dataChange(fields, 'fields')}
-        // M5B-R1：逻辑实体字段删除前指标影响确认（新建未保存实体无 id 不阻扰）
+        // M5B-R1：逻辑实体字段删除前指标影响确认（新建未保存实体无 id 不阻扰）；
+        // MET-12：确认删除后同一处理内经 updateDataSource 标记命中绑定失效
         checkFieldsDelete={data && data.id
           ? makeFieldsDeleteCheck(() => (getDataSource ? getDataSource() : dataSource),
-            'logicEntities', data.id)
+            'logicEntities', data.id, updateDataSource)
           : undefined}
       />;
     };

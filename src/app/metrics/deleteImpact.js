@@ -5,8 +5,8 @@
 //   JSX 消息调用处使用）；metricDeleteImpactLines：纯文本行（contextMenuUtil 拼接用）；
 // - makeFieldsDeleteCheck：共享字段表删除接缝工厂——有影响先确认再执行原删除回调，
 //   无指标元数据/无影响直接放行（不增加阻扰），取消零变更；
-// - 确认放行后仅执行原删除，不改动固定指标版本与绑定证据；端点失效由血缘层的
-//   稳定 ID 在场判定投影（本模块只读，不写 metricPlatform）。
+// - 放行（确认或无可展示影响）后执行原删除，并以一次 updateSource 落 applyDeleteImpact
+//   （命中绑定 → unresolved，MET-12）；不改动固定指标版本，无命中不写。
 // 约定：与 src/lib/metrics 一致，不使用 ?? / ?.。
 import React from 'react';
 import {FormatMessage, Modal} from 'components';
@@ -92,25 +92,38 @@ export const MetricDeleteImpactBody = ({summary}) => {
 
 // 字段删除检查工厂（共享字段表最小接缝）：
 // 返回 check(deletedFields, proceed)——有影响时弹确认并接管（返回 true），
-// 确认后才执行 proceed（原删除逻辑原样）；无影响返回 false 直接放行。
-export const makeFieldsDeleteCheck = (getSource, collection, objectId) => {
+// 确认后才执行 proceed（原删除逻辑原样）；无可展示影响时不弹确认、直接执行 proceed
+// 并接管（返回 true）；无有效字段返回 false 由调用方原样删除。
+// updateSource 给出时，放行后同一处理里基于最新 source 计算 applyDeleteImpact，
+// 有变化才调用一次 updateSource（绑定失效与删除同一确认动作落入项目状态）。
+export const makeFieldsDeleteCheck = (getSource, collection, objectId, updateSource) => {
   if (collection == null || objectId == null || objectId === '') return null;
+  const latest = () => (typeof getSource === 'function' ? getSource() : getSource);
   return (deletedFields, proceed) => {
     const endpoints = (deletedFields || [])
       .filter(f => f != null && f.id != null && f.id !== '')
       .map(f => ({collection, objectId, fieldId: f.id}));
     if (endpoints.length === 0) return false;
-    const source = typeof getSource === 'function' ? getSource() : getSource;
-    const summary = summarizeMetricDeleteImpact(source, endpoints);
-    if (summary.count === 0) return false;
+    const commit = () => {
+      proceed && proceed();
+      if (typeof updateSource !== 'function') return;
+      const current = latest();
+      const next = metricApi.applyDeleteImpact(current,
+        {collection, objectId, fieldIds: endpoints.map(e => e.fieldId)});
+      if (next !== current) updateSource(next);
+    };
+    const summary = summarizeMetricDeleteImpact(latest(), endpoints);
+    if (summary.count === 0) {
+      // 无可展示影响（如仅概念级语义绑定）：不弹确认、直接删除，绑定失效照常落盘
+      commit();
+      return true;
+    }
     Modal.confirm({
       title: FormatMessage.string({id: 'metrics.deleteImpact.confirmTitle'}),
       message: <div>
         <MetricDeleteImpactBody summary={summary}/>
       </div>,
-      onOk: () => {
-        proceed && proceed();
-      },
+      onOk: commit,
     });
     return true;
   };

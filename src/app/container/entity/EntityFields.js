@@ -47,9 +47,11 @@ export default React.memo(({data, dataSource, update, FieldsExtraOpt,customerHea
     openDict={openDict}
     defaultGroups={defaultGroups}
     // M5B-R1：仅物理实体（指标绑定目标集合 entities）接入字段删除影响确认；
-    // 未保存实体（无 id）/无指标关联字段不增加阻扰
+    // 未保存实体（无 id）/无指标关联字段不增加阻扰。
+    // MET-12：确认删除后同一处理内经 updateDataSource 标记命中绑定失效
     checkFieldsDelete={type === 'entity' && data && data.id
-      ? makeFieldsDeleteCheck(getDataSource || (() => dataSource), 'entities', data.id)
+      ? makeFieldsDeleteCheck(getDataSource || (() => dataSource), 'entities', data.id,
+        updateDataSource)
       : undefined}
   />;
 });

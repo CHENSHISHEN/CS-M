@@ -959,3 +959,40 @@ export const syncMetricBindingStates = (source, options) => {
     touched,
   };
 };
+
+// 删除影响落盘（MET-12）：字段/对象删除经用户确认后，由删除入口在同一次项目更新里调用。
+// impact = {fieldIds, entityIds}，可选 collection / objectId 限定端点：
+//   entityIds → 对象级失效；fieldIds → 字段级失效（给 objectId 时限定该对象，
+//   未给时按绑定字段范围定位所属对象）。命中生效/建议绑定 → unresolved（保留端点快照）。
+// 无命中原样返回 source（引用相等）；存储不可写（损坏/版本不支持）同样原样返回——
+// 删除本身不因指标存储受阻（"只提示不阻止"）。同号重建不复活，须显式 restore。
+export const applyDeleteImpact = (source, impact, options) => {
+  const f = impact == null ? {} : impact;
+  const withCollection = query => (f.collection == null ? query : {...query, collection: f.collection});
+  let next = source;
+  const mark = (query) => {
+    const result = markMetricBindingsUnresolved(next, withCollection(query), options);
+    if (result.ok) next = result.source;
+  };
+  (f.entityIds || []).forEach((objectId) => {
+    if (objectId != null && objectId !== '') mark({objectId});
+  });
+  (f.fieldIds || []).forEach((fieldId) => {
+    if (fieldId == null || fieldId === '') return;
+    if (f.objectId != null) {
+      mark({objectId: f.objectId, fieldId});
+      return;
+    }
+    const objectIds = [];
+    bindingsOf(readMetricPlatform(next)).forEach((binding) => {
+      if (binding.modelRef == null || bindingFieldScope(binding).indexOf(fieldId) < 0) return;
+      if (objectIds.indexOf(binding.modelRef.objectId) < 0) objectIds.push(binding.modelRef.objectId);
+    });
+    objectIds.forEach(objectId => mark({objectId, fieldId}));
+  });
+  return next;
+};
+
+// 导航计数口径：只计生效/建议绑定（released 属历史、unresolved 已失效，均不计入）
+export const countActiveMetricBindings = source => bindingsOf(readMetricPlatform(source))
+  .filter(binding => binding.state !== 'released' && binding.state !== 'unresolved').length;

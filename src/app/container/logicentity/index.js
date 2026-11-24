@@ -96,6 +96,7 @@ const LogicEntity = React.memo(({prefix, dataSource, entity, tabDataChange, tabK
               data={iniData}
               dataSource={dataSource}
               dataChange={dataChange}
+              updateDataSource={updateDataSource}
             />,
           },
           {
