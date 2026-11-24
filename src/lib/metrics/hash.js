@@ -136,6 +136,9 @@ export const sha256Hex = (text) => {
 // 发布修订内容哈希：sha256:<64位hex>（键排序稳定序列化，同内容同哈希）
 export const contentHash = (value) => `sha256:${sha256Hex(stableStringify(value))}`;
 
+// 界面短哈希：去掉 sha256: 前缀再取 12 位，避免前缀占掉可区分字符；旧格式 h<8hex> 无前缀，原样显示
+export const shortHashLabel = hash => (hash == null ? '—' : String(hash).replace(/^sha256:/, '').slice(0, 12));
+
 const CONTENT_HASH_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const LEGACY_HASH_PATTERN = /^h[0-9a-f]{8}$/;
 

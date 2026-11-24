@@ -315,7 +315,7 @@ function buildDictProject() {
     assert(r.ok, JSON.stringify(r.errors));
     source = r.source;
   });
-  const atomic =coreApi.createMetricDraft(source, Object.assign(
+  const atomic = coreApi.createMetricDraft(source, Object.assign(
     fixtures.paidAmountAtomic('metric-paid-amount'), {revisionId: 'mrev-paid-amount-1'}));
   assert(atomic.ok, JSON.stringify(atomic.errors));
   const pubAtomic = coreApi.publishMetricRevision(atomic.source, 'mrev-paid-amount-1', {});

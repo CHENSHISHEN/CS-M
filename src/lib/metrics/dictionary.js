@@ -400,7 +400,7 @@ export const validateSpecAgainstDictionary = (data, spec, scope) => {
 };
 
 // ---- 写入 ----
-const validateEntry =(category, input, dimensions) => {
+const validateEntry = (category, input, dimensions) => {
   const errors = [];
   const path = `dictionary.${category}`;
   if (input == null || typeof input !== 'object') {

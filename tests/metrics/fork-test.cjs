@@ -86,6 +86,7 @@ test('MET-01：分叉部门修订拒绝升级，不产生新草案、存储不�
   assert.equal(result.errors[0].code, 'FORK_NOT_UPGRADABLE');
   assert.equal(result.errors[0].messageKey, 'metric.error.forkNotUpgradable');
   assert.equal(result.errors[0].path, 'departmentRevisionId');
+  assert.equal(result.source, undefined); // 拒绝时不返回新存储
   assert.equal(api.readMetricPlatform(source).revisions.length, countBefore);
   assert.equal(JSON.stringify(source), before);
   // 分叉自己的 30 天窗口保持不变

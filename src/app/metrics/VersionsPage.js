@@ -2,6 +2,7 @@ import React, {useMemo, useState} from 'react';
 import {FormatMessage, Message, Modal} from 'components';
 import {metricApi, runMetricCommand} from './commands';
 import {renderErrorList, renderKindBadge, renderScopeBadge, renderStatusBadge} from './parts';
+import {shortHashLabel} from '../../lib/metrics/hash';
 
 // 指标平台 M3B：版本与变更页（替换 PendingPage）。
 // - 全部定义的真实版本记录（草案/已发布/已废弃），来源标注（新定义/修订/部门基线/升级/分叉）；
@@ -11,8 +12,6 @@ import {renderErrorList, renderKindBadge, renderScopeBadge, renderStatusBadge} f
 // - 本页不渲染假数据、不做服务端审批；本地确认发布不等于审核通过。
 
 const STATUS_FILTERS = ['all', 'draft', 'published', 'deprecated'];
-
-const shortHash = hash => (hash == null ? '—' : String(hash).slice(0, 12));
 
 // M5B 引用角色业务化：英文枚举 → 中文角色（原始码留 title 次级信息）
 const ROLE_LABEL_KEYS = {
@@ -190,7 +189,7 @@ const VersionsPage = ({source, commandRunner, readOnly, onOpenDefinition}) => {
             <td><code className='chiner-metrics-mono'
               title={FormatMessage.string({id: 'metrics.versions.hashImmutable'})}
               data-testid='metrics-versions-hash'>
-              {shortHash(row.revision.hash)}
+              {shortHashLabel(row.revision.hash)}
             </code></td>
             <td>{row.revision.publishedAt || '—'}</td>
             <td><span className='chiner-metrics-muted'>{sourceLabel(row.revision)}</span></td>

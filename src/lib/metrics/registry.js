@@ -67,6 +67,14 @@ const isDefinitionDeprecated = (data, definitionId) => {
     && !revisions.some(item => item.status === PUBLISHED);
 };
 
+// 校验/发布共用：已废弃定义的遗留草案返回 DEFINITION_DEPRECATED，否则空数组
+const deprecatedDefinitionErrors = (data, revision) => {
+  if (!isDefinitionDeprecated(data, revision.definitionId)) return [];
+  return [error('DEFINITION_DEPRECATED', 'definitionId',
+    'metric.error.definitionDeprecated',
+    `definition ${revision.definitionId} is deprecated, cannot publish`, {id: revision.definitionId})];
+};
+
 const storeGuard = (data) => {
   if (!isStoreWritable(data)) {
     return [error('SCHEMA_VERSION_UNSUPPORTED', 'profile.metricPlatform.schemaVersion',
@@ -683,6 +691,9 @@ export const validateMetricDraft = (source, revisionId, options) => {
     return {ok: false, errors: [error('UNKNOWN_REFERENCE', 'revisionId', 'metric.error.unknownReference',
       `revision does not exist: ${revisionId}`)]};
   }
+  // 与发布一致：已废弃定义的遗留草案校验即失败，不能「校验通过、发布被拒」
+  const deprecated = deprecatedDefinitionErrors(data, revision);
+  if (deprecated.length) return {ok: false, errors: deprecated};
   const conflict = preconditionErrors(revision, options);
   if (conflict.length) return {ok: false, errors: conflict};
   const result = validateRevisionForPublish(source, data, revision);
@@ -705,11 +716,8 @@ export const publishMetricRevision = (source, revisionId, options) => {
       `revision ${revisionId} is already ${revision.status}`)]};
   }
   // 已废弃的定义不可再发布遗留草案（防绕过废弃）
-  if (isDefinitionDeprecated(data, revision.definitionId)) {
-    return {ok: false, errors: [error('DEFINITION_DEPRECATED', 'definitionId',
-      'metric.error.definitionDeprecated',
-      `definition ${revision.definitionId} is deprecated, cannot publish`, {id: revision.definitionId})]};
-  }
+  const deprecated = deprecatedDefinitionErrors(data, revision);
+  if (deprecated.length) return {ok: false, errors: deprecated};
   const conflict = preconditionErrors(revision, options);
   if (conflict.length) return {ok: false, errors: conflict};
   const result = validateRevisionForPublish(source, data, revision);

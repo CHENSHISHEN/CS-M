@@ -94,6 +94,21 @@ test('整定义废弃后发布遗留草案：ok:false 且存储不变(c)', () =>
   assert.equal(left.version, null);
 });
 
+test('整定义废弃后校验遗留草案：validateMetricDraft 与发布返回同一错误(c2)', () => {
+  const source = baseWithV10();
+  const draft = ok(api.createRevisionDraft(source, DEF_ID, {revisionId: 'mrev-ver-left2'}));
+  // 废弃前遗留草案可通过校验
+  assert.equal(api.validateMetricDraft(draft.source, 'mrev-ver-left2', {}).ok, true);
+  const deprecated = ok(api.deprecateMetricDefinition(draft.source, DEF_ID));
+  const before = JSON.stringify(deprecated.source);
+  const validated = api.validateMetricDraft(deprecated.source, 'mrev-ver-left2', {});
+  const published = api.publishMetricRevision(deprecated.source, 'mrev-ver-left2', {});
+  assert.equal(validated.ok, false);
+  assert.equal(validated.errors[0].code, 'DEFINITION_DEPRECATED');
+  assert.deepEqual(validated.errors, published.errors);
+  assert.equal(JSON.stringify(deprecated.source), before);
+});
+
 test('旧数据已有两个 "1.0"：readMetricPlatform 不抛错且原样返回(d)', () => {
   const source = baseWithV10();
   const legacy = JSON.parse(JSON.stringify(source));

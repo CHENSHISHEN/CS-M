@@ -371,6 +371,16 @@ test('导入拒绝诊断有中英文文案（模型关联页诊断标签）', ()
   assert.match(page, /METRIC_IMPORT_HASH_MISMATCH:\s*'metrics\.binding\.diag\.hashMismatch'/);
 });
 
+test('shortHashLabel：去掉 sha256: 前缀后取 12 位，旧格式 h<8hex> 原样显示', () => {
+  const hex = 'ab'.repeat(32);
+  assert.equal(api.shortHashLabel(`sha256:${hex}`), hex.slice(0, 12));
+  assert.equal(api.shortHashLabel('h1a2b3c4d'), 'h1a2b3c4d');
+  assert.equal(api.shortHashLabel(null), '—');
+  assert.equal(api.shortHashLabel(undefined), '—');
+  const page = fs.readFileSync(path.join(PROJECT_ROOT, 'src', 'app', 'metrics', 'VersionsPage.js'), 'utf8');
+  assert.match(page, /shortHashLabel\(row\.revision\.hash\)/);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) {
   failures.forEach(({name, error}) => {
