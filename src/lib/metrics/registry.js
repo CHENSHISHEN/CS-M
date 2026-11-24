@@ -47,6 +47,24 @@ const latestPublished = (data, definitionId) =>
     .filter(item => item.status === PUBLISHED)
     .sort((a, b) => (versionOrder(a.version) < versionOrder(b.version) ? 1 : -1))[0] || null;
 
+// 下一个版本号：取该定义下所有修订（含已废弃）中 1.<n> 的最大 n + 1；
+// 非 1.<n> 形式/空版本忽略；无任何已编号修订时从 1.0 起（不按已发布数量计，避免废弃后回收旧号）
+const nextVersion = (data, definitionId) => {
+  let max = -1;
+  definitionRevisions(data, definitionId).forEach((item) => {
+    const match = /^1\.(\d+)$/.exec(String(item.version == null ? '' : item.version));
+    if (match != null && Number(match[1]) > max) max = Number(match[1]);
+  });
+  return `1.${max + 1}`;
+};
+
+// 定义已整体废弃：没有任何已发布修订，且存在已废弃修订（单个旧版本被废弃不算）
+const isDefinitionDeprecated = (data, definitionId) => {
+  const revisions = definitionRevisions(data, definitionId);
+  return revisions.some(item => item.status === DEPRECATED)
+    && !revisions.some(item => item.status === PUBLISHED);
+};
+
 const storeGuard = (data) => {
   if (!isStoreWritable(data)) {
     return [error('SCHEMA_VERSION_UNSUPPORTED', 'profile.metricPlatform.schemaVersion',
@@ -676,15 +694,18 @@ export const publishMetricRevision = (source, revisionId, options) => {
     return {ok: false, errors: [error('IMMUTABLE_PUBLISHED', 'revisionId', 'metric.error.immutable',
       `revision ${revisionId} is already ${revision.status}`)]};
   }
+  // 已废弃的定义不可再发布遗留草案（防绕过废弃）
+  if (isDefinitionDeprecated(data, revision.definitionId)) {
+    return {ok: false, errors: [error('DEFINITION_DEPRECATED', 'definitionId',
+      'metric.error.definitionDeprecated',
+      `definition ${revision.definitionId} is deprecated, cannot publish`, {id: revision.definitionId})]};
+  }
   const conflict = preconditionErrors(revision, options);
   if (conflict.length) return {ok: false, errors: conflict};
   const result = validateRevisionForPublish(source, data, revision);
   if (result.errors.length) return {ok: false, errors: result.errors};
   const semantic = result.semantic;
-  const definition = findDefinition(data, revision.definitionId);
-  const publishedCount = definitionRevisions(data, revision.definitionId)
-    .filter(item => item.status === PUBLISHED).length;
-  const version = `1.${publishedCount}`;
+  const version = nextVersion(data, revision.definitionId);
   const specSnapshot = cloneJson(revision.spec); // 发布快照与旧草案/表单/patch 引用隔离（R1）
   const resolvedSpec = {
     kind: revision.spec.kind,

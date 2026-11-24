@@ -2152,6 +2152,7 @@ projectTemplate: {
             unknownReference: 'Reference does not exist: {ref}',
             unpublishedReference: 'Referenced revision is not published: {ref}',
             deprecatedReference: 'Referenced definition is deprecated: {ref}',
+            definitionDeprecated: 'Definition is deprecated; its leftover draft cannot be published: {id}',
             referenceKind: 'Reference kind mismatch (atomics need a derived definition first): {ref}',
             unknownDimension: 'Dimension is not declared by the source atomic: {dimension}',
             immutable: 'Published revisions are immutable; create a new draft revision',
