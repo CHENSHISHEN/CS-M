@@ -2493,6 +2493,7 @@ projectTemplate: {
             title: 'Discard draft',
             messageNew: 'This definition was never published: discarding deletes the draft together with the definition, and the code {code} becomes available again. Unsaved form changes are lost too.',
             messagePublished: 'Only the current draft (including unsaved form changes) is deleted; published and deprecated versions stay unchanged and can still be revised later.',
+            bindingsRemoved: '{count} model binding(s) pointing to this draft will be removed as well.',
         },
         notice: {
             draftSaved: 'Draft saved into project state.',
@@ -2718,6 +2719,7 @@ projectTemplate: {
                     DUPLICATE_VERSION: 'Duplicate version number under one definition',
                     DANGLING_REFERENCE: 'Reference points to a missing object',
                     STORE_CORRUPT: 'Store structure is corrupt (read as empty here; store is read-only)',
+                    STORE_CORRUPT_ELEMENT: 'Corrupt store element (ignored here; it will be removed on the next save)',
                     other: 'Other issue',
                 },
             },

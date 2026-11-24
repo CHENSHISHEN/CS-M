@@ -125,6 +125,9 @@ const attachDiagnostics = (value, diagnostics) => {
 
 // 只读入口：不存在 → 空；schemaVersion 不认识 → 空集合 + unsupported 标记（写命令据此拒绝）；
 // 结构损坏 → 按空/过滤读取 + __diagnostics（集合/根类型损坏时 storeCorrupt，写命令拒绝）
+// 注意（R-A-F3）：内部浅归一化读取，返回的元素是存储中的活引用（未冻结、未深拷贝），
+// 调用方必须当只读使用；冻结/拷贝保证只由 getMetricRevision / listMetricRevisions /
+// getMetricDefinition 提供。
 export const readMetricPlatform = (source) => {
   const holder = source == null ? null : source.profile;
   if (holder == null) return emptyMetricPlatform();

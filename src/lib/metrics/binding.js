@@ -284,6 +284,9 @@ const metricInfoOf = (data, binding) => {
   };
 };
 
+// 注意（R-A-F3）：内部浅归一化读取，返回的元素是存储中的活引用（未冻结、未深拷贝），
+// 调用方必须当只读使用；冻结/拷贝保证只由 getMetricRevision / listMetricRevisions /
+// getMetricDefinition 提供。
 export const listMetricBindings = (source, filter) => {
   const data = readMetricPlatform(source);
   const f = filter == null ? {} : filter;
@@ -851,9 +854,10 @@ export const restoreMetricBinding = (source, bindingId, options) => {
   }
   const endpoint = bindingEndpoint(source, binding);
   if (!endpoint.present) {
+    // 损坏的旧绑定可能缺 modelRef：按端点缺失拒绝，不抛错
+    const ref = binding.modelRef == null ? null : binding.modelRef.objectId;
     return {ok: false, errors: [error('BINDING_ENDPOINT_MISSING', 'modelRef', 'metric.error.bindingEndpointMissing',
-      `binding endpoint is still missing: ${binding.modelRef.objectId}`,
-      {ref: binding.modelRef.objectId})]};
+      `binding endpoint is still missing: ${ref}`, {ref})]};
   }
   const opts = options == null ? {} : options;
   const now = opts.at || null;
@@ -863,7 +867,8 @@ export const restoreMetricBinding = (source, bindingId, options) => {
     delete next.unresolved;
     return {
       ...next,
-      events: item.events.concat([{type: 'restored', at: now, by: opts.by == null ? null : opts.by}]),
+      events: (Array.isArray(item.events) ? item.events : []).concat([{type: 'restored', at: now,
+        by: opts.by == null ? null : opts.by}]),
     };
   });
   const updated = bindings.filter(item => item.id === bindingId)[0];

@@ -219,6 +219,36 @@ test('(g) 损坏绑定缺 modelRef：不抛错，损坏元素原样保留，其�
   assert.doesNotThrow(() => api.countActiveMetricBindings(source));
 });
 
+test('(h) restore 损坏的已失效绑定：缺 events 照常复活并补出事件；缺 modelRef 返回端点缺失而不抛错', () => {
+  const invalidated = api.applyDeleteImpact(withoutField(withBindings(), ORDER_ID), {
+    collection: 'entities', objectId: ENTITY, fieldIds: [ORDER_ID],
+  });
+  const rebuilt = {...invalidated, entities: withBindings().entities};
+  const noEvents = withCorruptBinding(rebuilt, (b) => {
+    if (b.id !== 'bind-di-key') return b;
+    const next = {...b};
+    delete next.events;
+    return next;
+  });
+  let restored;
+  assert.doesNotThrow(() => { restored = api.restoreMetricBinding(noEvents, 'bind-di-key', {}); });
+  assert.equal(restored.ok, true, JSON.stringify(restored.errors));
+  assert.equal(bindingState(restored.source, 'bind-di-key'), 'suggested');
+  assert.deepEqual(restored.binding.events.map(e => e.type), ['restored']);
+  const noRef = withCorruptBinding(rebuilt, (b) => {
+    if (b.id !== 'bind-di-key') return b;
+    const next = {...b};
+    delete next.modelRef;
+    return next;
+  });
+  const before = JSON.stringify(noRef);
+  let refused;
+  assert.doesNotThrow(() => { refused = api.restoreMetricBinding(noRef, 'bind-di-key', {}); });
+  assert.equal(refused.ok, false);
+  assert.equal(refused.errors[0].code, 'BINDING_ENDPOINT_MISSING');
+  assert.equal(JSON.stringify(noRef), before);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) {
   failures.forEach(({name, error}) => console.error(`\n[${name}]\n${error && error.stack}`));

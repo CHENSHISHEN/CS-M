@@ -1,5 +1,5 @@
 // 指标存储审计（MET-03 / MET-22）：只读、纯函数、确定性顺序，从不修复或改写存储。
-// auditMetricStore(source) → {ok, issues: [{code, path}]}，ok = issues 为空。
+// auditMetricStore(source) → {ok, issues: [{code, path, reason?}]}，ok = issues 为空（reason 仅 STORE_CORRUPT）。
 // issue 码：
 // - HASH_MISMATCH：非草案修订 hash 与自身 {spec, resolvedSpec} 不符（verifyRevisionHash）；
 //   合法的旧格式 h<8hex> 不报任何 issue；
@@ -13,7 +13,8 @@
 //   revisions[mrev-1].spec.refs[0].revisionId、bindings[bind-1].metricRevisionId；
 //   对象缺 id 时以 `#<数组下标>` 代替 id（如 revisions[#3].hash）。
 // - STORE_CORRUPT：存储结构损坏（readMetricPlatform 的 __diagnostics：根/集合类型错误、元素非对象），
-//   path 为诊断路径；损坏时读取已按空/过滤处理，其余检查仅覆盖可读部分；
+//   path 为诊断路径，另带 reason（not-object / not-array / invalid-element，见 store.js）；
+//   损坏时读取已按空/过滤处理，其余检查仅覆盖可读部分；
 // 顺序：先 STORE_CORRUPT 诊断（若有），再按存储顺序逐个修订（hash → version → 各引用字段按上列顺序），再逐个绑定。
 // 注：构建链不识别 ??，使用 == null 三元。
 
@@ -37,7 +38,10 @@ export const auditMetricStore = (source) => {
   const issues = [];
   const push = (code, path) => issues.push({code, path});
   (data.__diagnostics || []).forEach((diagnostic) => {
-    push(diagnostic.code, diagnostic.path);
+    // 附带诊断 reason：集合/根级（not-array/not-object）存储只读；元素级（invalid-element）仍可写、
+    // 下次写入时被过滤的元素将被永久移除——UI 据此给出不同提示
+    issues.push(diagnostic.reason == null ? {code: diagnostic.code, path: diagnostic.path}
+      : {code: diagnostic.code, path: diagnostic.path, reason: diagnostic.reason});
   });
   const seenVersions = new Map(); // definitionId → Set(version)
 

@@ -162,10 +162,30 @@ test('(b2) 丢弃草案同时移除指向该草案的关联，审计无悬挂引
     {id: 'bind-keep', role: 'SEMANTIC_MATCH', state: 'suggested', metricRevisionId: 'mrev-dd-amount-0',
       metricDefinitionId: DEF_ID, modelRef: {collection: 'conceptEntities', objectId: 'concept-trade'}},
   ];
+  // 确认框据此提示级联移除条数（与丢弃实际移除的同一判定）
+  assert.equal(api.countDiscardDraftBindings(poked, DEF_ID), 1);
+  assert.equal(api.countDiscardDraftBindings(source, DEF_ID), 0);
+  assert.equal(api.countDiscardDraftBindings(poked, 'metric-nope'), 0);
   const discarded = ok(api.discardMetricDraft(poked, DEF_ID, {expectedRevision: 1}));
   const bindings = api.readMetricPlatform(discarded.source).bindings.map(item => item.id);
   assert.deepEqual(bindings, ['bind-keep']);
   assert.deepEqual(api.auditMetricStore(discarded.source).issues, []);
+});
+
+test('(b3) 从未发布的定义：计数含指向该定义任一版本的关联', () => {
+  const created = ok(api.createMetricDraft(fixtures.baseProject(), {
+    ...fixtures.paidAmountAtomic('metric-dd-new'), code: 'paid_amount_new', revisionId: 'mrev-dd-new',
+  }));
+  const poked = JSON.parse(JSON.stringify(created.source));
+  poked.profile.metricPlatform.bindings = [
+    {id: 'bind-new', role: 'SEMANTIC_MATCH', state: 'suggested', metricRevisionId: 'mrev-dd-new',
+      metricDefinitionId: 'metric-dd-new', modelRef: {collection: 'conceptEntities', objectId: 'concept-trade'}},
+    {id: 'bind-new-def', role: 'SEMANTIC_MATCH', state: 'suggested', metricRevisionId: 'mrev-dd-gone',
+      metricDefinitionId: 'metric-dd-new', modelRef: {collection: 'conceptEntities', objectId: 'concept-trade'}},
+  ];
+  assert.equal(api.countDiscardDraftBindings(poked, 'metric-dd-new'), 2);
+  const discarded = ok(api.discardMetricDraft(poked, 'metric-dd-new', {expectedRevision: 1}));
+  assert.deepEqual(api.readMetricPlatform(discarded.source).bindings, []);
 });
 
 test('(c) 两个版本各有下游：listDefinitionDependents 汇总两条（废弃前后一致）', () => {
@@ -222,6 +242,22 @@ test('(d2) 废弃前遗留草案仍不可发布；丢弃后基于已废弃版本
   const published = ok(api.publishMetricRevision(revive.source, 'mrev-dd-revive2', {}));
   assert.equal(published.version, '1.2');
   assert.equal(api.isDefinitionDeprecated(published.source, DEF_ID), false);
+});
+
+test('(d3) 整体废弃（无已发布版本）后的复活草案不能切换类型（SPEC 9.2）', () => {
+  const deprecated = ok(api.deprecateMetricDefinition(atomicWithV10(), DEF_ID)).source;
+  const revive = ok(api.createRevisionDraft(deprecated, DEF_ID,
+    {baseRevisionId: 'mrev-dd-amount-0', revisionId: 'mrev-dd-kind'}));
+  const before = JSON.stringify(revive.source);
+  const compound = fixtures.aovCompound('metric-dd-kind', 'amount', 'orders',
+    'mrev-dd-amount-0', 'mrev-dd-amount-0');
+  const result = api.updateMetricDraft(revive.source, 'mrev-dd-kind', {spec: compound.spec},
+    {expectedRevision: 1});
+  assert.equal(result.ok, false);
+  assert.equal(result.errors[0].code, 'INVALID_VALUE');
+  assert.equal(result.errors[0].path, 'spec.kind');
+  assert.equal(JSON.stringify(revive.source), before);
+  assert.equal(api.getMetricDefinition(revive.source, DEF_ID).definition.kind, 'atomic');
 });
 
 test('(e) 有活动草案时基于已废弃版本修订仍受 ACTIVE_DRAFT_EXISTS 保护', () => {

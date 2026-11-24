@@ -41,6 +41,9 @@ const definitionRevisions = (data, definitionId) =>
   (data.revisions || []).filter(item => item.definitionId === definitionId);
 const activeDraft = (data, definitionId) =>
   definitionRevisions(data, definitionId).filter(item => item.status === DRAFT)[0] || null;
+// 曾经发布过：存在任一非草案版本（已发布或已废弃）。整体废弃后没有 PUBLISHED，但仍算发布过
+const everPublishedDefinition = (data, definitionId) =>
+  definitionRevisions(data, definitionId).some(item => item.status !== DRAFT);
 const versionOrder = (version) => {
   const parts = String(version == null ? '0.0' : version).split('.');
   return Number(parts[0]) * 100000 + Number(parts[1] || 0);
@@ -642,10 +645,8 @@ export const updateMetricDraft = (source, revisionId, patch, options) => {
   if (conflict.length) return {ok: false, errors: conflict};
   const next = patch == null ? {} : patch;
   if (next.spec !== undefined && next.spec.kind !== revision.spec.kind) {
-    // 三类型切换只允许发生在尚无任何发布版本的新草案上（SPEC 9.2）
-    const hasPublished = definitionRevisions(data, revision.definitionId)
-      .some(item => item.status === PUBLISHED);
-    if (hasPublished) {
+    // 三类型切换只允许发生在从未发布过的新草案上（SPEC 9.2）；整体废弃后的复活草案也算发布过
+    if (everPublishedDefinition(data, revision.definitionId)) {
       return {ok: false, errors: [error('INVALID_VALUE', 'spec.kind', 'metric.error.invalidValue',
         'published-type change requires a new definition (kind switch not allowed)')]};
     }
@@ -810,6 +811,28 @@ export const deprecateMetricDefinition = (source, definitionId) => {
 // ---- 丢弃草案（MET-14）：仅删除活动草案；从未发布过的定义连同定义一并删除（释放 code）。
 // 已发布/已废弃版本不动；并发以草案 id（expectedRevisionId）+ rev/etag 前置校验（同 updateMetricDraft）。
 // 指向被删草案/定义的关联记录一并移除，不留悬挂引用（auditMetricStore 的 DANGLING_REFERENCE）。
+// 丢弃会删除的版本：发布过只删草案；从未发布则删除该定义全部版本
+const discardRemovedRevision = (data, definitionId, draft) => {
+  const removedRevisionIds = everPublishedDefinition(data, definitionId)
+    ? [draft.id]
+    : definitionRevisions(data, definitionId).map(item => item.id);
+  return id => removedRevisionIds.indexOf(id) >= 0;
+};
+// 丢弃会级联移除的关联：指向被删版本；从未发布时还包括指向该定义的任何关联
+const discardRemovesBinding = (data, definitionId, removed, binding) =>
+  removed(binding.metricRevisionId)
+  || (!everPublishedDefinition(data, definitionId) && binding.metricDefinitionId === definitionId);
+
+// 丢弃确认框用：丢弃当前活动草案将级联移除的关联条数（与 discardMetricDraft 同一判定；无草案/定义 → 0）
+export const countDiscardDraftBindings = (source, definitionId) => {
+  const data = readMetricPlatform(source);
+  const draft = activeDraft(data, definitionId);
+  if (findDefinition(data, definitionId) == null || draft == null || !Array.isArray(data.bindings)) return 0;
+  const removed = discardRemovedRevision(data, definitionId, draft);
+  return data.bindings.filter(binding => binding != null
+    && discardRemovesBinding(data, definitionId, removed, binding)).length;
+};
+
 export const discardMetricDraft = (source, definitionId, options) => {
   const data = readMetricPlatform(source);
   const guard = storeGuard(data);
@@ -833,19 +856,15 @@ export const discardMetricDraft = (source, definitionId, options) => {
   }
   const conflict = preconditionErrors(draft, options);
   if (conflict.length) return {ok: false, errors: conflict};
-  const everPublished = definitionRevisions(data, definitionId).some(item => item.status !== DRAFT);
-  const removedRevisionIds = everPublished
-    ? [draft.id]
-    : definitionRevisions(data, definitionId).map(item => item.id);
-  const removed = id => removedRevisionIds.indexOf(id) >= 0;
+  const everPublished = everPublishedDefinition(data, definitionId);
+  const removed = discardRemovedRevision(data, definitionId, draft);
   const next = {
     ...data,
     revisions: data.revisions.filter(item => !removed(item.id)),
     ...(everPublished ? {} : {definitions: data.definitions.filter(item => item.id !== definitionId)}),
   };
   if (Array.isArray(data.bindings)) {
-    next.bindings = data.bindings.filter(binding => !removed(binding.metricRevisionId)
-      && (everPublished || binding.metricDefinitionId !== definitionId));
+    next.bindings = data.bindings.filter(binding => !discardRemovesBinding(data, definitionId, removed, binding));
   }
   return {
     ok: true,

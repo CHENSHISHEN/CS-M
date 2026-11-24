@@ -129,6 +129,9 @@ export const emptyMetricDictionary = () => ({
   departments: [], dimensions: [], qualifiers: [], periods: [], units: [],
 });
 
+// 注意（R-A-F3）：内部浅归一化读取，各分类数组为新数组，但其中的元素是存储中的活引用（未冻结、未深拷贝），
+// 调用方必须当只读使用；冻结/拷贝保证只由 getMetricRevision / listMetricRevisions /
+// getMetricDefinition 提供。
 export const readMetricDictionary = (source) => {
   const data = readMetricPlatform(source);
   const dict = data.dictionary == null || typeof data.dictionary !== 'object' ? {} : data.dictionary;

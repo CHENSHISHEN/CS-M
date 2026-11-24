@@ -140,22 +140,21 @@ test('(e) 读取就绪不改已发布版本 hash，也不改 source', () => {
   assert.equal(JSON.stringify(source), snapshot);
 });
 
-test('(f) mapping 不齐 → MAPPING_INCOMPLETE（按 spec 推导必需键）', () => {
-  const source = bind(publishedAmount(), {id: 'bind-rd-part', mapping: {aggregate: 'SUM',
-    timeFieldId: 'field-paid-at'}});
+test('(f) mapping 缺时间字段 → MAPPING_INCOMPLETE；UI 可写的 aggregate+timeFieldId 即齐备', () => {
+  // R-A-F1：必需键只有 timeFieldId（UI 只能写 aggregate/timeFieldId，限定/维度/事实键暂不判定）
+  const source = bind(publishedAmount(), {id: 'bind-rd-part', mapping: {aggregate: 'SUM'}});
   const readiness = api.getMetricReadiness(source, REV);
   assert.equal(readiness.ready, false);
   assert.deepEqual(readiness.reasons, [
-    {code: 'MAPPING_INCOMPLETE', path: 'bindings[bind-rd-part].mapping.qualifierFieldIds'},
-    {code: 'MAPPING_INCOMPLETE', path: 'bindings[bind-rd-part].mapping.dimensionFieldIds'},
+    {code: 'MAPPING_INCOMPLETE', path: 'bindings[bind-rd-part].mapping.timeFieldId'},
   ]);
-  // 只要有一条 confirmed 绑定映射齐备即可（另一条不齐不拖累）
-  const both = bind(source, {id: 'bind-rd-full', mapping: fullMapping(),
+  // 只要有一条 confirmed 绑定映射齐备即可（另一条不齐不拖累）；UI 形状的映射即可就绪
+  const both = bind(source, {id: 'bind-rd-ui', mapping: {aggregate: 'SUM', timeFieldId: 'field-paid-at'},
     modelRef: {collection: 'entities', objectId: ENTITY, fieldId: 'field-order-id'}});
   assert.deepEqual(api.getMetricReadiness(both, REV), {ready: true, reasons: []});
 });
 
-test('(g) spec 不需要的映射不报缺；端点异于声明来源对象时才要求事实键', () => {
+test('(g) 限定/维度/事实键暂不要求；已写入的映射字段仍须在端点上', () => {
   // 无限定/无维度的原子：只需时间字段
   let source = fixtures.baseProject();
   const lean = fixtures.paidAmountAtomic('metric-rd-lean');
@@ -168,19 +167,35 @@ test('(g) spec 不需要的映射不报缺；端点异于声明来源对象时�
     mapping: {timeFieldId: 'field-paid-at'},
   })).source;
   assert.deepEqual(api.getMetricReadiness(source, 'mrev-rd-lean'), {ready: true, reasons: []});
-  // 绑定端点为另一张物理表：spec 的事实唯一键字段 ID 不在该表上 → 需要 factKeyFieldIds
+  // 绑定端点为另一张物理表、只映射时间字段：事实键/限定/维度暂不判定（Phase 4 映射编辑器）→ ready
   const other = bind(publishedAmount(), {id: 'bind-rd-snap',
     modelRef: {collection: 'entities', objectId: SNAPSHOT_ENTITY.id, fieldId: 'snap-amount'},
-    mapping: {timeFieldId: 'snap-paid-at', qualifierFieldIds: ['snap-status'],
-      dimensionFieldIds: ['snap-channel']}});
-  assert.deepEqual(api.getMetricReadiness(other, REV).reasons, [
-    {code: 'MAPPING_INCOMPLETE', path: 'bindings[bind-rd-snap].mapping.factKeyFieldIds'},
-  ]);
+    mapping: {timeFieldId: 'snap-paid-at'}});
+  assert.deepEqual(api.getMetricReadiness(other, REV), {ready: true, reasons: []});
+  // 已写入的可选映射键引用的字段被删（绑定尚未失效）→ 该键判不齐
   const withKeys = bind(publishedAmount(), {id: 'bind-rd-snap2',
     modelRef: {collection: 'entities', objectId: SNAPSHOT_ENTITY.id, fieldId: 'snap-amount'},
     mapping: {timeFieldId: 'snap-paid-at', qualifierFieldIds: ['snap-status'],
       dimensionFieldIds: ['snap-channel'], factKeyFieldIds: ['snap-order-id']}});
   assert.deepEqual(api.getMetricReadiness(withKeys, REV), {ready: true, reasons: []});
+  const staleKey = {...withKeys, entities: withKeys.entities.map(e => (e.id === SNAPSHOT_ENTITY.id
+    ? {...e, fields: e.fields.filter(f => f.id !== 'snap-channel')} : e))};
+  assert.deepEqual(api.getMetricReadiness(staleKey, REV).reasons, [
+    {code: 'MAPPING_INCOMPLETE', path: 'bindings[bind-rd-snap2].mapping.dimensionFieldIds'},
+  ]);
+});
+
+test('(l) confirmed 绑定端点对象已不在场 → SOURCE_MISSING @ bindings[id].modelRef', () => {
+  const source = bind(publishedAmount(), {id: 'bind-rd-gone',
+    modelRef: {collection: 'entities', objectId: SNAPSHOT_ENTITY.id, fieldId: 'snap-amount'},
+    mapping: {timeFieldId: 'snap-paid-at'}});
+  const gone = {...source, entities: source.entities.filter(e => e.id !== SNAPSHOT_ENTITY.id)};
+  assert.deepEqual(api.getMetricReadiness(gone, REV), {
+    ready: false, reasons: [{code: 'SOURCE_MISSING', path: 'bindings[bind-rd-gone].modelRef'}],
+  });
+  // 另有在场的有效绑定 → 不拖累
+  const withMain = bind(gone, {id: 'bind-rd-main', mapping: fullMapping()});
+  assert.deepEqual(api.getMetricReadiness(withMain, REV), {ready: true, reasons: []});
 });
 
 test('(h) 映射字段被删（绑定尚未失效）→ MAPPING_INCOMPLETE', () => {
@@ -237,7 +252,7 @@ test('(i) 损坏绑定（缺 modelRef/mapping/events、null 元素）不抛错',
     nullElement = api.getMetricReadiness(withNull, REV);
   });
   assert.deepEqual(codes(noRef), ['NO_CONFIRMED_BINDING']);
-  assert.deepEqual(codes(noMapping), ['MAPPING_INCOMPLETE', 'MAPPING_INCOMPLETE', 'MAPPING_INCOMPLETE']);
+  assert.deepEqual(codes(noMapping), ['MAPPING_INCOMPLETE']);
   assert.deepEqual(noEvents, {ready: true, reasons: []});
   assert.deepEqual(nullElement, {ready: true, reasons: []});
 });

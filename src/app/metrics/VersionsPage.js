@@ -1,4 +1,4 @@
-import React, {useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {FormatMessage, Message, Modal} from 'components';
 import {metricApi, runMetricCommand} from './commands';
 import {renderErrorList, renderKindBadge, renderScopeBadge, renderStatusBadge} from './parts';
@@ -18,6 +18,16 @@ const STATUS_FILTERS = ['all', 'draft', 'published', 'deprecated'];
 const AUDIT_CODES = ['HASH_MISMATCH', 'LEGACY_HASH', 'DUPLICATE_VERSION', 'DANGLING_REFERENCE',
   'STORE_CORRUPT'];
 
+// STORE_CORRUPT 按 reason 区分：元素级（invalid-element）仍可写、下次保存时损坏元素被移除；
+// 集合/根级（not-array/not-object，或无 reason）按空读取且存储只读
+const auditCodeLabelKey = (issue) => {
+  if (AUDIT_CODES.indexOf(issue.code) < 0) return 'metrics.versions.audit.code.other';
+  if (issue.code === 'STORE_CORRUPT' && issue.reason === 'invalid-element') {
+    return 'metrics.versions.audit.code.STORE_CORRUPT_ELEMENT';
+  }
+  return `metrics.versions.audit.code.${issue.code}`;
+};
+
 // M5B 引用角色业务化：英文枚举 → 中文角色（原始码留 title 次级信息）
 const ROLE_LABEL_KEYS = {
   ATOMIC_BASE: 'metrics.lineage.role.atomicBase',
@@ -31,6 +41,10 @@ const VersionsPage = ({source, commandRunner, readOnly, onOpenDefinition}) => {
   const [commandErrors, setCommandErrors] = useState([]);
   const [refsFor, setRefsFor] = useState(null); // {revisionId, code, version}
   const [auditReport, setAuditReport] = useState(null); // {ok, issues} | null（未检查）
+  // 检查结果是点击时快照：数据变化后作废，避免继续显示过期的"未发现问题"
+  useEffect(() => {
+    setAuditReport(null);
+  }, [source]);
 
   const definitionById = useMemo(() => {
     const map = {};
@@ -128,18 +142,18 @@ const VersionsPage = ({source, commandRunner, readOnly, onOpenDefinition}) => {
   const sourceLabel = (revision) => {
     if (revision.upgradedFromRevisionId != null) {
       const from = metricApi.getMetricRevision(source, revision.upgradedFromRevisionId);
-      return FormatMessage.string({id: 'metrics.versions.sourceUpgrade'},
-        {version: from && from.version ? `v${from.version}` : '—'});
+      return FormatMessage.string({id: 'metrics.versions.sourceUpgrade',
+        data: {version: from && from.version ? `v${from.version}` : '—'}});
     }
     if (revision.baseline != null) {
       const base = metricApi.getMetricRevision(source, revision.baseline.baseRevisionId);
-      return FormatMessage.string({id: 'metrics.versions.sourceBaseline'},
-        {version: base && base.version ? `v${base.version}` : '—'});
+      return FormatMessage.string({id: 'metrics.versions.sourceBaseline',
+        data: {version: base && base.version ? `v${base.version}` : '—'}});
     }
     if (revision.baseRevisionId != null) {
       const base = metricApi.getMetricRevision(source, revision.baseRevisionId);
-      return FormatMessage.string({id: 'metrics.versions.sourceRevise'},
-        {version: base && base.version ? `v${base.version}` : '—'});
+      return FormatMessage.string({id: 'metrics.versions.sourceRevise',
+        data: {version: base && base.version ? `v${base.version}` : '—'}});
     }
     if (revision.fork === true || revision.forkNote != null) {
       return FormatMessage.string({id: 'metrics.versions.sourceFork'});
@@ -180,8 +194,7 @@ const VersionsPage = ({source, commandRunner, readOnly, onOpenDefinition}) => {
             data-code={issue.code}>
             <span className='chiner-metrics-tag chiner-metrics-tag-warn'>{issue.code}</span>
             <span>
-              <FormatMessage id={AUDIT_CODES.indexOf(issue.code) >= 0
-                ? `metrics.versions.audit.code.${issue.code}` : 'metrics.versions.audit.code.other'}/>
+              <FormatMessage id={auditCodeLabelKey(issue)}/>
             </span>
             <code className='chiner-metrics-mono'>{issue.path}</code>
           </li>)}

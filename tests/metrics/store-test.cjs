@@ -72,6 +72,7 @@ test('(a) revisions="x"：读入口不抛、修订按空处理，__diagnostics �
   const {revs, publish} = exerciseReads(source);
   assert.deepEqual(revs, []);
   assert.equal(publish.ok, false);
+  assert.equal(publish.errors[0].code, 'STORE_CORRUPT');
   assert.equal(api.getMetricRevision(source, 'mrev-st-1'), null);
   const data = api.readMetricPlatform(source);
   assert.deepEqual(data.revisions, []);
@@ -87,6 +88,7 @@ test('(a) definitions={}：listMetricDefinitions 返回 []，诊断指向 defini
   const {defs, publish} = exerciseReads(source);
   assert.deepEqual(defs, []);
   assert.equal(publish.ok, false);
+  assert.equal(publish.errors[0].code, 'STORE_CORRUPT');
   const data = api.readMetricPlatform(source);
   assert.deepEqual(data.definitions, []);
   assert.deepEqual(diagPaths(data), ['profile.metricPlatform.definitions']);
@@ -127,7 +129,7 @@ test('(a) dictionary.units:[null]：字典读取与发布不抛，诊断指向 d
   platform.dictionary = {units: [null]};
   const source = withPlatform(buildStore(), platform);
   const {publish} = exerciseReads(source);
-  assert.equal(typeof publish.ok, 'boolean');
+  assert.equal(publish.ok, true, JSON.stringify(publish.errors));
   assert.deepEqual(api.listDictionaryEntries(source, 'units'), []);
   assert.deepEqual(diagPaths(api.readMetricPlatform(source)), ['profile.metricPlatform.dictionary.units[0]']);
 });

@@ -491,12 +491,19 @@ const DefinitionPage = ({source, commandRunner, readOnly, focus, onDirtyChange})
     const detail = metricApi.getMetricDefinition(latestSource(), editor.definitionId);
     const everPublished = !!detail
       && (detail.revisions || []).some(r => r.status !== 'draft');
+    // 丢弃会级联移除指向该草案（从未发布时为该定义）的关联：确认前如实告知条数
+    const removedBindings = metricApi.countDiscardDraftBindings(latestSource(), editor.definitionId);
+    const discardMessage = FormatMessage.string(everPublished
+      ? {id: 'metrics.discard.messagePublished'}
+      : {id: 'metrics.discard.messageNew',
+        data: {code: detail ? detail.definition.code : ''}});
     Modal.confirm({
       title: FormatMessage.string({id: 'metrics.discard.title'}),
-      message: FormatMessage.string(everPublished
-        ? {id: 'metrics.discard.messagePublished'}
-        : {id: 'metrics.discard.messageNew',
-          data: {code: detail ? detail.definition.code : ''}}),
+      message: removedBindings > 0 ? <div data-testid='metrics-discard-confirm'>
+        <p>{discardMessage}</p>
+        <p data-testid='metrics-discard-bindings'>{FormatMessage.string({id: 'metrics.discard.bindingsRemoved',
+          data: {count: removedBindings}})}</p>
+      </div> : discardMessage,
       onOk: () => {
         runCommand(latest => metricApi.discardMetricDraft(latest, editor.definitionId,
           {expectedRevision: editor.baseRev, expectedRevisionId: editor.revisionId}), (result) => {

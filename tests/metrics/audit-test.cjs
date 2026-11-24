@@ -249,17 +249,20 @@ test('A.7：干净库审计为空报告；结构损坏的库不抛错并返回 S
   const corrupted = withPlatform(buildStore(), {...clone(platformOf(buildStore())), revisions: 'oops'});
   const audit = api.auditMetricStore(corrupted);
   assert.equal(audit.ok, false);
+  // reason 原样带出：集合级（not-array/not-object → 只读）与元素级（invalid-element → 仍可写）UI 文案不同
   assert.deepEqual(issuesOf(audit, 'STORE_CORRUPT'),
-    [{code: 'STORE_CORRUPT', path: 'profile.metricPlatform.revisions'}]);
+    [{code: 'STORE_CORRUPT', path: 'profile.metricPlatform.revisions', reason: 'not-array'}]);
   const notObject = api.auditMetricStore({profile: 'bad'});
   assert.equal(notObject.ok, false);
-  assert.deepEqual(issuesOf(notObject, 'STORE_CORRUPT'), [{code: 'STORE_CORRUPT', path: 'profile'}]);
+  assert.deepEqual(issuesOf(notObject, 'STORE_CORRUPT'),
+    [{code: 'STORE_CORRUPT', path: 'profile', reason: 'not-object'}]);
   // 仅元素损坏：被过滤的元素也要报告
   const filtered = clone(platformOf(buildStore()));
   filtered.definitions.push(null);
   const partial = api.auditMetricStore(withPlatform(buildStore(), filtered));
   assert.equal(partial.ok, false);
   assert.equal(issuesOf(partial, 'STORE_CORRUPT')[0].path.indexOf('profile.metricPlatform.definitions['), 0);
+  assert.equal(issuesOf(partial, 'STORE_CORRUPT')[0].reason, 'invalid-element');
 });
 
 // ---------------- (f) 导入 ----------------
