@@ -1,0 +1,32 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            app/package-lock.json
+
+      # .npmrc 指向 npmmirror,GitHub runner 上改用官方 registry
+      - name: Install dependencies
+        run: npm ci --registry=https://registry.npmjs.org
+
+      # 未安装 Java:workbook-branding 会被 SKIP(原因见输出)
+      - name: Test
+        run: npm test
+
+      # 仅报告,不阻塞
+      - name: Audit (report only)
+        run: npm audit --omit=dev --registry=https://registry.npmjs.org || true

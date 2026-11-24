@@ -28,17 +28,29 @@ function load(file, imports = {}) {
 }
 // No real project templates are read: every data input below is synthetic.
 const catalog = load('src/lib/model_catalog.js');
+const conceptLinks = load('src/lib/concept_logical_links.js');
+// 以下均为无副作用的纯模块,直接加载真实实现(utils.js / datasource_util.js 的新增依赖)
+const fieldRecommendation = load('src/lib/field_recommendation.js');
+const dataStandardLibrary = load('src/lib/data_standard_library.js', {'./field_recommendation': fieldRecommendation});
+const modelRules = load('src/lib/quality/modelRules.js', {'../data_standard_library.js': dataStandardLibrary});
+const projectMetadata = load('src/lib/quality/projectMetadata.js', {'./modelRules.js': modelRules});
+const metricHash = load('src/lib/metrics/hash.js');
+const metricStore = load('src/lib/metrics/store.js', {'./hash': metricHash});
+const metricPersistence = load('src/lib/metrics/persistence.js', {'./store': metricStore, './hash': metricHash});
 const util = load('src/lib/utils.js', {
   './template/教学管理系统.pdma.json': {}, '../lang': {}, lodash, dot: {},
   '../../profile': {separator: '::'}, './string': {firstUp: s => s[0].toUpperCase() + s.slice(1)},
-  './Math': {}, './model_catalog': catalog,
+  './Math': {}, './model_catalog': catalog, './concept_logical_links': conceptLinks,
+  './quality/projectMetadata': projectMetadata, './metrics/persistence': metricPersistence,
 });
 const data = load('src/lib/datasource_util.js', {
   'lodash/object': lodash, moment: {}, components: {FormatMessage: {string: ({id}) => id}},
   './cache': {getAllTabData: () => tabs}, '../lib/template/empty.json': {},
   '../../profile': {separator: '::'}, './string': {firstUp: s => s[0].toUpperCase() + s.slice(1)},
   './update': {}, './template/教学管理系统.pdma.json': {}, './subscribe': {}, './utils': util,
-  './event_tool': {},
+  './event_tool': {}, './concept_logical_links': conceptLinks,
+  './quality/projectMetadata': projectMetadata, './metrics/persistence': metricPersistence,
+  './drawing_persistence': {drawingPersistence: {isSaved: () => true}},
 });
 const refs = load('src/app/workbench/references.js');
 const clone = value => JSON.parse(JSON.stringify(value));

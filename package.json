@@ -3,7 +3,7 @@
   "version": "0.5.0",
   "description": "CS-M - 开源数据建模工具",
   "scripts": {
-    "test": "node tests/baseline-source.cjs && node tests/project-safety.cjs && node tests/save-state.cjs && node tests/standard-regression.cjs && node tests/workbook-branding.cjs && node tests/test-drawing-platform.cjs && node tests/test-file-guard.cjs && node tests/test-chen-core.cjs && node tests/test-chen-geometry.cjs && node tests/test-chen-persistence.cjs && node tests/test-chen-recovery.cjs && node --import ./tests/esm-loader.mjs tests/test-enterprise-modeling.mjs && node --import ./tests/esm-loader.mjs tests/test-platform-ai.mjs && node tests/test-platform-host.cjs && node tests/test-metric-platform.cjs",
+    "test": "node tests/run-all.cjs",
     "electron": "electron ./src/main",
     "start": "node bin/start.js",
     "build": "node bin/build.js",
