@@ -888,6 +888,8 @@ export const markMetricBindingsUnresolved = (source, query, options) => {
   const reason = opts.reason == null ? 'ENDPOINT_MISSING' : opts.reason;
   let touched = 0;
   const bindings = bindingsOf(data).map((binding) => {
+    // 损坏元素（缺 modelRef 等）原样保留、不参与失效，不让删除路径抛错
+    if (binding == null || binding.modelRef == null) return binding;
     if (isHistorical(binding) || binding.state === 'unresolved') return binding;
     const ref = binding.modelRef;
     const objectHit = ref.objectId === query.objectId
@@ -906,7 +908,7 @@ export const markMetricBindingsUnresolved = (source, query, options) => {
         objectId: query.objectId,
         ...(query.fieldId == null ? {} : {fieldId: query.fieldId}),
       },
-      events: binding.events.concat([{
+      events: (Array.isArray(binding.events) ? binding.events : []).concat([{
         type: 'unresolved',
         at: now,
         by: opts.by == null ? null : opts.by,
@@ -964,8 +966,9 @@ export const syncMetricBindingStates = (source, options) => {
 // impact = {fieldIds, entityIds}，可选 collection / objectId 限定端点：
 //   entityIds → 对象级失效；fieldIds → 字段级失效（给 objectId 时限定该对象，
 //   未给时按绑定字段范围定位所属对象）。命中生效/建议绑定 → unresolved（保留端点快照）。
-// 无命中原样返回 source（引用相等）；存储不可写（损坏/版本不支持）同样原样返回——
-// 删除本身不因指标存储受阻（"只提示不阻止"）。同号重建不复活，须显式 restore。
+// 无命中原样返回 source（引用相等）；存储不可写（storeGuard：损坏/版本不支持）同样原样
+// 返回，单个损坏绑定元素（缺 modelRef）跳过、缺 events 按空历史补——删除本身不因指标存储
+// 受阻（"只提示不阻止"）。同号重建不复活，须显式 restore。
 export const applyDeleteImpact = (source, impact, options) => {
   const f = impact == null ? {} : impact;
   const withCollection = query => (f.collection == null ? query : {...query, collection: f.collection});
@@ -985,7 +988,8 @@ export const applyDeleteImpact = (source, impact, options) => {
     }
     const objectIds = [];
     bindingsOf(readMetricPlatform(next)).forEach((binding) => {
-      if (binding.modelRef == null || bindingFieldScope(binding).indexOf(fieldId) < 0) return;
+      if (binding == null || binding.modelRef == null
+        || bindingFieldScope(binding).indexOf(fieldId) < 0) return;
       if (objectIds.indexOf(binding.modelRef.objectId) < 0) objectIds.push(binding.modelRef.objectId);
     });
     objectIds.forEach(objectId => mark({objectId, fieldId}));
@@ -995,4 +999,5 @@ export const applyDeleteImpact = (source, impact, options) => {
 
 // 导航计数口径：只计生效/建议绑定（released 属历史、unresolved 已失效，均不计入）
 export const countActiveMetricBindings = source => bindingsOf(readMetricPlatform(source))
-  .filter(binding => binding.state !== 'released' && binding.state !== 'unresolved').length;
+  .filter(binding => binding != null && binding.state !== 'released'
+    && binding.state !== 'unresolved').length;

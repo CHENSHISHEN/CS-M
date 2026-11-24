@@ -2841,6 +2841,7 @@ projectTemplate: {
             title: 'This deletion affects {count} metric revisions',
             confirmTitle: 'Confirm deletion: metric impact found',
             note: 'Fixed-version references and binding evidence of these metric revisions are not silently modified; affected endpoints become invalid by stable ID.',
+            bindingsInvalidated: '{count} model binding(s) will be marked invalid on confirmation; if the field comes back, reconnect them manually under Metric Bindings.',
         },
         lineage: {
             title: 'Lineage & Impact',

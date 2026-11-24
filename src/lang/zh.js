@@ -2845,6 +2845,7 @@ codeKeepHint: '已确认代码保持不变：',
             title: '删除将影响 {count} 个指标版本',
             confirmTitle: '确认删除：存在指标影响',
             note: '删除后这些指标版本的固定引用与关联证据不会被静默修改，相关端点将按稳定 ID 标记失效。',
+            bindingsInvalidated: '确认后将标记 {count} 条模型关联失效；字段恢复后需在“指标关联”中手动重连。',
         },
         lineage: {
             title: '血缘与影响',

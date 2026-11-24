@@ -167,6 +167,58 @@ test('(e) 不给 objectId 时按绑定字段范围定位对象；集合不符不
   }), source);
 });
 
+// 直接改写存储里的绑定元素（模拟旧/损坏数据：普通对象但缺字段，normalize 保留、storeGuard 放行）
+const withCorruptBinding = (source, mutate) => {
+  const copy = JSON.parse(JSON.stringify(source));
+  copy.profile.metricPlatform.bindings = copy.profile.metricPlatform.bindings.map(mutate);
+  return copy;
+};
+const amountBindingOf = source => api.readMetricPlatform(source).bindings
+  .filter(b => b.id === 'bind-di-amount')[0];
+
+test('(f) 损坏绑定缺 events：不抛错，照常失效并补出事件，其余绑定不受影响', () => {
+  const source = withCorruptBinding(withBindings(), (b) => {
+    if (b.id !== 'bind-di-key') return b;
+    const next = {...b};
+    delete next.events;
+    return next;
+  });
+  let next;
+  assert.doesNotThrow(() => {
+    next = api.applyDeleteImpact(source, {collection: 'entities', objectId: ENTITY, fieldIds: [ORDER_ID]});
+  });
+  assert.equal(bindingState(next, 'bind-di-key'), 'unresolved');
+  assert.equal(bindingState(next, 'bind-di-amount'), 'unresolved');
+  const key = api.readMetricPlatform(next).bindings.filter(b => b.id === 'bind-di-key')[0];
+  assert.deepEqual(key.events.map(e => e.type), ['unresolved']);
+  // 存储其他部分不变
+  assert.deepEqual(api.readMetricPlatform(next).revisions, api.readMetricPlatform(source).revisions);
+  assert.deepEqual(api.readMetricPlatform(next).definitions, api.readMetricPlatform(source).definitions);
+});
+
+test('(g) 损坏绑定缺 modelRef：不抛错，损坏元素原样保留，其余命中绑定照常失效', () => {
+  const source = withCorruptBinding(withBindings(), (b) => {
+    if (b.id !== 'bind-di-key') return b;
+    const next = {...b};
+    delete next.modelRef;
+    return next;
+  });
+  const before = api.readMetricPlatform(source).bindings.filter(b => b.id === 'bind-di-key')[0];
+  let withObject;
+  let withoutObject;
+  assert.doesNotThrow(() => {
+    withObject = api.applyDeleteImpact(source, {collection: 'entities', objectId: ENTITY, fieldIds: [ORDER_ID]});
+    withoutObject = api.applyDeleteImpact(source, {fieldIds: [ORDER_ID], entityIds: [ENTITY]});
+  });
+  [withObject, withoutObject].forEach((next) => {
+    assert.equal(amountBindingOf(next).state, 'unresolved');
+    const corrupt = api.readMetricPlatform(next).bindings.filter(b => b.id === 'bind-di-key')[0];
+    assert.deepEqual(corrupt, before);
+    assert.deepEqual(api.readMetricPlatform(next).revisions, api.readMetricPlatform(source).revisions);
+  });
+  assert.doesNotThrow(() => api.countActiveMetricBindings(source));
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) {
   failures.forEach(({name, error}) => console.error(`\n[${name}]\n${error && error.stack}`));
