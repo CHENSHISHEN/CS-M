@@ -444,9 +444,9 @@ export const WorkbenchTopbar = React.memo(({currentPrefix, mode, isChildWindow, 
       >
         <Icon type='fa-angle-left'/>
       </button>}
-      <span className={`${currentPrefix}-wb-topbar-logo`} aria-hidden="true">P</span>
+      <span className={`${currentPrefix}-wb-topbar-logo`} aria-hidden="true">C</span>
       <span className={`${currentPrefix}-wb-topbar-namegroup`}>
-        <span className={`${currentPrefix}-wb-topbar-name`}>PDManer</span>
+        <span className={`${currentPrefix}-wb-topbar-name`}>{FormatMessage.string({id: 'workbench.brandName'})}</span>
         <span className={`${currentPrefix}-wb-topbar-label`}>WORKBENCH</span>
       </span>
       <span className={`${currentPrefix}-wb-topbar-divider`}/>

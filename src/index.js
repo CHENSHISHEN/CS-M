@@ -4,11 +4,12 @@ import { createStore, applyMiddleware } from 'redux';
 import { Provider } from 'react-redux';
 import thunkMiddleware from 'redux-thunk';
 import { logger } from 'redux-logger';
-import { Modal } from 'components';
+import { Modal, FormatMessage } from 'components';
 import Welcome from './app/welcome';
 import reducers from './reducers';
 import './style/detault.less';
 import { writeLog, showErrorLogFolder } from './lib/middle';
+import { toErrorFallbackInfo } from './lib/errorBoundaryState';
 //import { sendMessage } from './lib/electron-window-opt';
 
 const store = createStore(reducers,
@@ -28,9 +29,28 @@ const store = createStore(reducers,
     },
   ));
 
+// 兜底界面文案:语言配置可能尚未初始化,取不到时使用默认中文
+const t = (id, defaultText) => {
+  try {
+    const text = FormatMessage.string({id});
+    return text && text !== id ? text : defaultText;
+  } catch (e) {
+    return defaultText;
+  }
+};
+
 class Container extends React.Component{
+  constructor(props) {
+    super(props);
+    this.state = {error: null, logFile: ''};
+  }
+  static getDerivedStateFromError(error) {
+    // React 16 渲染异常会卸载整棵树,这里切换到兜底界面避免白屏
+    return {error: toErrorFallbackInfo(error)};
+  }
   componentDidCatch(error) {
     writeLog(error).then((file) => {
+      this.setState({logFile: file});
       Modal.error({
         title: '出错了',
         message: <span>
@@ -40,6 +60,20 @@ class Container extends React.Component{
     });
   }
   render() {
+    const { error, logFile } = this.state;
+    if (error) {
+      return <div style={{padding: 40, fontFamily: 'sans-serif'}}>
+        <h2>{t('system.errorBoundary.title', '程序出现异常')}</h2>
+        <p style={{wordBreak: 'break-all'}}>{error.message}</p>
+        {logFile && <p style={{wordBreak: 'break-all'}}>
+          {t('system.errorBoundary.logPath', '日志文件：')}
+          <a onClick={() => showErrorLogFolder(logFile)}>{logFile}</a>
+        </p>}
+        <button type='button' onClick={() => window.location.reload()}>
+          {t('system.errorBoundary.reload', '重新加载')}
+        </button>
+      </div>;
+    }
     return <Welcome store={store}/>;
   }
 }

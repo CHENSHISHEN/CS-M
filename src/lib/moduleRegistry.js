@@ -98,6 +98,11 @@ class ModuleRegistry {
     return Array.from(this.modules.values());
   }
 
+  // 可独立创建项目的模块(排除与数据建模共享项目的指标平台)
+  getProjectCreatableModules() {
+    return this.getModules().filter(m => m.sharedProject !== true);
+  }
+
   getModule(idOrKey) {
     if (!idOrKey) return null;
     if (this.modules.has(idOrKey)) {
