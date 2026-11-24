@@ -9,7 +9,7 @@ const assert = require('assert');
 const crypto = require('crypto');
 const {spawnSync} = require('child_process');
 const babel = require('@babel/core');
-const {DrawingPersistence, decode} = require(path.resolve(__dirname, '../public/drawing-persistence'));
+const {DrawingPersistence, decode, encode} = require(path.resolve(__dirname, '../public/drawing-persistence'));
 
 const root = path.resolve(__dirname, '..');
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
@@ -991,7 +991,7 @@ const lockLeftovers = dir => fs.readdirSync(dir).filter(n => n.includes('pdmaner
   });
 
   // DRW-13:日志被清空/删除后重开必须能察觉已 ACK 的命令丢失。
-  await knownFailing('DRW-13 日志被清空/删除后重开状态为 damaged(而非 saved + 0 图纸)', async dir => {
+  await ok('DRW-13 日志被清空/删除后重开状态为 damaged(而非 saved + 0 图纸)', async dir => {
     const problems = [];
     for (const mode of ['truncated', 'deleted']) {
       const sub = path.join(dir, mode);fs.mkdirSync(sub);
@@ -1012,6 +1012,179 @@ const lockLeftovers = dir => fs.readdirSync(dir).filter(n => n.includes('pdmaner
       } finally {dispose(s2);}
     }
     assert.strictEqual(problems.length, 0, `日志丢失未被察觉 → ${problems.join('; ')}`);
+  });
+
+  // DRW-13 高水位(highwater.json)的各条边界:旧会话、垃圾文件、检查点/压缩、尾部丢失、崩溃时序、repair、外部修改重置。
+  const hwSetup = async (dir, ids = ['d1', 'd2', 'd3'], extra = {}) => {
+    const file = path.join(dir, 'p.pdma.json');writeProject(file, []);
+    const store = makeStore(dir, extra);let s;
+    try {
+      await store.open(file, project([]), 'o');s = sessionOf(store, file);
+      for (const id of ids) await store.command(file, addCommand(id, `图 ${id}`, s.drawings, id), 'o');
+    } finally {dispose(store);}
+    return {file, store, sdir: s.dir, journal: s.journal, hwFile: path.join(s.dir, 'highwater.json')};
+  };
+  const readHw = hwFile => JSON.parse(fs.readFileSync(hwFile, 'utf8')).seq;
+  const reopen = async (dir, file, fn, baseline = project([])) => {
+    const store = makeStore(dir);
+    try {const state = await store.open(file, baseline, 'o');return await fn(state, store);} finally {dispose(store);}
+  };
+
+  await ok('DRW-13 每条已 ACK 的命令在应答前写入高水位;高水位只在日志 fsync 之后推进', async dir => {
+    const seen = [];let hwFile = null;
+    const beforeSync = async record => {if (hwFile && record.type === 'command') seen.push([record.seq, fs.existsSync(hwFile) ? readHw(hwFile) : 0]);};
+    const file = path.join(dir, 'p.pdma.json');writeProject(file, []);
+    const store = makeStore(dir, {beforeSync});
+    try {
+      await store.open(file, project([]), 'o');const s = sessionOf(store, file);hwFile = path.join(s.dir, 'highwater.json');
+      for (const id of ['d1', 'd2', 'd3']) {
+        const acked = await store.command(file, addCommand(id, `图 ${id}`, s.drawings, id), 'o');
+        assert.strictEqual(readHw(hwFile), acked.seq, 'ACK 时高水位已持久化为该命令的 seq');
+      }
+    } finally {dispose(store);}
+    assert.deepStrictEqual(seen, [[1, 0], [2, 1], [3, 2]], '写日志记录时高水位尚未包含该记录');
+  });
+
+  await ok('DRW-13 旧会话(无 highwater.json)正常打开,不判 damaged,并补写高水位', async dir => {
+    const {file, hwFile} = await hwSetup(dir);
+    fs.unlinkSync(hwFile);
+    await reopen(dir, file, state => {
+      assert.strictEqual(state.status, 'local');assert.strictEqual(state.seq, 3);assert.strictEqual(state.drawings.length, 3);
+    });
+    assert.strictEqual(readHw(hwFile), 3, '打开后补写高水位');
+  });
+
+  await ok('DRW-13 垃圾/非法/不可读的 highwater.json 视为 0,不报错也不判 damaged', async dir => {
+    for (const [mode, write] of [['garbage', f => fs.writeFileSync(f, '{garbage')], ['string-seq', f => fs.writeFileSync(f, '{"seq":"99"}')],
+      ['negative', f => fs.writeFileSync(f, '{"seq":-5}')], ['null', f => fs.writeFileSync(f, 'null')], ['directory', f => fs.mkdirSync(f)]]) {
+      const sub = path.join(dir, mode);fs.mkdirSync(sub);
+      const {file, hwFile} = await hwSetup(sub);
+      fs.rmSync(hwFile, {recursive: true, force: true});write(hwFile);
+      await reopen(sub, file, state => {
+        assert.strictEqual(state.status, 'local', mode);assert.strictEqual(state.seq, 3, mode);
+      });
+    }
+  });
+
+  await ok('DRW-13 检查点(压缩清空日志)后重开健康;再追加命令、删除 previous-*.log 重开仍健康', async dir => {
+    const {file, journal, sdir, hwFile} = await hwSetup(dir);
+    await reopen(dir, file, async (state, store) => {
+      assert.strictEqual((await store.flush(file, 'o')).status, 'saved');
+      assert.strictEqual(fs.statSync(journal).size, 0, '压缩后日志为空');
+    });
+    assert.strictEqual(readHw(hwFile), 3);
+    await reopen(dir, file, async (state, store) => {
+      assert.strictEqual(state.status, 'saved');assert.strictEqual(state.seq, 3);
+      await store.command(file, addCommand('d4', '图 d4', state.drawings, 'd4'), 'o');
+    });
+    for (const name of fs.readdirSync(sdir)) if (/^previous-/.test(name)) fs.unlinkSync(path.join(sdir, name));
+    await reopen(dir, file, state => {assert.strictEqual(state.status, 'local');assert.strictEqual(state.seq, 4);});
+    assert.strictEqual(readHw(hwFile), 4);
+  });
+
+  await ok('DRW-13 anchor.json 损坏时经 anchor.previous + previous-*.log 恢复,不误判日志丢失', async dir => {
+    const {file, sdir} = await hwSetup(dir);
+    await reopen(dir, file, async (state, store) => {
+      await store.flush(file, 'o');
+      await store.command(file, addCommand('d4', '图 d4', sessionOf(store, file).drawings, 'd4'), 'o');
+      await store.flush(file, 'o');  // 第二次压缩:anchor.previous 指向 seq 3 的锚点 + previous-4.log
+    });
+    fs.writeFileSync(path.join(sdir, 'anchor.json'), '{broken');
+    await reopen(dir, file, state => {
+      assert.notStrictEqual(state.status, 'damaged', `状态 ${state.status}`);assert.strictEqual(state.seq, 4);
+    });
+  });
+
+  await ok('DRW-13 检查点后 seq==anchor.seq==高水位 时日志被删除:健康(没有丢失任何已 ACK 的命令)', async dir => {
+    const {file, journal, hwFile} = await hwSetup(dir);
+    await reopen(dir, file, (state, store) => store.flush(file, 'o'));
+    fs.unlinkSync(journal);
+    await reopen(dir, file, state => {
+      assert.strictEqual(state.status, 'saved');assert.strictEqual(state.seq, 3);assert.strictEqual(state.drawings.length, 3);
+    });
+    assert.strictEqual(readHw(hwFile), 3);
+  });
+
+  await ok('DRW-13 ACK 后日志尾部丢一条记录 → damaged,目录内留诊断 JOURNAL_TRUNCATED,高水位不被降低', async dir => {
+    const {file, journal, sdir, hwFile} = await hwSetup(dir);
+    const text = fs.readFileSync(journal, 'utf8');const lines = text.split('\n').filter(Boolean);
+    fs.writeFileSync(journal, lines.slice(0, -1).map(l => `${l}\n`).join(''));
+    await reopen(dir, file, async (state, store) => {
+      assert.strictEqual(state.status, 'damaged');assert.strictEqual(state.seq, 2);
+      assert.strictEqual(codeOf((await settle(store.command(file, addCommand('d9', 'x', state.drawings, 'd9'), 'o'))).error), 'DAMAGED_JOURNAL');
+    });
+    const diag = JSON.parse(fs.readFileSync(path.join(sdir, 'diagnostic.json'), 'utf8'));
+    assert.strictEqual(diag.code, 'JOURNAL_TRUNCATED');assert.strictEqual(diag.seq, 2);assert.strictEqual(diag.highWater, 3);
+    assert.strictEqual(readHw(hwFile), 3, 'damaged 时高水位保持原值');
+    await reopen(dir, file, state => assert.strictEqual(state.status, 'damaged', '再次打开仍为 damaged'));
+  });
+
+  await ok('DRW-13 崩溃时序: 日志已追加但进程在写高水位前死亡 → 重开健康并回放该命令', async dir => {
+    const {file, journal, hwFile} = await hwSetup(dir);
+    // 模拟“第 4 条命令 fsync 进日志后、写 highwater.json 之前崩溃”:日志多一条,高水位仍为 3。
+    const {records} = decode(fs.readFileSync(journal));
+    const drawings = [drawing('d1', '图 d1'), drawing('d2', '图 d2'), drawing('d3', '图 d3')];
+    fs.appendFileSync(journal, encode({type: 'command', sessionId: records[0].sessionId, seq: 4, ...addCommand('d4', '图 d4', drawings, 'd4')}));
+    assert.strictEqual(readHw(hwFile), 3);
+    await reopen(dir, file, state => {assert.strictEqual(state.status, 'local');assert.strictEqual(state.seq, 4);});
+    assert.strictEqual(readHw(hwFile), 4, '打开后高水位追上回放的 seq');
+  });
+
+  await ok('DRW-13 崩溃时序: 日志记录写入失败(回滚)时高水位不前进,重开健康', async dir => {
+    let fail = false;
+    const writeRecord = (handle, content) => {if (fail) throw new Error('模拟写日志失败');return handle.writeFile(content);};
+    const file = path.join(dir, 'p.pdma.json');writeProject(file, []);
+    const store = makeStore(dir, {writeRecord});let hwFile;
+    try {
+      await store.open(file, project([]), 'o');const s = sessionOf(store, file);hwFile = path.join(s.dir, 'highwater.json');
+      await store.command(file, addCommand('d1', '图 d1', s.drawings, 'd1'), 'o');
+      fail = true;
+      assert((await settle(store.command(file, addCommand('d2', '图 d2', s.drawings, 'd2'), 'o'))).error, '未 ACK');
+      assert.strictEqual(readHw(hwFile), 1);
+    } finally {dispose(store);}
+    await reopen(dir, file, state => {assert.strictEqual(state.status, 'local');assert.strictEqual(state.seq, 1);});
+  });
+
+  await ok('DRW-13 repair() 修复 JOURNAL_TRUNCATED:备份证据、重开为 saved 且高水位重置为重建后的 seq', async dir => {
+    const {file, journal, sdir, hwFile} = await hwSetup(dir);
+    fs.truncateSync(journal, 0);
+    await reopen(dir, file, async (state, store) => {
+      assert.strictEqual(state.status, 'damaged');
+      const repaired = await store.repair(file, {...project([]), drawings: [drawing('d1', '恢复')]}, 'o');
+      assert.strictEqual(repaired.status, 'saved');assert.strictEqual(repaired.seq, 1);
+    });
+    assert.strictEqual(readHw(hwFile), 1, '高水位重置为重建后的 seq');
+    assert(!fs.existsSync(path.join(sdir, 'diagnostic.json')), '诊断文件移入备份');
+    const backups = fs.readdirSync(sdir).filter(n => n.startsWith('repair-backup-'));
+    assert.strictEqual(backups.length, 1);
+    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(sdir, backups[0], 'diagnostic.json'), 'utf8')).code, 'JOURNAL_TRUNCATED');
+    await reopen(dir, file, async (state, store) => {
+      assert.strictEqual(state.status, 'saved');assert.deepStrictEqual(state.drawings.map(d => d.id), ['d1']);
+      const next = await store.command(file, addCommand('d2', '图 d2', state.drawings, 'd2'), 'o');
+      assert.strictEqual(next.seq, 2);
+    });
+    assert.strictEqual(readHw(hwFile), 2);
+    await reopen(dir, file, state => assert.strictEqual(state.status, 'local'));
+  });
+
+  await ok('DRW-13 外部修改工程文件后日志重置(seq 归 0):高水位同步重置,之后重开不误判', async dir => {
+    const {file, hwFile} = await hwSetup(dir);
+    await reopen(dir, file, (state, store) => store.flush(file, 'o'));
+    const external = [drawing('x1', '外部')];writeProject(file, external);
+    await reopen(dir, file, state => {assert.strictEqual(state.status, 'saved');assert.strictEqual(state.seq, 0);}, project(external));
+    assert.strictEqual(readHw(hwFile), 0);
+    await reopen(dir, file, state => {assert.strictEqual(state.status, 'saved');assert.deepStrictEqual(state.drawings.map(d => d.id), ['x1']);}, project(external));
+  });
+
+  await ok('DRW-13 未命名会话: 日志被清空同样判 damaged', async dir => {
+    const store = makeStore(dir);let journal;
+    try {
+      await store.open('', project([]), 'o');const s = store.sessions.get('untitled:o');journal = s.journal;
+      for (const id of ['d1', 'd2']) await store.command('', addCommand(id, `图 ${id}`, s.drawings, id), 'o');
+    } finally {dispose(store);}
+    fs.truncateSync(journal, 0);
+    const s2 = makeStore(dir);
+    try {assert.strictEqual((await s2.open('', project([]), 'o')).status, 'damaged');} finally {dispose(s2);}
   });
 
   if (failures.length) {
