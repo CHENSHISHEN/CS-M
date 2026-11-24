@@ -59,7 +59,9 @@ class DrawingPersistence {
     const existing=this.sessions.get(key);if(existing){
       if(existing.owner!==owner)throw codeError('PROJECT_BUSY');await existing.queue.catch(()=>{});
       // 工程文件已不在磁盘:保留现有会话与日志,以 error 状态上报,而不是抛原始 ENOENT。
-      let current=null;if(canonical){try{current=await fs.promises.readFile(canonical);}catch(e){if(e.code!=='ENOENT')throw e;existing.lastError='PROJECT_FILE_MISSING';this.notify(this.state(existing,false));return this.state(existing);}}
+      let current=null;if(canonical){try{current=await fs.promises.readFile(canonical);}catch(e){if(e.code!=='ENOENT')throw e;
+        // 只回报、不写入 lastError:文件回来后不会留下陈旧错误(真正的未落盘失败由 flush 记录)。
+        const flag={status:'error',error:'PROJECT_FILE_MISSING'};this.notify({...this.state(existing,false),...flag});return {...this.state(existing),...flag};}}
       const changed=canonical && hash(current)!==existing.expectedHash;
       if(changed && existing.seq===existing.checkpointSeq){clearTimeout(existing.timer);clearTimeout(existing.maxTimer);this.sessions.delete(key);}
       else {if(changed)existing.conflict=true;return this.state(existing);}
@@ -143,7 +145,10 @@ class DrawingPersistence {
   async flush(file,owner='default',candidate){
     const s=this.session(file,owner);clearTimeout(s.timer);clearTimeout(s.maxTimer);s.timer=null;s.maxTimer=null;
     return this.enqueue(s,async()=>{
-      try{if(candidate || s.seq>s.checkpointSeq){const data=clone(candidate || s.baseline);await this.guardedWrite(s,data,s.seq);}this.notify(this.state(s,false));return {...this.state(s),project:clone(s.baseline)};}
+      try{if(candidate || s.seq>s.checkpointSeq){const data=clone(candidate || s.baseline);await this.guardedWrite(s,data,s.seq);}
+        // 无待写入:没有任何未落盘内容,之前遗留的 lastError(检查点提交之后的收尾失败、被拒绝的命令等)不再阻断。
+        else s.lastError='';
+        this.notify(this.state(s,false));return {...this.state(s),project:clone(s.baseline)};}
       catch(e){s.lastError=e.message;this.notify(this.state(s,false));
         // 工程文件缺失不抛:会话与日志原样保留(已 ACK 的编辑都在日志里),以 error 状态返回,恢复副本仍可导出。
         if(e.code==='PROJECT_FILE_MISSING')return this.state(s);throw e;}

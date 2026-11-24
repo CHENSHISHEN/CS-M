@@ -863,6 +863,89 @@ const lockLeftovers = dir => fs.readdirSync(dir).filter(n => n.includes('pdmaner
     } finally {dispose(store);}
   });
 
+  // 陈旧错误:文件回来 / 检查点已提交之后,无待写入的 flush 不得再报错;真正的未落盘失败仍须报错。
+  await ok('DRW-11 已落盘 → 删文件 → open(error) → 原样还原: flush 与再次 open 均为 saved,不留陈旧 PROJECT_FILE_MISSING', async dir => {
+    const {store, file, remove, real} = await missingSetup(dir, 'deleted');
+    try {
+      const original = fs.readFileSync(path.join(real, 'p.pdma.json'));
+      assert.strictEqual((await store.flush(file, 'o')).status, 'saved');
+      const saved = fs.readFileSync(path.join(real, 'p.pdma.json'));
+      remove();
+      assert.strictEqual((await store.open(file, project([]), 'o')).error, 'PROJECT_FILE_MISSING');
+      fs.writeFileSync(path.join(real, 'p.pdma.json'), saved);
+      const f = await store.flush(file, 'o');
+      assert.strictEqual(f.status, 'saved');assert.strictEqual(f.error, '');
+      const again = await store.open(file, project([]), 'o');
+      assert.strictEqual(again.status, 'saved');assert.strictEqual(again.error, '');
+      assert(original.length > 0);
+    } finally {dispose(store);}
+  });
+
+  await ok('DRW-11 渲染端: 文件缺失期间 open 后还原,flush/关闭屏障/离开工程均不抛', async dir => {
+    const {store, file, remove, real} = await missingSetup(dir, 'deleted', {owner: 'win-1'});
+    const handlers = {}, sent = [];
+    const hadWindow = 'window' in global, oldWindow = global.window, hadDocument = 'document' in global, oldDocument = global.document;
+    global.window = {dispatchEvent: () => {}};global.document = {activeElement: null};
+    try {
+      const wrapper = loadWrapper(store, {on: (channel, fn) => {handlers[channel] = fn;}, send: (channel, payload) => sent.push({channel, payload})});
+      await wrapper.open(file, project([]));
+      await wrapper.flush();
+      const saved = fs.readFileSync(path.join(real, 'p.pdma.json'));
+      remove();
+      await wrapper.open(file, project([]));
+      assert.strictEqual(wrapper.getState().status, 'error');
+      fs.writeFileSync(path.join(real, 'p.pdma.json'), saved);
+      assert.strictEqual((await wrapper.flush()).status, 'saved');
+      await handlers['drawing-before-close']({}, 'req-2');
+      assert.strictEqual(sent[0].payload.ok, true, '文件已回来且全部落盘,屏障应放行');
+      const other = path.join(real, 'other.pdma.json');writeProject(other, []);
+      await wrapper.open(other, project([]));   // leaveSession 不得抛
+    } finally {
+      if (hadWindow) global.window = oldWindow;else delete global.window;
+      if (hadDocument) global.document = oldDocument;else delete global.document;
+      dispose(store);
+    }
+  });
+
+  await ok('DRW-11 检查点提交之后的收尾失败只让当次 flush 报错,后续无待写入 flush 为 saved', async dir => {
+    let failCommit = true;
+    const writeRecord = (handle, content) => {
+      if (failCommit && content.includes('"type":"commit"')) throw new Error('模拟 commit 记录写入失败');
+      return handle.writeFile(content);
+    };
+    const file = path.join(dir, 'p.pdma.json');writeProject(file, []);
+    const store = makeStore(dir, {writeRecord});
+    try {
+      await store.open(file, project([]), 'o');
+      await store.command(file, addCommand('d1', '订单', [], 'a'), 'o');
+      const first = await settle(store.flush(file, 'o'));
+      assert(first.error, '检查点提交后的失败本次仍须报告');
+      assert.deepStrictEqual(JSON.parse(fs.readFileSync(file)).drawings.map(d => d.id), ['d1'], '检查点已写入工程文件');
+      failCommit = false;
+      const second = await store.flush(file, 'o');
+      assert.strictEqual(second.status, 'saved');assert.strictEqual(second.error, '');
+    } finally {dispose(store);}
+  });
+
+  await ok('DRW-11 真正的未落盘失败仍报 error(有待写入时不被清除)', async dir => {
+    let fail = true;
+    const writeRecord = (handle, content) => {
+      if (fail && content.includes('"type":"prepare"')) throw new Error('模拟 prepare 记录写入失败');
+      return handle.writeFile(content);
+    };
+    const file = path.join(dir, 'p.pdma.json');writeProject(file, []);
+    const store = makeStore(dir, {writeRecord});
+    try {
+      await store.open(file, project([]), 'o');
+      await store.command(file, addCommand('d1', '订单', [], 'a'), 'o');
+      assert(( await settle(store.flush(file, 'o'))).error);
+      assert(( await settle(store.flush(file, 'o'))).error, '仍有待写入,重复 flush 继续报错');
+      assert.strictEqual(store.state(store.sessions.get(store.canonical(file)), false).status, 'error');
+      fail = false;
+      assert.strictEqual((await store.flush(file, 'o')).status, 'saved');
+    } finally {dispose(store);}
+  });
+
   // 渲染端:flush 返回 status error 时发布错误状态、不触发重开循环、且对调用方(关闭屏障/返回/保存)仍是失败。
   await ok('DRW-11 渲染端: flush 遇 PROJECT_FILE_MISSING 发布 error 并抛出,不重开;commit 同样不当作已保存', async dir => {
     const {store, file, remove} = await missingSetup(dir, 'deleted', {owner: 'win-1'});
