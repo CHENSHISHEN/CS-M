@@ -116,6 +116,7 @@ const lockKinds = {
 };
 const age = (target, seconds) => {const t = new Date(Date.now() - seconds * 1000);fs.utimesSync(target, t, t);};
 const deadPid = () => {const r = spawnSync(process.execPath, ['-e', '0']);return r.pid;};
+const lockLeftovers = dir => fs.readdirSync(dir).filter(n => n.includes('pdmaner-write-lock'));
 
 // ---------- 场景 ----------
 (async () => {
@@ -449,6 +450,87 @@ const deadPid = () => {const r = spawnSync(process.execPath, ['-e', '0']);return
     }
   });
 
+  // process.kill 对超出 int32 的 PID 抛 ERR_INVALID_ARG_TYPE(不是 ESRCH):这类"可解析"的锁不能因此永久占用。
+  await ok('DRW-10a 超大/非法 PID: 解析为无法解析 → 按 mtime 规则(过期可回收、新鲜仍为忙),引擎与 guard 一致', async dir => {
+    const writeLock = require(path.resolve(root, 'public/write-lock'));
+    const guardSide = loadSrc('src/lib/project_file_guard.js');
+    const table = [
+      ['{"pid":99999999999}', null], ['{"pid":4294967296}', null], ['{"pid":2147483648}', null], ['{"pid":"99999999999"}', null],
+      ['{"pid":2147483647}', {pid: 2147483647}], ['{"pid":"abc"}', null], ['{"pid":1.5}', null], ['{"pid":-1}', null], ['{"pid":0}', null],
+    ];
+    for (const [text, want] of table) {
+      assert.deepStrictEqual(writeLock.parseLockInfo(text), want, `引擎: ${text}`);
+      assert.deepStrictEqual(guardSide.parseLockInfo(text), want, `guard: ${text}`);
+    }
+    // 第二道防线:即便调用方绕过解析直接给出超大 PID,kill 的非 ESRCH/EPERM 错误也退回 mtime 规则。
+    assert.strictEqual(writeLock.isLockStale({pid: 99999999999}, {mtimeMs: 0}, Date.now()), true);
+    assert.strictEqual(writeLock.isLockStale({pid: 99999999999}, {mtimeMs: Date.now()}, Date.now()), false);
+    const {createProjectFileGuard} = guardSide;
+    const dead = deadPid();
+    const lockTexts = {huge: '{"pid":99999999999}', int32: '{"pid":4294967296}', over: '{"pid":2147483648}', abc: '{"pid":"abc"}', frac: '{"pid":1.5}', neg: '{"pid":-1}', zero: '{"pid":0}', dead: JSON.stringify({pid: dead})};
+    const problems = [];
+    for (const [name, text] of Object.entries(lockTexts)) {
+      for (const ageSeconds of [120, 0]) {
+        const expectBusy = ageSeconds === 0 && name !== 'dead'; // 死进程的锁不论新旧都可回收
+        const sub = path.join(dir, `${name}-${ageSeconds}`);fs.mkdirSync(sub);
+        const file = path.join(sub, 'p.pdma.json');writeProject(file, []);
+        const store = makeStore(sub);
+        try {
+          await store.open(file, project([]), 'o');
+          await store.command(file, addCommand('d1', '订单', [], 'a'), 'o');
+          const lock = `${file}.pdmaner-write-lock`;fs.writeFileSync(lock, text);if (ageSeconds) age(lock, ageSeconds);
+          const r = await settle(store.flush(file, 'o'));
+          if ((codeOf(r.error) || 'ok') !== (expectBusy ? 'PROJECT_BUSY' : 'ok')) problems.push(`engine/${name}/${ageSeconds}s:${codeOf(r.error) || 'ok'}`);
+        } finally {dispose(store);}
+        const gfile = path.join(sub, 'g.json');fs.writeFileSync(gfile, JSON.stringify({a: 1}));
+        const guard = createProjectFileGuard({fs, path, hash: sha, save: async (key, data) => fs.promises.writeFile(key, JSON.stringify(data)), message: key => key});
+        guard.track(gfile, {a: 1});
+        const glock = `${gfile}.pdmaner-write-lock`;fs.writeFileSync(glock, text);if (ageSeconds) age(glock, ageSeconds);
+        const g = await settle(guard.commit(gfile, {a: 2}));
+        if ((codeOf(g.error) || 'ok') !== (expectBusy ? 'projectBusy' : 'ok')) problems.push(`guard/${name}/${ageSeconds}s:${codeOf(g.error) || 'ok'}`);
+      }
+    }
+    assert.strictEqual(problems.length, 0, `与预期不符: ${problems.join(', ')}`);
+  });
+
+  // 无稳定文件 ID 的文件系统(FAT/exFAT、部分 SMB):rename 后 ino 会变、且不支持硬链接。
+  // 用注入的 fs 模拟:回收中间文件(.reclaim-<pid>-<rand>)的 lstat 返回不同的 ino,link 一律 EPERM。
+  const unstableInodeFs = () => {
+    const shifted = st => Object.assign(Object.create(Object.getPrototypeOf(st)), st, {ino: st.ino + 7777});
+    const promises = Object.assign({}, fs.promises, {
+      lstat: async p => {const st = await fs.promises.lstat(p);return /\.reclaim-[0-9]+-[0-9a-f]+$/.test(p) ? shifted(st) : st;},
+      link: async () => {throw Object.assign(Error('EPERM: hard links not supported'), {code: 'EPERM'});},
+    });
+    return Object.assign({}, fs, {promises});
+  };
+
+  await ok('DRW-10b 无稳定 inode 的文件系统: 死进程锁仍可回收(不退化为永久忙)', async dir => {
+    const writeLock = require(path.resolve(root, 'public/write-lock'));
+    for (const [kind, prepare] of [['dead', l => fs.writeFileSync(l, JSON.stringify({pid: deadPid()}))], ['empty-old', l => {fs.writeFileSync(l, '');age(l, 120);}]]) {
+      const lock = path.join(dir, `${kind}.pdmaner-write-lock`);prepare(lock);
+      const held = await writeLock.acquireWriteLock(unstableInodeFs(), lock, {});
+      assert(held, `${kind}: 过期锁应可回收`);
+      assert.strictEqual(JSON.parse(fs.readFileSync(lock, 'utf8')).pid, process.pid);
+      await writeLock.releaseWriteLock(fs, lock, held);
+    }
+    assert.deepStrictEqual(lockLeftovers(dir), []);
+  });
+
+  await ok('DRW-10b 无稳定 inode 的文件系统: 被误搬走的他人新锁仍判为外来锁并放回(无硬链接时退回 rename)', async dir => {
+    const writeLock = require(path.resolve(root, 'public/write-lock'));
+    const lock = path.join(dir, 'x.pdmaner-write-lock');
+    fs.writeFileSync(lock, JSON.stringify({pid: deadPid()}));
+    const judged = await writeLock.inspectLock(fs, lock);
+    const winner = await writeLock.acquireWriteLock(fs, lock, {});
+    assert(winner, '胜者应获得锁');
+    const heldText = fs.readFileSync(lock, 'utf8');
+    assert.strictEqual(await writeLock.reclaimLock(unstableInodeFs(), lock, judged), 'busy');
+    assert.strictEqual(fs.readFileSync(lock, 'utf8'), heldText, '胜者的锁应被放回原路径');
+    assert.deepStrictEqual(lockLeftovers(dir), ['x.pdmaner-write-lock'], '不应遗留回收中间文件');
+    await writeLock.releaseWriteLock(fs, lock, winner);
+    assert.deepStrictEqual(lockLeftovers(dir), []);
+  });
+
   await ok('DRW-10a 基线: 存活进程持有的锁(含 mtime 已过期)不被回收', async dir => {
     const file = path.join(dir, 'p.pdma.json');writeProject(file, []);
     const store = makeStore(dir);
@@ -537,7 +619,6 @@ const deadPid = () => {const r = spawnSync(process.execPath, ['-e', '0']);return
     return {hook, within, waitAll: () => within(allArrived, '写者未全部在判定过期后到达交错点'), release: n => release[n]()};
   };
   const holdPoint = () => {let entered;let leave;const inside = new Promise(r => {entered = r;});const hold = new Promise(r => {leave = r;});return {inside, hold, entered: () => entered(), leave: () => leave()};};
-  const lockLeftovers = dir => fs.readdirSync(dir).filter(n => n.includes('pdmaner-write-lock'));
 
   await ok('DRW-10b 确定性交错(引擎): 两个写者都判定同一把锁过期后,落败者不得搬走胜者的新锁,得到 PROJECT_BUSY', async dir => {
     const file = path.join(dir, 'p.pdma.json');writeProject(file, []);

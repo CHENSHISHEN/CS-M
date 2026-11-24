@@ -13,21 +13,26 @@
    - 释放:只有锁路径仍指向自己创建的 inode 时才删除,绝不删除他人的锁。 */
 const STALE_MS = 60000;
 const RECLAIM_ROUNDS = 2;
+const MAX_PID = 2147483647; // process.kill 只接受 int32 PID,更大的值会抛 ERR_INVALID_ARG_TYPE 而不是 ESRCH
 
-// 统一 PID 解析:JSON 对象的 pid 为正安全整数,或纯数字字符串;其余一律视为无法解析。
+// 统一 PID 解析:JSON 对象的 pid 为 1..2147483647 的整数,或同范围的纯数字字符串;其余一律视为无法解析(走 mtime 规则)。
 function parseLockInfo(text) {
   let value;
   try {value = JSON.parse(String(text));} catch (e) {return null;}
   if (!value || typeof value !== 'object') return null;
   let pid = value.pid;
   if (typeof pid === 'string' && /^[0-9]+$/.test(pid)) pid = Number(pid);
-  return typeof pid === 'number' && Number.isSafeInteger(pid) && pid > 0 ? {pid} : null;
+  return typeof pid === 'number' && Number.isInteger(pid) && pid > 0 && pid <= MAX_PID ? {pid} : null;
 }
 
-// 过期判定:可解析的锁只看进程是否存在(EPERM 等视为存活);无法解析/为空的锁看 mtime 是否超过阈值。
+// 过期判定:可解析的锁看进程是否存在(ESRCH → 过期,EPERM → 存活);kill 报其他错误(无法按存活判断)
+// 与无法解析/为空的锁一样,看 mtime 是否超过阈值。
 function isLockStale(info, stat, now) {
   if (info) {
-    try {process.kill(info.pid, 0);return false;} catch (e) {return e.code === 'ESRCH';}
+    try {process.kill(info.pid, 0);return false;} catch (e) {
+      if (e.code === 'ESRCH') return true;
+      if (e.code === 'EPERM') return false;
+    }
   }
   return Boolean(stat) && now - stat.mtimeMs > STALE_MS;
 }
@@ -42,6 +47,11 @@ function lockContent(options) {
 // 同一文件对象:dev+ino 相同且 size/mtime/类型未变(inode 可能被复用,故不单看 ino;ctime 会因 rename 改变,不参与比较)。
 const sameStat = (a, b) => a.dev === b.dev && a.ino === b.ino && a.size === b.size && a.mtimeMs === b.mtimeMs && a.mode === b.mode;
 const sameLock = (a, b) => sameStat(a.stat, b.stat) && a.text === b.text;
+// rename 之后的核对不比较 ino:FAT/exFAT、部分 SMB 没有稳定的文件 ID,改名(中间名总是更长)后 ID 会变。
+// 判定是否仍是同一把锁靠 dev/类型/size/mtime/内容:他人新建的锁 pid/createdAt/mtime 必然不同,ABA 照样识别;
+// 同一路径上的复核(互斥内、rename 前)仍包含 ino。
+const sameLockAfterRename = (moved, judged) => moved.stat.dev === judged.stat.dev && moved.stat.mode === judged.stat.mode
+  && moved.stat.size === judged.stat.size && moved.stat.mtimeMs === judged.stat.mtimeMs && moved.text === judged.text;
 
 // 读取锁快照 {stat, text, info};锁已不存在返回 null;读取期间对象发生变化或无法读取返回 {unstable: true}(按忙处理)。
 // 只对普通文件读取内容(目录、符号链接、FIFO 等一律视为无法解析,不会跟随链接或阻塞)。
@@ -82,7 +92,7 @@ async function reclaimLock(fs, file, judged) {
   }
   const moved = await inspectLock(fs, aside);
   const isDirectory = Boolean(moved && moved.stat && moved.stat.isDirectory());
-  if (moved && !moved.unstable && sameLock(moved, judged)) {await discard(fs, aside, isDirectory);return 'removed';}
+  if (moved && !moved.unstable && sameLockAfterRename(moved, judged)) {await discard(fs, aside, isDirectory);return 'removed';}
   await restore(fs, aside, file, isDirectory);
   return 'busy';
 }
