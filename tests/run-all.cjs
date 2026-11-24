@@ -42,6 +42,7 @@ const TESTS = [
   {file: 'tests/test-safe-html.mjs'},
   {file: 'tests/test-safe-external.mjs'},
   {file: 'tests/test-no-raw-html.cjs'},
+  {file: 'tests/test-process-ports.mjs'},
   // gui-smoke.cjs 不纳入: 需要 playwright + Electron
 ];
 // ===== /TESTS =====
