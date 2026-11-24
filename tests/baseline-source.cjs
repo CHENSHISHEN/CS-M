@@ -49,6 +49,14 @@ for (const file of files) {
   assert(!/namespace PDManer\./.test(text), `代码模板仍生成旧产品命名空间：${path.relative(root, file)}`);
   assert(!/https?:\/\/www\.yuque\.com\/pdmaner|https?:\/\/pdmaas\.pdmaner\.com/.test(text), `外链泄露：${path.relative(root, file)}`);
 }
+// 隐私/安全：桌面窗口启用 nodeIntegration，入口 HTML 不得引入统计或任何远程脚本。
+for (const htmlFile of ['public/index.html', 'app/build/index.html']) {
+  if (!fs.existsSync(path.join(root, htmlFile))) continue;
+  const html = read(htmlFile).toString();
+  assert(!/hm\.baidu\.com/i.test(html), `入口 HTML 含百度统计脚本：${htmlFile}`);
+  assert(!/<script\b[^>]*\bsrc\s*=\s*["']?\s*(https?:)?\/\//i.test(html), `入口 HTML 含远程 <script src>：${htmlFile}`);
+  assert(!/createElement\(\s*['"]script['"]\s*\)/i.test(html), `入口 HTML 动态创建 script 标签：${htmlFile}`);
+}
 assert(pkg.dependencies['node-sql-parser'], 'node-sql-parser 核心依赖必须安装');
 assert.deepStrictEqual(pkg.build.win.target[0].arch, ['x64']);
 assert.equal(pkg.build.win.icon, 'assets/branding/app.ico');
