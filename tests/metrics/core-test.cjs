@@ -905,6 +905,21 @@ test('R1 口径不一致拒绝：基础限定不同 QUALIFIER_CONFLICT；时间�
   assert.ok(errAt(refusedRole, 'TIME_ROLE_CONFLICT'));
 });
 
+test('可再聚合：两个指标相乘不可再聚合（MET-06），指标乘常量仍可', () => {
+  const judge = (expression) => api.compoundReAggregable({expression}, () => true);
+  const product = judge('{{a}}*{{b}}');
+  assert.equal(product.reAggregable, false);
+  assert.equal(product.reason, 'PRODUCT_NOT_SUMMABLE');
+  assert.equal(judge('{{a}}*2').reAggregable, true);
+  assert.equal(judge('2*{{a}}').reAggregable, true);
+  const ratio = judge('{{a}}/{{b}}');
+  assert.equal(ratio.reAggregable, false);
+  assert.equal(ratio.reason, 'RATIO_NOT_SUMMABLE');
+  assert.equal(judge('({{a}}*{{b}})/{{c}}').reAggregable, false);
+  assert.equal(judge('({{a}}+{{b}})*{{c}}').reason, 'PRODUCT_NOT_SUMMABLE');
+  assert.equal(judge('{{a}}-{{b}}').reAggregable, true);
+});
+
 // =====================================================================
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) {
