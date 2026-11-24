@@ -235,7 +235,8 @@ export const remapMetricPlatformForReduce = (project, collections) => {
     if (!result.changed) return revision;
     const next = {...revision, spec: result.spec};
     if (next.status === 'draft') next.etag = draftEtag(next);
-    if (next.status === 'published' && sealedOk) {
+    // 非草案即已封存（published 与 deprecated 均保留发布 hash），与 convertRevisionForImport 一致
+    if (next.status !== 'draft' && sealedOk) {
       next.hash = contentHash({spec: next.spec, resolvedSpec: next.resolvedSpec});
     }
     return next;

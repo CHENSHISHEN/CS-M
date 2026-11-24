@@ -302,6 +302,56 @@ test('(f) 干净导出（sha256）往返：reduce 重映射 + 合并 ID 换新�
     .filter(i => i.code === 'HASH_MISMATCH').length, 0);
 });
 
+// 已废弃修订保留发布时封存的 hash（deprecateMetricDefinition 只改 status），
+// reduce 合法重映射其 spec.source 后同样必须重算，否则正常导入被误拒
+const renamedOrderCollections = () => {
+  const renamed = {...fixtures.orderEntity, id: 'entity-new', old: fixtures.orderEntity.id,
+    fields: fixtures.orderEntity.fields.map(f => ({...f, id: `${f.id}-new`, old: f.id}))};
+  return {entities: [renamed], logicEntities: [], conceptEntities: [],
+    sourceEntities: [fixtures.orderEntity], sourceLogicEntities: [], sourceConceptEntities: []};
+};
+const buildDeprecatedStore = () => {
+  let source = fixtures.baseProject();
+  source = ok(api.createMetricDraft(source, {
+    ...fixtures.paidAmountAtomic('metric-au-dep'), revisionId: 'mrev-au-dep-1',
+  })).source;
+  source = ok(api.publishMetricRevision(source, 'mrev-au-dep-1', {})).source;
+  return ok(api.deprecateMetricDefinition(source, 'metric-au-dep')).source;
+};
+
+test('(f) 已废弃原子经 reduce 重映射后导入成功，hash 校验通过、audit 无 HASH_MISMATCH', () => {
+  const store = buildDeprecatedStore();
+  assert.equal(api.getMetricRevision(store, 'mrev-au-dep-1').status, 'deprecated');
+  assert.deepEqual(api.auditMetricStore(store), {ok: true, issues: []});
+  const reduced = api.remapMetricPlatformForReduce(store, renamedOrderCollections());
+  const remapped = reduced.revisions.filter(r => r.id === 'mrev-au-dep-1')[0];
+  assert.equal(remapped.spec.source.modelId, 'entity-new', '确实发生了重映射');
+  assert.equal(remapped.status, 'deprecated');
+  assert.deepEqual(api.verifyRevisionHash(remapped), {ok: true, legacy: false}, '重映射后 hash 重算');
+  const result = importInto({}, {metricPlatform: reduced});
+  assert.equal((result.importDiagnostics || []).some(d => d.code === 'METRIC_IMPORT_HASH_MISMATCH'), false,
+    JSON.stringify(result.importDiagnostics));
+  assert.equal(result.revisions.length, 1, '已废弃修订随导入并入');
+  assert.equal(result.revisions[0].status, 'deprecated');
+  assert.deepEqual(api.verifyRevisionHash(result.revisions[0]), {ok: true, legacy: false});
+  assert.equal(api.auditMetricStore(withPlatform(store, result)).issues
+    .filter(i => i.code === 'HASH_MISMATCH').length, 0);
+});
+
+test('(f) 已废弃原子在重映射前被篡改 → reduce 不洗白，合并仍拒绝', () => {
+  const store = buildDeprecatedStore();
+  const platform = clone(platformOf(store));
+  platform.revisions.filter(r => r.id === 'mrev-au-dep-1')[0].spec.unit = 'USD';
+  const reduced = api.remapMetricPlatformForReduce(withPlatform(store, platform), renamedOrderCollections());
+  const remapped = reduced.revisions.filter(r => r.id === 'mrev-au-dep-1')[0];
+  assert.equal(remapped.spec.source.modelId, 'entity-new');
+  assert.equal(api.verifyRevisionHash(remapped).ok, false, '被篡改内容不得被重算 hash 洗白');
+  const result = importInto({}, {metricPlatform: reduced});
+  assert.equal((result.revisions || []).length, 0);
+  assert.equal(result.importDiagnostics[0].code, 'METRIC_IMPORT_HASH_MISMATCH');
+  assert.deepEqual(result.importDiagnostics[0].revisionIds, ['mrev-au-dep-1']);
+});
+
 test('(f) 旧格式导出（h<8hex>）仍可导入，导入后 hash 校验通过', () => {
   const legacy = toLegacyStore(buildStore());
   const result = importInto({}, {metricPlatform: clone(platformOf(legacy))});
