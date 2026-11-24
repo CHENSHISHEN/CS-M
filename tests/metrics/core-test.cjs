@@ -825,7 +825,7 @@ test('R1 快照隔离：输入/旧草案/表单引用不改变已落盘草案与
   assert.equal(stored.spec.unit, 'CNY'); // 发布快照不被旧引用改变
   assert.equal(stored.resolvedSpec.unit, 'CNY');
   assert.equal(stored.hash, hashBefore);
-  assert.equal(stored.hash, api.hashValue({spec: stored.spec, resolvedSpec: stored.resolvedSpec}));
+  assert.equal(stored.hash, api.contentHash({spec: stored.spec, resolvedSpec: stored.resolvedSpec}));
   // 修订路径同样隔离：patch.spec 写入后，表单对象再变不影响草案
   const c2 = api.createMetricDraft(project,
     {...fixtures.paidAmountAtomic('metric-iso2'), revisionId: 'mrev-iso-2'});

@@ -659,7 +659,7 @@ test('真实 reduceProject(old 模式)：指标引用与绑定端点按新 ID �
   assert(atomic.spec.source.fieldId === newAmountField.id, 'spec.source.fieldId 重绑');
   assert(atomic.spec.factGrain.uniqueKeyFieldIds[0]
     === newEntity.fields.filter(f => f.defKey === 'order_id')[0].id, 'factGrain 字段重绑');
-  assert(atomic.hash === api.hashValue({spec: atomic.spec, resolvedSpec: atomic.resolvedSpec}),
+  assert(atomic.hash === api.contentHash({spec: atomic.spec, resolvedSpec: atomic.resolvedSpec}),
     '发布 hash 按重映射后内容重算一致');
   const srcBinding = store.bindings.filter(b => b.id === 'bind-persist-src')[0];
   assert(srcBinding.modelRef.objectId === newEntity.id
@@ -922,7 +922,7 @@ test('M4A-R1 真实reduce→merge：原子spec来源/事实键沿合并集合重
   assert(importedA1.spec.factGrain.uniqueKeyFieldIds[0]
     === targetOrder.fields.filter(f => f.defKey === 'order_id')[0].id, '事实键对齐目标字段');
   assert(importedA1.resolvedSpec.computeReady === true, '物理来源重绑后保持就绪');
-  assert(importedA1.hash === api.hashValue({spec: importedA1.spec, resolvedSpec: importedA1.resolvedSpec}),
+  assert(importedA1.hash === api.contentHash({spec: importedA1.spec, resolvedSpec: importedA1.resolvedSpec}),
     '发布 hash 按转换后内容一致');
   // a2：模型未随导入——保留原端点 + unresolved 证据 + 诊断，不误绑目标同 defKey 对象
   const importedA2 = store.revisions.filter(r => r.id === 'mrev-a2')[0];
@@ -931,7 +931,7 @@ test('M4A-R1 真实reduce→merge：原子spec来源/事实键沿合并集合重
   assert(importedA2.spec.source.unresolved === true, '失效证据 unresolved 标记');
   assert(importedA2.resolvedSpec.computeReady === false
     && importedA2.resolvedSpec.designOnly === true, '导入副本不再声称计算就绪');
-  assert(importedA2.hash === api.hashValue({spec: importedA2.spec, resolvedSpec: importedA2.resolvedSpec}),
+  assert(importedA2.hash === api.contentHash({spec: importedA2.spec, resolvedSpec: importedA2.resolvedSpec}),
     '未就绪副本 hash 同步重算');
   const diagnostics = store.importDiagnostics || [];
   assert(diagnostics.some(d => d.code === 'METRIC_IMPORT_ENDPOINT_UNRESOLVED'
@@ -1022,7 +1022,7 @@ test('M4A-R1 字典冲突code级联：scope/限定/维度/粒度/单位/patch/�
     && importedPublic.resolvedSpec.grain[0] === 'dim-channel_imp'
     && importedPublic.resolvedSpec.baseQualifiers[0].dimensionId === 'dim-channel_imp',
     'resolvedSpec 单位/粒度/基础限定级联');
-  assert(importedPublic.hash === api.hashValue({spec: importedPublic.spec, resolvedSpec: importedPublic.resolvedSpec}),
+  assert(importedPublic.hash === api.contentHash({spec: importedPublic.spec, resolvedSpec: importedPublic.resolvedSpec}),
     '级联后 hash 重算一致');
   const importedDep = store.revisions.filter(r => r.id === 'mrev-src-dep')[0];
   assert(importedDep.definitionId === 'metric-src-dep'
@@ -1071,7 +1071,7 @@ test('M4A-R1 发布hash/etag重算：导入副本全部一致，目标既有与�
     if (revision.status === 'draft') {
       assert(revision.etag === api.draftEtag(revision), `导入草案 etag 重算一致 (${revision.id})`);
     } else {
-      assert(revision.hash === api.hashValue({spec: revision.spec, resolvedSpec: revision.resolvedSpec}),
+      assert(revision.hash === api.contentHash({spec: revision.spec, resolvedSpec: revision.resolvedSpec}),
         `导入发布 hash 重算一致 (${revision.id})`);
     }
     if (revision.spec.kind === 'derived') {
@@ -1123,7 +1123,7 @@ test('M4A-R1 版本数组倒序：baseline 前向引用全字段同步到换新�
   assert(importedDep.resolvedSpec.baseline.baseRevisionId === remappedCommon.to, 'resolvedSpec.baseline 同步');
   assert(importedDep.definitionId === 'metric-dep-1'
     && store.definitions.filter(d => d.id === 'metric-dep-1')[0].baseline == null, '部门定义自身并入');
-  assert(importedDep.hash === api.hashValue({spec: importedDep.spec, resolvedSpec: importedDep.resolvedSpec}),
+  assert(importedDep.hash === api.contentHash({spec: importedDep.spec, resolvedSpec: importedDep.resolvedSpec}),
     'baseline 同步后 hash 重算一致');
 });
 
@@ -1153,6 +1153,10 @@ test('M4A-R1 恰好一次映射：冲突换新ID不抢占来源原ID，前向引
         resolvedSpec: {kind: 'derived', unit: 'CNY', grain: [], qualifiers: [], computeReady: false},
         hash: 'hbbbbbbbb'},
     ]}};
+  // 导入会按来源内容校验发布 hash（MET-03）：手工夹具的占位 hash 换成按内容计算的旧格式 h<8hex>
+  sourceProfile.metricPlatform.revisions.forEach((revision) => {
+    revision.hash = api.hashValue({spec: revision.spec, resolvedSpec: revision.resolvedSpec});
+  });
   // 第一次提议 rev-b（已被来源 rev-b 原ID占用）→ 必须换 rev-c
   const proposals = ['rev-b', 'rev-c'];
   let cursor = 0;
@@ -1168,7 +1172,7 @@ test('M4A-R1 恰好一次映射：冲突换新ID不抢占来源原ID，前向引
   assert(importedB.spec.atomicRevisionId === 'rev-c', '前向引用恰好一次转换到换新后的ID');
   assert(result.revisions.filter(r => r.id === 'rev-a').length === 1, '目标同号版本原样唯一');
   [importedA, importedB].forEach(revision =>
-    assert(revision.hash === api.hashValue({spec: revision.spec, resolvedSpec: revision.resolvedSpec}),
+    assert(revision.hash === api.contentHash({spec: revision.spec, resolvedSpec: revision.resolvedSpec}),
       `hash 按转换后内容重算 (${revision.id})`));
 });
 

@@ -16,10 +16,12 @@
 //   后重算导入副本的 draft etag/发布 hash——目标既有条目与来源原文件快照不改写；
 //   两侧未知键（平台级/字典级）来源独有保留、同名冲突显式诊断不静默舍弃；
 //   目标 schemaVersion 未知源不执行、显式诊断。
+// - 发布 hash（MET-03）：来源已发布修订在任何重映射之前按自身内容校验（sha256 或旧 h<8hex>），
+//   不符则整个来源指标存储拒绝导入（METRIC_IMPORT_HASH_MISMATCH 诊断）；合法重映射后以 contentHash 重算。
 // 注：构建链不识别 ??，本文件一律使用 == null 三元。
 
 import {draftEtag} from './store';
-import {hashValue} from './hash';
+import {contentHash, hashValue, verifyRevisionHash} from './hash';
 
 export const METRIC_PLATFORM_KEY = 'metricPlatform';
 export const IMPORT_METRIC_UNKNOWN_SCHEMA = 'METRIC_IMPORT_UNKNOWN_SCHEMA';
@@ -28,6 +30,8 @@ export const IMPORT_METRIC_CODE_RENAMED = 'METRIC_IMPORT_CODE_RENAMED';
 export const IMPORT_METRIC_ID_REASSIGNED = 'METRIC_IMPORT_ID_REASSIGNED';
 export const IMPORT_METRIC_ENDPOINT_UNRESOLVED = 'METRIC_IMPORT_ENDPOINT_UNRESOLVED';
 export const IMPORT_METRIC_UNKNOWN_KEY_CONFLICT = 'METRIC_IMPORT_UNKNOWN_KEY_CONFLICT';
+// 来源已发布修订 hash 与其自身内容不符（被篡改/损坏）：整个来源指标存储拒绝导入
+export const IMPORT_METRIC_HASH_MISMATCH = 'METRIC_IMPORT_HASH_MISMATCH';
 
 // 平台级已知键（schema1 增量合同）：合并时显式处理，其余按未知键保留策略处理
 const PLATFORM_KNOWN_KEYS = ['schemaVersion', 'namespace', 'concepts', 'definitions',
@@ -224,11 +228,16 @@ export const remapMetricPlatformForReduce = (project, collections) => {
   const diagnostics = [];
   const revisions = (platform.revisions || []).map((revision) => {
     if (revision == null || revision.spec == null || revision.spec.kind !== 'atomic') return revision;
+    // 先按来源原内容校验（重映射之前）：只有校验通过的发布 hash 才随合法重映射重算；
+    // 被篡改的保留原 hash，使不一致延续到合并阶段被拒，绝不在此“洗白”（MET-03）
+    const sealedOk = verifyRevisionHash(revision).ok;
     const result = remapSpecForReduce(revision.spec, resolveObject, resolveField);
     if (!result.changed) return revision;
     const next = {...revision, spec: result.spec};
     if (next.status === 'draft') next.etag = draftEtag(next);
-    if (next.status === 'published') next.hash = hashValue({spec: next.spec, resolvedSpec: next.resolvedSpec});
+    if (next.status === 'published' && sealedOk) {
+      next.hash = contentHash({spec: next.spec, resolvedSpec: next.resolvedSpec});
+    }
     return next;
   });
   const bindings = (platform.bindings || []).map(binding =>
@@ -777,7 +786,8 @@ const convertRevisionForImport = (revision, context) => {
   if (next.status === 'draft') {
     next.etag = draftEtag(next);
   } else if (next.hash != null) {
-    next.hash = hashValue({spec: next.spec, resolvedSpec: next.resolvedSpec});
+    // 合并入口已按来源原内容校验通过（见 mergeMetricPlatformForImport），此处重算合法转换后的内容
+    next.hash = contentHash({spec: next.spec, resolvedSpec: next.resolvedSpec});
   }
   return next;
 };
@@ -810,6 +820,26 @@ export const mergeMetricPlatformForImport = ({targetProfile, sourceProfile, merg
         schemaVersion: sourcePlatform.schemaVersion,
         message: `source profile.metricPlatform schemaVersion=${sourcePlatform.schemaVersion}`
           + ' is not importable; kept in the source project only',
+      }]),
+    };
+  }
+  // 来源发布 hash 校验（任何 ID/引用重映射之前，按来源自身内容；旧 h<8hex> 用旧算法）：
+  // 任一不符 → 整个来源指标存储拒绝导入，不并入任何内容，只在目标留显式诊断（MET-03）。
+  // 目标原无指标存储时以最小空存储承载诊断，使导入通知可见（不静默丢弃）。
+  const tamperedIds = (sourcePlatform.revisions || [])
+    .filter(revision => revision != null && !verifyRevisionHash(revision).ok)
+    .map(revision => revision.id);
+  if (tamperedIds.length) {
+    const holder = targetBase != null ? targetBase : {
+      schemaVersion: 1, namespace: null, concepts: [], definitions: [], revisions: [], bindings: [],
+    };
+    return {
+      ...holder,
+      importDiagnostics: (holder.importDiagnostics || []).concat([{
+        code: IMPORT_METRIC_HASH_MISMATCH,
+        revisionIds: tamperedIds,
+        message: `source metric revision hash mismatch (${tamperedIds.join(', ')}); `
+          + 'content was modified after publish, nothing from the source metric store was imported',
       }]),
     };
   }

@@ -4,7 +4,7 @@
 // 注：构建链不识别 ??，使用 == null 三元。
 
 import {metricError, missingFieldError} from './errors';
-import {hashValue, newMetricId} from './hash';
+import {contentHash, hashValue, newMetricId} from './hash';
 import {
   draftEtag, ensureNamespace, isStoreWritable, readMetricPlatform, writeMetricPlatform,
 } from './store';
@@ -137,7 +137,8 @@ export const listMetricDefinitions = (source, filter) => {
       }
       return true;
     })
-    .map(definition => ({
+    // 返回深拷贝（MET-22）：调用方修改返回值不得改写存储内定义/修订
+    .map(definition => cloneJson({
       definition,
       publishedCount: definitionRevisions(data, definition.id)
         .filter(item => item.status === PUBLISHED).length,
@@ -150,15 +151,17 @@ export const getMetricDefinition = (source, definitionId) => {
   const data = readMetricPlatform(source);
   const definition = findDefinition(data, definitionId);
   if (definition == null) return null;
-  return {
+  return cloneJson({
     definition,
     revisions: definitionRevisions(data, definitionId),
     latestPublished: latestPublished(data, definitionId),
     draft: activeDraft(data, definitionId),
-  };
+  });
 };
 
-export const getMetricRevision = (source, revisionId) => findRevision(readMetricPlatform(source), revisionId);
+// 深拷贝返回（MET-22）：修改返回对象不影响存储，已发布快照与 hash 不会被读取方悄悄改写
+export const getMetricRevision = (source, revisionId) =>
+  cloneJson(findRevision(readMetricPlatform(source), revisionId));
 
 export const getMetricDependencies = (source, revisionId) =>
   metricDependencies(readMetricPlatform(source), revisionId);
@@ -734,7 +737,7 @@ export const publishMetricRevision = (source, revisionId, options) => {
     status: PUBLISHED,
     spec: specSnapshot,
     resolvedSpec,
-    hash: hashValue({spec: specSnapshot, resolvedSpec}),
+    hash: contentHash({spec: specSnapshot, resolvedSpec}),
     publishedAt: (options == null ? null : options.publishedAt) || null,
   };
   const revisions = data.revisions.map(item => (item.id === revisionId ? published : item));

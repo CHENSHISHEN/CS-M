@@ -2775,6 +2775,7 @@ projectTemplate: {
                 unknownKeyConflict: 'Unknown-key conflict (target kept)',
                 namespaceAdopted: 'Namespace adopted from source',
                 unknownSchema: 'Unsupported source schema',
+                hashMismatch: 'Source published content failed hash check (possibly tampered); no metrics imported',
                 other: 'Other diagnostic',
             },
             treeTitle: 'Metric system',

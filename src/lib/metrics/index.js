@@ -14,3 +14,4 @@ export * from './governance';
 export * from './binding';
 export * from './lineage';
 export * from './persistence';
+export * from './audit';
