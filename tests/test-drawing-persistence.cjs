@@ -398,7 +398,56 @@ const deadPid = () => {const r = spawnSync(process.execPath, ['-e', '0']);return
         assert.strictEqual(codeOf(r.error), 'PROJECT_BUSY');
       } finally {dispose(store);}
     });
+    // 渲染端 guard 同一基线:刚创建、尚未写入内容的锁不得被误回收。
+    await ok(`DRW-10a 基线: 新鲜的${kind === 'empty' ? '空' : '垃圾内容'}锁文件仍为 projectBusy(guard)`, async dir => {
+      const {createProjectFileGuard} = loadSrc('src/lib/project_file_guard.js');
+      const file = path.join(dir, 'g.json');fs.writeFileSync(file, JSON.stringify({a: 1}));
+      const guard = createProjectFileGuard({fs, path, hash: sha, save: async (key, data) => fs.promises.writeFile(key, JSON.stringify(data)), message: key => key});
+      guard.track(file, {a: 1});
+      const lock = `${file}.pdmaner-write-lock`;lockKinds[kind](lock);
+      const r = await settle(guard.commit(file, {a: 2}));
+      assert.strictEqual(codeOf(r.error), 'projectBusy');
+      assert(fs.existsSync(lock), '新鲜锁不应被删除');
+      assert.deepStrictEqual(JSON.parse(fs.readFileSync(file, 'utf8')), {a: 1});
+    });
   }
+
+  await ok('DRW-10a 统一 PID 解析: 引擎与 guard 共用 parseLockInfo(接受数字与数字字符串 PID)', async () => {
+    const engineSide = require(path.resolve(root, 'public/write-lock'));
+    const guardSide = loadSrc('src/lib/project_file_guard.js');
+    const cases = [
+      ['{"pid":123}', {pid: 123}], ['{"pid":"123"}', {pid: 123}], ['{"pid":123,"startTime":1,"host":"h","createdAt":2}', {pid: 123}],
+      ['{"pid":-5}', null], ['{"pid":0}', null], ['{"pid":"-5"}', null], ['{"pid":"12a"}', null], ['{"pid":1.5}', null],
+      ['{"pid":" 7"}', null], ['{}', null], ['[1]', null], ['null', null], ['', null], ['\u0000\u0001 not json {{{', null],
+    ];
+    for (const [text, want] of cases) {
+      assert.deepStrictEqual(engineSide.parseLockInfo(text), want, `引擎: ${JSON.stringify(text)}`);
+      assert.deepStrictEqual(guardSide.parseLockInfo(text), want, `guard: ${JSON.stringify(text)}`);
+    }
+  });
+
+  await ok('DRW-10a 数字字符串 PID: 死进程的锁两处都可回收,存活进程的锁两处都为忙', async dir => {
+    const dead = String(deadPid());
+    const {createProjectFileGuard} = loadSrc('src/lib/project_file_guard.js');
+    for (const [pid, busy] of [[dead, false], [String(process.pid), true]]) {
+      const sub = path.join(dir, `p${pid}`);fs.mkdirSync(sub);
+      const file = path.join(sub, 'p.pdma.json');writeProject(file, []);
+      const store = makeStore(sub);
+      try {
+        await store.open(file, project([]), 'o');
+        await store.command(file, addCommand('d1', '订单', [], 'a'), 'o');
+        fs.writeFileSync(`${file}.pdmaner-write-lock`, JSON.stringify({pid}));
+        const r = await settle(store.flush(file, 'o'));
+        assert.strictEqual(codeOf(r.error) || 'ok', busy ? 'PROJECT_BUSY' : 'ok', `引擎 pid="${pid}"`);
+      } finally {dispose(store);}
+      const gfile = path.join(sub, 'g.json');fs.writeFileSync(gfile, JSON.stringify({a: 1}));
+      const guard = createProjectFileGuard({fs, path, hash: sha, save: async (key, data) => fs.promises.writeFile(key, JSON.stringify(data)), message: key => key});
+      guard.track(gfile, {a: 1});
+      fs.writeFileSync(`${gfile}.pdmaner-write-lock`, JSON.stringify({pid}));
+      const g = await settle(guard.commit(gfile, {a: 2}));
+      assert.strictEqual(codeOf(g.error) || 'ok', busy ? 'projectBusy' : 'ok', `guard pid="${pid}"`);
+    }
+  });
 
   await ok('DRW-10a 基线: 存活进程持有的锁(含 mtime 已过期)不被回收', async dir => {
     const file = path.join(dir, 'p.pdma.json');writeProject(file, []);
@@ -414,7 +463,7 @@ const deadPid = () => {const r = spawnSync(process.execPath, ['-e', '0']);return
     } finally {dispose(store);}
   });
 
-  await knownFailing('DRW-10a 空/垃圾/目录/负 PID 且已过期的写锁可被回收(引擎 + 渲染端 guard)', async dir => {
+  await ok('DRW-10a 空/垃圾/目录/负 PID 且已过期的写锁可被回收(引擎 + 渲染端 guard)', async dir => {
     const problems = [];
     for (const kind of Object.keys(lockKinds)) {
       const sub = path.join(dir, `engine-${kind}`);fs.mkdirSync(sub);
@@ -438,16 +487,19 @@ const deadPid = () => {const r = spawnSync(process.execPath, ['-e', '0']);return
   });
 
   // DRW-10b:两个写者并发回收同一死锁,临界区必须互斥。
-  await knownFailing('DRW-10b 两个写者并发回收同一过期锁,同一时刻仅一个进入临界区(循环 30 次)', async dir => {
+  await ok('DRW-10b 两个写者并发回收同一过期锁,同一时刻仅一个进入临界区(循环 30 次)', async dir => {
     const pid = deadPid();
     const problems = [];
     for (let round = 0; round < 30; round += 1) {
       const sub = path.join(dir, `r${round}`);fs.mkdirSync(sub);
       const file = path.join(sub, 'p.pdma.json');writeProject(file, []);
-      const windows = [];
+      const windows = [];let inside = 0;let maxInside = 0;
+      // 除时间窗外再用实时计数:只要两个写者曾同时停留在临界区,maxInside 必为 2。
       const probe = name => async record => {
         if (record.type !== 'prepare') return;
+        inside += 1;maxInside = Math.max(maxInside, inside);
         const w = {name, start: Date.now()};await sleep(30);w.end = Date.now();windows.push(w);
+        inside -= 1;
       };
       const stores = ['A', 'B'].map(name => new DrawingPersistence(path.join(sub, `store-${name}`), {notify: () => {}, delay: 3600000, maxDelay: 7200000, beforeSync: probe(name)}));
       try {
@@ -458,11 +510,148 @@ const deadPid = () => {const r = spawnSync(process.execPath, ['-e', '0']);return
         fs.writeFileSync(`${file}.pdmaner-write-lock`, JSON.stringify({pid}));
         const results = await Promise.all(stores.map(s => settle(s.flush(file, 'o'))));
         const overlap = windows.length === 2 && windows[0].start < windows[1].end && windows[1].start < windows[0].end;
-        if (overlap) problems.push(`第 ${round} 轮: 两个写者同时处于临界区`);
+        if (overlap || maxInside > 1) problems.push(`第 ${round} 轮: 两个写者同时处于临界区`);
         results.forEach(r => {if (r.error && !['PROJECT_BUSY', 'PROJECT_CONFLICT'].includes(codeOf(r.error))) problems.push(`第 ${round} 轮: 落败者得到 ${codeOf(r.error)}`);});
+        if (!results.some(r => !r.error)) problems.push(`第 ${round} 轮: 死锁未被任何写者回收`);
+        if (fs.readdirSync(sub).some(n => n.includes('pdmaner-write-lock'))) problems.push(`第 ${round} 轮: 遗留锁/回收文件 ${fs.readdirSync(sub).join(',')}`);
       } finally {stores.forEach(dispose);}
     }
     assert.strictEqual(problems.length, 0, `${problems.length} 次违例,例: ${problems[0]}`);
+  });
+
+  // DRW-10b 确定性交错:onLockStale 钩子让两个写者都先读到同一把过期锁(都判定过期),
+  // 再按指定顺序逐个放行——即"慢速落败者在胜者已回收并重建新锁之后才动手"的 ABA 场景。
+  const staleGate = names => {
+    const arrived = new Set();const release = {};const gates = {};let all;
+    const allArrived = new Promise(resolve => {all = resolve;});
+    names.forEach(n => {gates[n] = new Promise(resolve => {release[n] = resolve;});});
+    const hook = name => async lockPath => {
+      if (!lockPath.endsWith('.pdmaner-write-lock')) return; // 只在主锁的过期判定处拦截
+      arrived.add(name);if (names.every(n => arrived.has(n))) all();
+      await gates[name];
+    };
+    const within = (promise, what) => {
+      let timer;const timeout = new Promise((resolve, reject) => {timer = setTimeout(() => reject(Error(`${what}(已到达: ${[...arrived].join(',') || '无'})`)), 3000);});
+      return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    };
+    return {hook, within, waitAll: () => within(allArrived, '写者未全部在判定过期后到达交错点'), release: n => release[n]()};
+  };
+  const holdPoint = () => {let entered;let leave;const inside = new Promise(r => {entered = r;});const hold = new Promise(r => {leave = r;});return {inside, hold, entered: () => entered(), leave: () => leave()};};
+  const lockLeftovers = dir => fs.readdirSync(dir).filter(n => n.includes('pdmaner-write-lock'));
+
+  await ok('DRW-10b 确定性交错(引擎): 两个写者都判定同一把锁过期后,落败者不得搬走胜者的新锁,得到 PROJECT_BUSY', async dir => {
+    const file = path.join(dir, 'p.pdma.json');writeProject(file, []);
+    const lock = `${file}.pdmaner-write-lock`;
+    const gate = staleGate(['A', 'B']);const pointA = holdPoint();
+    let inside = 0;let maxInside = 0;
+    const probe = name => async record => {
+      if (record.type !== 'prepare') return;
+      inside += 1;maxInside = Math.max(maxInside, inside);
+      if (name === 'A') {pointA.entered();await pointA.hold;}
+      inside -= 1;
+    };
+    const stores = {};
+    for (const name of ['A', 'B']) stores[name] = new DrawingPersistence(path.join(dir, `store-${name}`), {notify: () => {}, delay: 3600000, maxDelay: 7200000, beforeSync: probe(name), onLockStale: gate.hook(name)});
+    try {
+      for (const [i, name] of ['A', 'B'].entries()) {
+        await stores[name].open(file, project([]), 'o');
+        await stores[name].command(file, addCommand('d1', '订单', [], `w${i}`), 'o');
+      }
+      fs.writeFileSync(lock, JSON.stringify({pid: deadPid()}));
+      const flushA = settle(stores.A.flush(file, 'o'));const flushB = settle(stores.B.flush(file, 'o'));
+      await gate.waitAll();
+      gate.release('A');await gate.within(pointA.inside, 'A 未能回收并进入临界区');
+      const held = fs.lstatSync(lock);const heldText = fs.readFileSync(lock, 'utf8');
+      const info = JSON.parse(heldText);
+      assert.deepStrictEqual(Object.keys(info).sort(), ['createdAt', 'host', 'pid', 'startTime'], '锁内容应为 {pid, startTime, host, createdAt}');
+      assert.strictEqual(info.pid, process.pid);
+      gate.release('B');const b = await gate.within(flushB, 'B 未返回');
+      assert.strictEqual(codeOf(b.error), 'PROJECT_BUSY');
+      const after = fs.lstatSync(lock);
+      assert.strictEqual(after.ino, held.ino, '胜者的锁被替换');
+      assert.strictEqual(fs.readFileSync(lock, 'utf8'), heldText);
+      pointA.leave();const a = await flushA;
+      assert(!a.error, `胜者应保存成功: ${codeOf(a.error)}`);
+      assert.strictEqual(maxInside, 1);
+      assert.deepStrictEqual(lockLeftovers(dir), []);
+    } finally {pointA.leave();Object.values(stores).forEach(dispose);}
+  });
+
+  await ok('DRW-10b 确定性交错(guard): 两个写者都判定同一把锁过期后,落败者得到 projectBusy 且胜者的锁不变', async dir => {
+    const {createProjectFileGuard} = loadSrc('src/lib/project_file_guard.js');
+    const file = path.join(dir, 'g.json');fs.writeFileSync(file, JSON.stringify({a: 1}));
+    const lock = `${file}.pdmaner-write-lock`;
+    const gate = staleGate(['A', 'B']);const pointA = holdPoint();
+    const make = (name, save) => createProjectFileGuard({fs, path, hash: sha, message: key => key, save, onLockStale: gate.hook(name)});
+    const a = make('A', async (key, data) => {pointA.entered();await pointA.hold;await fs.promises.writeFile(key, JSON.stringify(data));});
+    const b = make('B', async () => {throw Error('落败者不应进入临界区');});
+    a.track(file, {a: 1});b.track(file, {a: 1});
+    fs.writeFileSync(lock, JSON.stringify({pid: deadPid()}));
+    try {
+      const pa = settle(a.commit(file, {a: 2}));const pb = settle(b.commit(file, {a: 3}));
+      await gate.waitAll();
+      gate.release('A');await gate.within(pointA.inside, 'A 未能回收并进入临界区');
+      const held = fs.lstatSync(lock);const heldText = fs.readFileSync(lock, 'utf8');
+      assert.deepStrictEqual(Object.keys(JSON.parse(heldText)).sort(), ['createdAt', 'host', 'pid', 'startTime']);
+      gate.release('B');const rb = await gate.within(pb, 'B 未返回');
+      assert.strictEqual(codeOf(rb.error), 'projectBusy');
+      assert.strictEqual(fs.lstatSync(lock).ino, held.ino, '胜者的锁被替换');
+      assert.strictEqual(fs.readFileSync(lock, 'utf8'), heldText);
+      pointA.leave();const ra = await pa;
+      assert(!ra.error, `胜者应保存成功: ${codeOf(ra.error)}`);
+      assert.deepStrictEqual(JSON.parse(fs.readFileSync(file, 'utf8')), {a: 2});
+      assert.deepStrictEqual(lockLeftovers(dir), []);
+    } finally {pointA.leave();}
+  });
+
+  await ok('DRW-10b ABA 兜底: 越过回收互斥的慢速落败者若搬走了胜者的新锁,原子放回并返回忙,不删除胜者的锁', async dir => {
+    const writeLock = require(path.resolve(root, 'public/write-lock'));
+    const lock = path.join(dir, 'x.pdmaner-write-lock');
+    fs.writeFileSync(lock, JSON.stringify({pid: deadPid()}));
+    const judged = await writeLock.inspectLock(fs, lock); // 落败者 B 读到并判定过期
+    assert(writeLock.isLockStale(judged.info, judged.stat, Date.now()));
+    const winner = await writeLock.acquireWriteLock(fs, lock, {}); // 胜者 A 回收旧锁并持有新锁(inode 可能被复用)
+    assert(winner, '胜者应获得锁');
+    const held = fs.lstatSync(lock);const heldText = fs.readFileSync(lock, 'utf8');
+    // 最坏交错:B 直接对路径执行 rename 回收(模拟回收互斥失效)。
+    assert.strictEqual(await writeLock.reclaimLock(fs, lock, judged), 'busy');
+    assert.strictEqual(fs.lstatSync(lock).ino, held.ino, '胜者的锁应被原子放回原路径');
+    assert.strictEqual(fs.readFileSync(lock, 'utf8'), heldText);
+    assert.deepStrictEqual(lockLeftovers(dir), ['x.pdmaner-write-lock'], '不应遗留回收中间文件');
+    await writeLock.releaseWriteLock(fs, lock, winner);
+    assert.deepStrictEqual(lockLeftovers(dir), []);
+  });
+
+  await ok('DRW-10b 释放只删除自己的锁: 锁路径已被换成他人的锁时,持有者释放不删除它', async dir => {
+    const writeLock = require(path.resolve(root, 'public/write-lock'));
+    const lock = path.join(dir, 'x.pdmaner-write-lock');
+    const mine = await writeLock.acquireWriteLock(fs, lock, {});
+    fs.renameSync(lock, path.join(dir, 'stolen'));fs.writeFileSync(lock, JSON.stringify({pid: process.pid, createdAt: Date.now()}));
+    await writeLock.releaseWriteLock(fs, lock, mine);
+    assert(fs.existsSync(lock), '他人的锁不应被删除');
+  });
+
+  await ok('DRW-10b 回收互斥: 崩溃遗留的过期互斥文件可回收;新鲜的互斥文件(他人正在回收)使本次写入为 PROJECT_BUSY', async dir => {
+    for (const [mutexAge, busy] of [[120, false], [0, true]]) {
+      const sub = path.join(dir, `m${mutexAge}`);fs.mkdirSync(sub);
+      const file = path.join(sub, 'p.pdma.json');writeProject(file, []);
+      const store = makeStore(sub);
+      const lock = `${file}.pdmaner-write-lock`;
+      try {
+        await store.open(file, project([]), 'o');
+        await store.command(file, addCommand('d1', '订单', [], 'a'), 'o');
+        fs.writeFileSync(lock, JSON.stringify({pid: deadPid()}));
+        fs.writeFileSync(`${lock}.reclaim-mutex`, '');if (mutexAge) age(`${lock}.reclaim-mutex`, mutexAge);
+        const r = await settle(store.flush(file, 'o'));
+        if (busy) {
+          assert.strictEqual(codeOf(r.error), 'PROJECT_BUSY');
+          assert.deepStrictEqual(lockLeftovers(sub).sort(), ['p.pdma.json.pdmaner-write-lock', 'p.pdma.json.pdmaner-write-lock.reclaim-mutex']);
+        } else {
+          assert(!r.error, `应回收成功: ${codeOf(r.error)}`);
+          assert.deepStrictEqual(lockLeftovers(sub), []);
+        }
+      } finally {dispose(store);}
+    }
   });
 
   // DRW-11:工程文件被删除/移动。

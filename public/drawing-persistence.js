@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const schema = require('./drawing-document');
+const writeLock = require('./write-lock');
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const bytes = value => JSON.stringify(value, null, 2);
 const clone = schema.clone;
@@ -36,7 +37,9 @@ const applyDelta = (drawings, delta) => {
   return order.map(v=>map.get(v));
 };
 class DrawingPersistence {
-  constructor(root, options={}) {this.root=root;this.sessions=new Map();this.notify=options.notify || (()=>{});this.writeRecord=options.writeRecord || ((handle,content)=>handle.writeFile(content));this.beforeSync=options.beforeSync || (async()=>{});this.delay=options.delay == null?750:options.delay;this.maxDelay=options.maxDelay || 3000;}
+  constructor(root, options={}) {this.root=root;this.sessions=new Map();this.notify=options.notify || (()=>{});this.writeRecord=options.writeRecord || ((handle,content)=>handle.writeFile(content));this.beforeSync=options.beforeSync || (async()=>{});this.delay=options.delay == null?750:options.delay;this.maxDelay=options.maxDelay || 3000;
+    // onLockStale: test-only interleaving hook awaited after a write lock is judged stale, before reclaiming it.
+    this.lockOptions={onStale:options.onLockStale};}
   canonical(file){if(!file)return '';const full=path.resolve(file);return fs.realpathSync(full);}
   enqueue(s, operation){const next=s.queue.catch(()=>{}).then(operation);s.queue=next;return next;}
   async append(s, record){await this.beforeSync(record);const h=await fs.promises.open(s.journal,'a');try{const initial=(await h.stat()).size;try{const content=encode(record);await this.writeRecord(h,content);await h.sync();s.logBytes=initial+Buffer.byteLength(content);}catch(e){try{await h.truncate(initial);await h.sync();}catch(rollbackError){s.corrupt=true;}throw e;}}finally{await h.close();}}
@@ -97,12 +100,11 @@ class DrawingPersistence {
   async guardedWrite(s, data, seq){
     if(!s.file)return;
     if(s.conflict)throw codeError('PROJECT_CONFLICT');if(s.corrupt)throw codeError('DAMAGED_JOURNAL');
-    const lock=`${s.file}.pdmaner-write-lock`;let h;
+    // Shared lock protocol (write-lock.js): content {pid,startTime,host,createdAt}, stale = dead PID or
+    // unparsable and older than 60s, serialized rename-based reclaim; any lost race is PROJECT_BUSY.
+    const lock=`${s.file}.pdmaner-write-lock`;let held;
     try{
-      try{h=await fs.promises.open(lock,'wx');}catch(e){if(e.code!=='EEXIST')throw e;
-        let dead=false;try{const info=JSON.parse(await fs.promises.readFile(lock,'utf8'));if(info.pid>0){try{process.kill(info.pid,0);}catch(err){dead=err.code==='ESRCH';}}}catch(err){}
-        if(!dead)throw codeError('PROJECT_BUSY');await fs.promises.unlink(lock);h=await fs.promises.open(lock,'wx');}
-      await h.writeFile(bytes({pid:process.pid}));
+      held=await writeLock.acquireWriteLock(fs,lock,this.lockOptions);if(!held)throw codeError('PROJECT_BUSY');
       const current=await fs.promises.readFile(s.file);if(hash(current)!==s.expectedHash){s.conflict=true;throw codeError('PROJECT_CONFLICT');}
       const target={...clone(data),drawings:clone(s.drawings),profile:{...data.profile,drawingPersistence:{journalId:s.sessionId,lastAppliedSeq:seq}}};
       const content=bytes(target),targetFileHash=hash(content);
@@ -114,7 +116,7 @@ class DrawingPersistence {
       const old=(await fs.promises.readdir(versions)).sort();for(const name of old.slice(0,-20))await fs.promises.unlink(path.join(versions,name));
       await this.compact(s,target,seq);
       s.lastError='';return target;
-    }finally{if(h){await h.close();await fs.promises.unlink(lock).catch(()=>{});}}
+    }finally{if(held)await writeLock.releaseWriteLock(fs,lock,held);}
   }
   async compact(s,target,seq){
     const previousAnchor=JSON.parse(await fs.promises.readFile(s.anchorFile,'utf8'));
