@@ -57,6 +57,7 @@ const TESTS = [
   {file: 'tests/metrics/delete-impact-test.cjs'},
   {file: 'tests/metrics/readiness-test.cjs'},
   {file: 'tests/test-navigation-guard.cjs'},
+  {file: 'tests/test-drawing-persistence.cjs'},
   // gui-smoke.cjs 不纳入: 需要 playwright + Electron
 ];
 // ===== /TESTS =====
