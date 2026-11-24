@@ -53,6 +53,7 @@ const TESTS = [
   {file: 'tests/metrics/dict-link-test.cjs'},
   {file: 'tests/metrics/store-test.cjs'},
   {file: 'tests/metrics/expression-limits-test.cjs'},
+  {file: 'tests/metrics/discard-deprecate-test.cjs'},
   {file: 'tests/test-navigation-guard.cjs'},
   // gui-smoke.cjs 不纳入: 需要 playwright + Electron
 ];

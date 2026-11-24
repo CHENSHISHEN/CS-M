@@ -7,8 +7,9 @@ import {shortHashLabel} from '../../lib/metrics/hash';
 // 指标平台 M3B：版本与变更页（替换 PendingPage）。
 // - 全部定义的真实版本记录（草案/已发布/已废弃），来源标注（新定义/修订/部门基线/升级/分叉）；
 // - 已发布历史 hash 只读展示（发布时固化，不可变）；
-// - 从版本修订 = createRevisionDraft（新草案，不改动旧版本）；废弃为定义级，确认时给出
-//   下游引用影响提示（listRevisionDependents，含部门基线/复合操作数/派生原子基）；
+// - 从版本修订 = createRevisionDraft（新草案，不改动旧版本）；已废弃版本也可修订（决策 D2：
+//   修订发布后定义级废弃自动解除）；废弃为定义级，确认时列出该定义全部版本的下游引用
+//   （listDefinitionDependents，含部门基线/复合操作数/派生原子基）；
 // - 本页不渲染假数据、不做服务端审批；本地确认发布不等于审核通过。
 
 const STATUS_FILTERS = ['all', 'draft', 'published', 'deprecated'];
@@ -65,7 +66,8 @@ const VersionsPage = ({source, commandRunner, readOnly, onOpenDefinition}) => {
   const reviseFrom = (row) => {
     Modal.confirm({
       title: FormatMessage.string({id: 'metrics.versions.revise'}),
-      message: FormatMessage.string({id: 'metrics.versions.reviseConfirm'}),
+      message: FormatMessage.string({id: row.revision.status === 'deprecated'
+        ? 'metrics.versions.reviseDeprecatedConfirm' : 'metrics.versions.reviseConfirm'}),
       onOk: () => {
         runVersion(latest => metricApi.createRevisionDraft(latest,
           row.definition.id, {baseRevisionId: row.revision.id}), (result) => {
@@ -76,12 +78,29 @@ const VersionsPage = ({source, commandRunner, readOnly, onOpenDefinition}) => {
     });
   };
 
+  // 废弃是定义级：确认框汇总该定义全部版本的下游引用并逐条列出（而非只看当前行版本）
   const deprecate = (row) => {
-    const dependents = metricApi.listRevisionDependents(source, row.revision.id);
+    const dependents = metricApi.listDefinitionDependents(source, row.definition.id);
+    const draftLabel = FormatMessage.string({id: 'metrics.status.draft'});
     Modal.confirm({
       title: FormatMessage.string({id: 'metrics.versions.deprecateTitle'}),
-      message: FormatMessage.string({id: 'metrics.versions.deprecateMessage',
-        data: {count: dependents.length}}),
+      message: <div data-testid='metrics-version-deprecate-confirm'>
+        <p>{FormatMessage.string({id: 'metrics.versions.deprecateMessage',
+          data: {count: dependents.length}})}</p>
+        {dependents.length > 0 && <ul className='chiner-metrics-deplist'>
+          {dependents.map(dep => <li key={dep.revisionId}>
+            {FormatMessage.string({
+              id: 'metrics.versions.deprecateDependent',
+              data: {
+                name: dep.definitionName,
+                code: dep.definitionCode,
+                version: dep.version ? `v${dep.version}` : draftLabel,
+                targets: dep.targetVersions.map(v => (v ? `v${v}` : draftLabel)).join(', '),
+              },
+            })}
+          </li>)}
+        </ul>}
+      </div>,
       onOk: () => {
         runVersion(latest => metricApi.deprecateMetricDefinition(latest, row.definition.id));
       },
@@ -195,26 +214,24 @@ const VersionsPage = ({source, commandRunner, readOnly, onOpenDefinition}) => {
             <td><span className='chiner-metrics-muted'>{sourceLabel(row.revision)}</span></td>
             <td>
               <div className='chiner-metrics-cell-actions'>
-                {row.revision.status === 'published' && <>
-                  <button
-                    type='button'
-                    className='chiner-metrics-btn'
-                    data-testid='metrics-version-revise'
-                    disabled={readOnly}
-                    onClick={() => reviseFrom(row)}
-                  >
-                    <FormatMessage id='metrics.versions.revise'/>
-                  </button>
-                  <button
-                    type='button'
-                    className='chiner-metrics-btn chiner-metrics-btn-danger'
-                    data-testid='metrics-version-deprecate'
-                    disabled={readOnly}
-                    onClick={() => deprecate(row)}
-                  >
-                    <FormatMessage id='metrics.versions.deprecate'/>
-                  </button>
-                </>}
+                {(row.revision.status === 'published' || row.revision.status === 'deprecated') && <button
+                  type='button'
+                  className='chiner-metrics-btn'
+                  data-testid='metrics-version-revise'
+                  disabled={readOnly}
+                  onClick={() => reviseFrom(row)}
+                >
+                  <FormatMessage id='metrics.versions.revise'/>
+                </button>}
+                {row.revision.status === 'published' && <button
+                  type='button'
+                  className='chiner-metrics-btn chiner-metrics-btn-danger'
+                  data-testid='metrics-version-deprecate'
+                  disabled={readOnly}
+                  onClick={() => deprecate(row)}
+                >
+                  <FormatMessage id='metrics.versions.deprecate'/>
+                </button>}
                 {row.revision.status === 'draft' && <button
                   type='button'
                   className='chiner-metrics-btn'

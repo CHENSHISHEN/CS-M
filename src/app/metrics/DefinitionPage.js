@@ -485,6 +485,35 @@ const DefinitionPage = ({source, commandRunner, readOnly, focus, onDirtyChange})
     });
   };
 
+  // 丢弃草案（MET-14）：从未发布的定义连同定义删除（释放 code），已发布过的只删草案；
+  // 用加载时的 rev 做并发前置校验，冲突时由既有冲突提示引导重载
+  const discardDraft = () => {
+    const detail = metricApi.getMetricDefinition(latestSource(), editor.definitionId);
+    const everPublished = !!detail
+      && (detail.revisions || []).some(r => r.status !== 'draft');
+    Modal.confirm({
+      title: FormatMessage.string({id: 'metrics.discard.title'}),
+      message: FormatMessage.string(everPublished
+        ? {id: 'metrics.discard.messagePublished'}
+        : {id: 'metrics.discard.messageNew',
+          data: {code: detail ? detail.definition.code : ''}}),
+      onOk: () => {
+        runCommand(latest => metricApi.discardMetricDraft(latest, editor.definitionId,
+          {expectedRevision: editor.baseRev}), (result) => {
+          const after = metricApi.getMetricDefinition(result.source, editor.definitionId);
+          const remain = after == null ? null
+            : (after.latestPublished
+              || (after.revisions || []).filter(r => r.status === 'deprecated')[0]);
+          setEditor(remain
+            ? {phase: 'view', definitionId: editor.definitionId, revisionId: remain.id}
+            : null);
+          setValidation(null);
+          Message.success({title: FormatMessage.string({id: 'metrics.notice.draftDiscarded'})});
+        });
+      },
+    });
+  };
+
   const deprecateDefinition = () => {
     Modal.confirm({
       title: FormatMessage.string({id: 'metrics.deprecate.title'}),
@@ -1300,6 +1329,15 @@ const DefinitionPage = ({source, commandRunner, readOnly, focus, onDirtyChange})
                 >
                   <FormatMessage id='metrics.editor.publish'/>
                 </button>
+                <button
+                  type='button'
+                  className='chiner-metrics-btn chiner-metrics-btn-danger'
+                  data-testid='metrics-discard-draft'
+                  disabled={readOnly}
+                  onClick={discardDraft}
+                >
+                  <FormatMessage id='metrics.editor.discardDraft'/>
+                </button>
               </>}
             </span>
           </div>
@@ -1389,27 +1427,26 @@ const DefinitionPage = ({source, commandRunner, readOnly, focus, onDirtyChange})
         >
           <FormatMessage id='metrics.editor.backList'/>
         </button>
-        {revision.status === 'published' && !readOnly && <>
-          <button
-            type='button'
-            className='chiner-metrics-btn'
-            data-testid='metrics-revise'
-            disabled={!!detail.draft}
-            title={detail.draft
-              ? FormatMessage.string({id: 'metrics.view.activeDraftExists'}) : undefined}
-            onClick={reviseDraft}
-          >
-            <FormatMessage id='metrics.view.revise'/>
-          </button>
-          <button
-            type='button'
-            className='chiner-metrics-btn chiner-metrics-btn-danger'
-            data-testid='metrics-deprecate'
-            onClick={deprecateDefinition}
-          >
-            <FormatMessage id='metrics.view.deprecate'/>
-          </button>
-        </>}
+        {/* 决策 D2：已废弃版本也可修订，修订发布后定义级废弃自动解除 */}
+        {(revision.status === 'published' || revision.status === 'deprecated') && !readOnly && <button
+          type='button'
+          className='chiner-metrics-btn'
+          data-testid='metrics-revise'
+          disabled={!!detail.draft}
+          title={detail.draft
+            ? FormatMessage.string({id: 'metrics.view.activeDraftExists'}) : undefined}
+          onClick={reviseDraft}
+        >
+          <FormatMessage id='metrics.view.revise'/>
+        </button>}
+        {revision.status === 'published' && !readOnly && <button
+          type='button'
+          className='chiner-metrics-btn chiner-metrics-btn-danger'
+          data-testid='metrics-deprecate'
+          onClick={deprecateDefinition}
+        >
+          <FormatMessage id='metrics.view.deprecate'/>
+        </button>}
       </div>
     </header>
 
