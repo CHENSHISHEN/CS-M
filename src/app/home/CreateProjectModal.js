@@ -156,7 +156,7 @@ export default React.memo(({
                   <span className='required'>*</span> <FormatMessage id='home.projectLocation' />
                 </label>
                 <PathSelectInput
-                  placeholder={FormatMessage.string({ id: 'project.path.placeholder' })}
+                  placeholder={FormatMessage.string({ id: 'home.projectLocationPlaceholder' })}
                   title={FormatMessage.string({ id: 'home.selectDir' })}
                   value={dirPath}
                   onChange={(val) => setDirPath(val)}
