@@ -86,6 +86,18 @@ function resolveRequestURL(baseURL, protocol, explicitPath) {
   return new URL(basePath + defaultPath, base); // origin / 网关前缀：追加完整默认 endpoint
 }
 
+/**
+ * AI-01：凭据绑定的 endpoint 身份 = protocol + baseURL + 显式 path（均取归一化后的值）。
+ * baseURL 已由 config.js 经 URL 解析归一（scheme/host 小写、默认端口、根斜杠）；
+ * 这里再剥除 pathname 末尾斜杠 —— resolveRequestURL 同样剥除，故 /v1 与 /v1/ 实际出网地址相同。
+ * 不同 host 字面量（127.0.0.1 vs localhost）按不同 endpoint 处理（保守）。
+ */
+function endpointIdentity(config) {
+  var u = new URL(config.baseURL);
+  var basePath = u.pathname.replace(/\/+$/, '');
+  return [config.protocol, u.origin + basePath, config.path || ''].join('\n');
+}
+
 function nowMs() {
   return Date.now();
 }
@@ -106,6 +118,13 @@ function createAiHostBroker(options) {
   var windows = new Map();     // windowId -> {webContents}
   var rateState = new Map();   // providerId -> {window:[ts], active}
   var stats = { total: 0, failed: 0, cancelled: 0, completed: 0 };
+
+  /** 脱敏回显 + 凭据是否在 vault（只给布尔，读取时实时计算，反映清除后的真实状态） */
+  function sanitizeWithCredential(config) {
+    var out = configLib.sanitizeProviderConfig(config);
+    out.hasCredential = vault.has('provider:' + config.id);
+    return out;
+  }
 
   function requireProvider(providerId) {
     var entry = providers.get(providerId);
@@ -507,15 +526,23 @@ function createAiHostBroker(options) {
         } catch (e) {
           throw AiHostError(ERROR_CODES.INVALID_REQUEST, 'provider config invalid: ' + e.message, { index: i });
         }
+        var refId = 'provider:' + normalized.config.id;
+        var previous = providers.get(normalized.config.id);
+        var endpointChanged = !!previous
+          && endpointIdentity(previous.config) !== endpointIdentity(normalized.config);
         providers.set(normalized.config.id, { config: normalized.config });
         if (normalized.apiKey) {
-          vault.set('provider:' + normalized.config.id, normalized.apiKey);
-        } else if (vault.has('provider:' + normalized.config.id) && list[i].apiKey === undefined) {
-          // 保留已存凭据（本轮会话内存中），允许只改非敏感设置
+          // 新 key 总是优先
+          vault.set(refId, normalized.apiKey);
         } else if (list[i].apiKey === null) {
-          vault.delete('provider:' + normalized.config.id);
+          vault.delete(refId);
+        } else if (endpointChanged) {
+          // AI-01：凭据绑定 endpoint —— 改了 baseURL/protocol/path 却未重输 key，
+          // 旧 key 不得随新地址出网，直接清除（请求将不带鉴权头，由服务端拒绝）
+          vault.delete(refId);
         }
-        sanitized.push(configLib.sanitizeProviderConfig(normalized.config));
+        // 其余情况：保留已存凭据（本轮会话内存中），允许只改 model/label/limits 等非敏感设置
+        sanitized.push(sanitizeWithCredential(normalized.config));
       }
       return sanitized;
     },
@@ -529,7 +556,7 @@ function createAiHostBroker(options) {
     listProviders: function () {
       var out = [];
       providers.forEach(function (entry) {
-        out.push(configLib.sanitizeProviderConfig(entry.config));
+        out.push(sanitizeWithCredential(entry.config));
       });
       return out;
     },
