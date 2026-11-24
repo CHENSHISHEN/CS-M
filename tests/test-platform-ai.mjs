@@ -17,6 +17,7 @@ import {
 import {
   validateQualityRuleSet, runModelQuality, readQualityProfile,
 } from '../src/lib/quality/modelRules.js';
+import {redactSensitiveText} from '../src/lib/ai/orchestration/context.js';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
@@ -923,6 +924,123 @@ test('fingerprint distinguishes object slices', () => {
   }, 'entities/ent_customer/fields');
   assert.notStrictEqual(a, c, 'field addition changes the slice fingerprint');
 });
+
+// ===================== 10. context redaction (AI-02) =====================
+console.log('context redaction');
+{
+  const MASK = '[已遮蔽]';
+  const assertMasked = (input, secret, keep = []) => {
+    const out = redactSensitiveText(input);
+    assert.ok(!out.text.includes(secret), `secret leaked: ${JSON.stringify(input)} -> ${JSON.stringify(out.text)}`);
+    assert.ok(out.text.includes(MASK), `no mask marker: ${JSON.stringify(out.text)}`);
+    assert.ok(out.maskCount >= 1, 'maskCount counted');
+    assert.ok(out.notices.some(n => n.includes('密钥/令牌')), 'credential notice present');
+    keep.forEach(k => assert.ok(out.text.includes(k), `expected to keep ${JSON.stringify(k)} in ${JSON.stringify(out.text)}`));
+    return out;
+  };
+  const assertUnchanged = (input) => {
+    const out = redactSensitiveText(input);
+    assert.strictEqual(out.text, input, `over-masked: ${JSON.stringify(input)} -> ${JSON.stringify(out.text)}`);
+    assert.strictEqual(out.maskCount, 0);
+    assert.deepStrictEqual(out.notices, []);
+  };
+
+  test('Authorization: Bearer keeps the scheme word, masks only the token', () => {
+    const out = assertMasked('Authorization: Bearer abc123def456ghi789', 'abc123def456ghi789', ['Authorization', 'Bearer']);
+    assert.strictEqual(out.text, `Authorization: Bearer ${MASK}`);
+    assert.strictEqual(out.maskCount, 1, 'masked exactly once');
+    assertMasked('curl -H "authorization: bearer eyJhbGciOiJIUzI1NiJ9.e30.sig123"', 'eyJhbGciOiJIUzI1NiJ9', ['bearer']);
+    assertMasked('{"Authorization": "Bearer abc123def456ghi789"}', 'abc123def456ghi789', ['Authorization', 'Bearer']);
+    assertMasked('send it as Bearer abc123def456ghi789 please', 'abc123def456ghi789', ['Bearer']);
+    assertMasked('Authorization: Basic dXNlcjpwYXNzd29yZA==', 'dXNlcjpwYXNzd29yZA', ['Basic']);
+  });
+  test('URL userinfo password is masked, user/host kept', () => {
+    const out = assertMasked('mysql://root:S3cret@db:3306/x', 'S3cret', ['mysql://root:', '@db:3306/x']);
+    assert.strictEqual(out.text, `mysql://root:${MASK}@db:3306/x`);
+    assertMasked('jdbc:postgresql://admin:p%40ss!word@10.0.0.1:5432/dw', 'p%40ss!word', ['admin', '10.0.0.1']);
+    assertMasked('redis://default:Zx9@cache:6379', 'Zx9', ['cache:6379']);
+  });
+  test('JSON-form password/token/secret/api_key values are masked, key names kept', () => {
+    const out = assertMasked('{"password":"hunter2hunter"}', 'hunter2hunter', ['"password"']);
+    // 与既有 key=value 规则一致：引号连同值一起被替换（password="x" → password=[已遮蔽]）
+    assert.strictEqual(out.text, `{"password":${MASK}}`);
+    assertMasked('{"user":"u","token": "t0k"}', 't0k', ['"token"', '"user":"u"']);
+    assertMasked("{'client_secret': 'cs-998877'}", 'cs-998877', ['client_secret']);
+    assertMasked('{"api_key":"abcd"}', '"abcd"', ['"api_key"']);
+  });
+  test('Chinese labels 密码/口令/密钥 with an operator mask the value', () => {
+    assertMasked('密码:Abcd1234efgh', 'Abcd1234efgh', ['密码']);
+    assertMasked('数据库密码：Abcd1234', 'Abcd1234', ['数据库密码']);
+    assertMasked('口令 = qwer1234', 'qwer1234', ['口令']);
+    assertMasked('密钥=k9k9k9k9', 'k9k9k9k9', ['密钥']);
+  });
+  test('secret_key / secret-key / client_secret / short values via key=value', () => {
+    assertMasked('secret_key=zzzz9999yyyy', 'zzzz9999yyyy', ['secret_key=']);
+    assertMasked('secret-key: zzzz9999yyyy', 'zzzz9999yyyy', ['secret-key']);
+    assertMasked('client_secret=abc12345', 'abc12345', ['client_secret=']);
+    assertMasked('aws_secret_access_key=wJalrXUtnFEMI', 'wJalrXUtnFEMI');
+    assertMasked('token=ab12', 'ab12', ['token=']);
+    assertMasked('password="x1"', 'x1"', ['password=']);
+  });
+  test('Alibaba Cloud LTAI access key id is masked', () => {
+    const out = assertMasked('ak is LTAI5tAbCdEfGhIjKlMnOp ok', 'LTAI5tAbCdEfGhIjKlMnOp', ['ak is ', ' ok']);
+    assert.strictEqual(out.text, `ak is ${MASK} ok`);
+  });
+  test('ordinary prose is not over-masked', () => {
+    [
+      'the token count is high',
+      'password policy is strict',
+      '密码学基础',
+      '密码学: 对称与非对称',
+      '密码：请联系管理员',
+      'use a Bearer token in prose',
+      'Bearer authentication is described in RFC 6750',
+      'the secretary: John',
+      'token_count = 5',
+      'see https://example.com:8443/docs and http://host/a@b',
+      'email me at someone@example.com',
+      'LTAI is a prefix',
+      'ratio 3:2, time 12:30',
+      // 有赋值符但值不像凭据：短占位词（不含数字）、字段类型、长度说明、非 userinfo 的 @
+      'token: none',
+      'password: null',
+      'pwd: ./bin',
+      'max_tokens: 4096',
+      'password_hash: char(64)',
+      '密码长度: 8',
+      '密钥: 由KMS托管',
+      'git@github.com:org/repo.git',
+      'ssh://git@host:22/x',
+    ].forEach(assertUnchanged);
+  });
+  test('previously covered redaction cases still behave the same', () => {
+    const same = (input, expected, count = 1) => {
+      const out = redactSensitiveText(input);
+      assert.strictEqual(out.text, expected, `${JSON.stringify(input)} -> ${JSON.stringify(out.text)}`);
+      assert.strictEqual(out.maskCount, count, `maskCount for ${JSON.stringify(input)}`);
+    };
+    same('api_key=sk-abcdefghijklmnop', `api_key=${MASK}`);
+    same('token: abcdef123456', `token: ${MASK}`);
+    same('password="hunter2"', `password=${MASK}`);
+    same("pwd='abcd1234'", `pwd=${MASK}`);
+    same('apikey = "abcd"', `apikey = ${MASK}`);
+    same('access-key: 1234567890', `access-key: ${MASK}`);
+    same('credential=abcdef', `credential=${MASK}`);
+    same('authorization=abcdef123', `authorization=${MASK}`);
+    same('key sk-abcdefghijklmnopqr here', `key ${MASK} here`);
+    same('ghp_abcdefghijklmnopqrstuvwxyz', MASK);
+    same('AKIAABCDEFGHIJKLMNOP', MASK);
+    same('xoxb-1234567890-abcdef', MASK);
+    same('-----BEGIN RSA PRIVATE KEY-----\nMIIabc\n-----END RSA PRIVATE KEY-----', MASK);
+    const p = redactSensitiveText('read /Users/alice/x.txt and C:\\Users\\bob\\y.sql');
+    assert.strictEqual(p.text, `read ${MASK} and ${MASK}`);
+    assert.strictEqual(p.maskCount, 2);
+    assert.deepStrictEqual(p.notices, ['输入中检测到本机路径，已遮蔽；上下文不会携带 OS 路径。']);
+    const both = redactSensitiveText('token=abcdef123 at /home/u/f');
+    assert.strictEqual(both.notices.length, 2, 'credential + path notices');
+    assert.deepStrictEqual(redactSensitiveText(42), {text: '', maskCount: 0, notices: []});
+  });
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

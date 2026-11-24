@@ -56,12 +56,39 @@ const redactTree = (value, notices) => {
 
 // ---------- conservative credential / OS-path masking in user input ----------
 
+// 标签类规则只在「标签 + 赋值符 + 像值的 token」同时出现时遮蔽，普通行文
+// （the token count / password policy / 密码学）不受影响。值形态：
+// - 引号包裹（≥1 字符，引号连同值一起替换，与既有行为一致）；
+// - 裸值：≥6 个非分隔字符（既有规则），或含数字的 4~5 个可打印 ASCII（短 token；
+//   none/null/true/./bin 这类不含数字的短词不算值）。
+const MASK = '[已遮蔽]';
+const QUOTED_VALUE = `"[^"\\n]{1,}"|'[^'\\n]{1,}'`;
+const SHORT_ASCII = `(?:(?![,;&"'])[\\x21-\\x7E])`;
+const BARE_VALUE = `[^\\s,;&"']{6,}|(?=${SHORT_ASCII}{0,4}[0-9])${SHORT_ASCII}{4,5}`;
+const ASCII_VALUE = `(?:(?![,;&"'])[\\x21-\\x7E]){4,}`;
+// 已被前序规则遮蔽的位置不重复计数
+const NOT_MASKED = '(?!\\[已遮蔽\\])';
+const AUTH_SCHEMES = '(?:Bearer|Basic|Digest|Token)';
+
 const SENSITIVE_PATTERNS = [
-  // key=value / key: value assignments (keep the label, mask the value)
-  {re: /((?:api[_-]?key|apikey|secret|token|passwd|password|pwd|authorization|credential|access[_-]?key)\s*[=:]\s*)("[^"\n]{4,}"|'[^'\n]{4,}'|[^\s,;&"']{6,})/gi,
+  // Authorization 头（含 JSON/引号形态）：保留标签与认证方案字样（Bearer/Basic…），只遮蔽凭据本体
+  {re: new RegExp(`(authorization["']?\\s*[=:：]\\s*["']?(?:${AUTH_SCHEMES}\\s+)?)${NOT_MASKED}(?!${AUTH_SCHEMES}\\b)(${BARE_VALUE})`, 'gi'),
     kind: 'credential', hasPrefix: true},
-  // well-known token shapes (no label needed)
-  {re: /\b(?:sk-[A-Za-z0-9_-]{12,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,})\b/g,
+  // 行文中的 Bearer <token>：token 须含数字或 ≥20 个 token 字符，"Bearer authentication" 等不动
+  {re: /\b(Bearer\s+)(?=[A-Za-z0-9._~+/-]*[0-9]|[A-Za-z0-9._~+/-]{20,})([A-Za-z0-9._~+/-]{8,}=*)/gi,
+    kind: 'credential', hasPrefix: true},
+  // URL userinfo 口令：scheme://user:pass@host → 保留 scheme/user/host，遮蔽 pass
+  {re: /\b([a-z][a-z0-9+.-]*:\/\/[^\s:@/?#]+:)([^\s/?#]+)(@)/gi,
+    kind: 'credential', hasPrefix: true, hasSuffix: true},
+  // key=value / key: value / "key": "value"（保留标签，遮蔽值）；
+  // 标签可带 _key/_id/_token/_secret 后缀（secret_key、secret-key、client_secret、access_token…）
+  {re: new RegExp(`((?:api[_-]?key|apikey|secret|token|passwd|password|pwd|credential|access[_-]?key)(?:[_.-]?(?:key|id|token|secret))?["']?\\s*[=:：]\\s*)${NOT_MASKED}(?!(?:Bearer|Basic|Digest)\\s)(${QUOTED_VALUE}|${BARE_VALUE})`, 'gi'),
+    kind: 'credential', hasPrefix: true},
+  // 中文标签：密码/口令/密钥… 须跟赋值符与 ASCII 值（"密码学基础"、"密码：请联系管理员" 不动）
+  {re: new RegExp(`((?:密码|口令|密钥|秘钥|私钥|令牌)\\s*[:：=]\\s*)${NOT_MASKED}(${QUOTED_VALUE}|${ASCII_VALUE})`, 'g'),
+    kind: 'credential', hasPrefix: true},
+  // well-known token shapes (no label needed)；LTAI… 为阿里云 AccessKey ID
+  {re: /\b(?:sk-[A-Za-z0-9_-]{12,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|LTAI[0-9A-Za-z]{12,}|xox[baprs]-[A-Za-z0-9-]{10,})\b/g,
     kind: 'credential', hasPrefix: false},
   {re: /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/g,
     kind: 'credential', hasPrefix: false},
@@ -75,11 +102,11 @@ export const redactSensitiveText = (text) => {
   let out = text;
   let maskCount = 0;
   const kinds = new Set();
-  SENSITIVE_PATTERNS.forEach(({re, kind, hasPrefix}) => {
-    out = out.replace(re, (match, prefix) => {
+  SENSITIVE_PATTERNS.forEach(({re, kind, hasPrefix, hasSuffix}) => {
+    out = out.replace(re, (match, prefix, value, suffix) => {
       maskCount += 1;
       kinds.add(kind);
-      return hasPrefix ? `${prefix}[已遮蔽]` : '[已遮蔽]';
+      return `${hasPrefix ? prefix : ''}${MASK}${hasSuffix ? suffix : ''}`;
     });
   });
   const notices = [];
