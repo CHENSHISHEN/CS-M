@@ -46,6 +46,7 @@ const TESTS = [
   {file: 'tests/metrics/version-test.cjs'},
   {file: 'tests/metrics/fork-test.cjs'},
   {file: 'tests/metrics/audit-test.cjs'},
+  {file: 'tests/metrics/dict-link-test.cjs'},
   // gui-smoke.cjs 不纳入: 需要 playwright + Electron
 ];
 // ===== /TESTS =====

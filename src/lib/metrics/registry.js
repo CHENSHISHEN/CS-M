@@ -14,6 +14,8 @@ import {
 import {astRefKeys, deriveAstUnit, parseExpression} from './ast';
 import {METRIC_KINDS, validateScope, validateSpecStructure} from './validate';
 import {isWindowCompatible} from './window';
+// MET-04：发布前字典一致性（dictionary.js 不依赖 registry，无循环引用）
+import {validateSpecAgainstDictionary} from './dictionary';
 // M3B：继承口径完整性检查使用部门白名单 patch 应用器（patch.js 无仓储依赖，无循环引用）
 import {applyDepartmentPatch} from './patch';
 
@@ -368,6 +370,8 @@ const validateRevisionForPublish = (source, data, revision) => {
   }
   const spec = revision.spec;
   validateSpecStructure(spec, 'spec').forEach(item => errors.push(item));
+  // MET-04：spec 与语义字典一致性（单位/维度/部门存在且未停用、限定值类型符合维度声明）
+  validateSpecAgainstDictionary(data, spec, definition.scope).forEach(item => errors.push(item));
   if (revision.baseline != null && revision.baseline.baseRevisionId != null) {
     const base = checkReferenceStatus(data, revision.baseline.baseRevisionId,
       'baseline.baseRevisionId', errors);

@@ -2173,6 +2173,8 @@ projectTemplate: {
             schemaUnsupported: 'Metric store schema version is unsupported',
             dictionaryInUse: 'Dictionary entry is referenced ({refs}; metric references and intra-dictionary qualifier→dimension deps included); disable it instead of deleting or changing semantics.',
             duplicateDictionaryCode: 'Dictionary code already exists in this category: {code}',
+            disabledDictionaryEntry: 'Dictionary entry is disabled and cannot be referenced by a new publish: {ref} (pick an active entry or re-enable it in the dictionary)',
+            valueTypeMismatch: 'Qualifier value type does not match dimension {dimension} in the dictionary: expected {expected}, got {actual}',
             bindingExists: 'An active binding with the same metric revision, role and endpoint already exists',
             bindingCycle: 'This field endpoint would create a real compute cycle ({path}); split versions/steps or use another endpoint',
             bindingEndpointMissing: 'The binding endpoint does not exist in the current project ({ref}); restore the object or re-link explicitly',

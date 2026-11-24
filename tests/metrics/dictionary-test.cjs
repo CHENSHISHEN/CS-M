@@ -306,7 +306,16 @@ function buildDictionary(source) {
 // 字典 + 指标：发布原子/派生 + 部门草案，分别制造 scope/维度/单位/周期/限定引用
 function buildDictProject() {
   let source = buildDictionary(fixtures.baseProject());
-  const atomic = coreApi.createMetricDraft(source, Object.assign(
+  // MET-04：有字典项目发布前校验维度登记——补登夹具原子用到的其余维度（仅夹具设置）
+  [{id: 'dim-region-id', code: 'dim-region', name: '地区', valueType: 'string'},
+    {id: 'dim-status-id', code: 'dim-status', name: '订单状态', valueType: 'string'},
+    {id: 'dim-is-test-id', code: 'dim-is-test', name: '测试单', valueType: 'boolean'},
+    {id: 'dim-is-void-id', code: 'dim-is-void', name: '作废单', valueType: 'boolean'}].forEach((dim) => {
+    const r = coreApi.createDictionaryEntry(source, 'dimensions', dim);
+    assert(r.ok, JSON.stringify(r.errors));
+    source = r.source;
+  });
+  const atomic =coreApi.createMetricDraft(source, Object.assign(
     fixtures.paidAmountAtomic('metric-paid-amount'), {revisionId: 'mrev-paid-amount-1'}));
   assert(atomic.ok, JSON.stringify(atomic.errors));
   const pubAtomic = coreApi.publishMetricRevision(atomic.source, 'mrev-paid-amount-1', {});
