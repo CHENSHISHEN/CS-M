@@ -114,6 +114,27 @@ test('非分叉部门升级既有行为不变；非分叉草案不带 fork 键',
   assert.equal(published.revision.resolvedSpec.window.length, 14);
 });
 
+test('A.7：分叉部门修订的升级状态为不可升级且 reason=FORK（公共有新版也不提示升级）', () => {
+  const source = publishPublicV11(buildProject({fork: true, forkNote: 'x'}));
+  const before = JSON.stringify(source);
+  const status = api.departmentUpgradeStatus(source, 'mrev-fk-dept-1');
+  assert.equal(status.ok, true);
+  assert.equal(status.upgradeAvailable, false);
+  assert.equal(status.reason, 'FORK');
+  assert.equal(status.candidate, null);
+  assert.equal(status.compare, null);
+  assert.equal(JSON.stringify(source), before);
+});
+
+test('A.7：非分叉部门修订的升级状态不变（有新公共版则可升级，无 reason）', () => {
+  const source = publishPublicV11(buildProject({}));
+  const status = api.departmentUpgradeStatus(source, 'mrev-fk-dept-1');
+  assert.equal(status.ok, true);
+  assert.equal(status.upgradeAvailable, true);
+  assert.equal(status.reason, undefined);
+  assert.equal(status.candidate.revisionId, 'mrev-fk-7d-2');
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) {
   failures.forEach(({name, error}) => {

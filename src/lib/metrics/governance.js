@@ -263,6 +263,18 @@ export const departmentUpgradeStatus = (source, departmentRevisionId) => {
     return {ok: false, errors: [metricError('SCOPE_POLICY', 'baseline.definitionId',
       'metric.error.scopePolicy', 'department baseline definition must be public')]};
   }
+  // 分叉口径没有可继承的基线契约，升级必被拒（FORK_NOT_UPGRADABLE）：不再提示无效升级
+  if (revision.fork === true) {
+    return {
+      ok: true,
+      upgradeAvailable: false,
+      reason: 'FORK',
+      baselineDefinitionId: baselineDefinition.id,
+      lockedRevisionId: revision.baseline.baseRevisionId,
+      candidate: null,
+      compare: null,
+    };
+  }
   const candidate = latestPublished(data, baselineDefinition.id);
   const upgradeAvailable = candidate != null
     && candidate.id !== revision.baseline.baseRevisionId;

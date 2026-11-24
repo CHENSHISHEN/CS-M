@@ -244,6 +244,24 @@ test('auditMetricStore 空项目/无存储 → ok', () => {
   assert.deepEqual(api.auditMetricStore(null), {ok: true, issues: []});
 });
 
+test('A.7：干净库审计为空报告；结构损坏的库不抛错并返回 STORE_CORRUPT 诊断', () => {
+  assert.deepEqual(api.auditMetricStore(buildStore()), {ok: true, issues: []});
+  const corrupted = withPlatform(buildStore(), {...clone(platformOf(buildStore())), revisions: 'oops'});
+  const audit = api.auditMetricStore(corrupted);
+  assert.equal(audit.ok, false);
+  assert.deepEqual(issuesOf(audit, 'STORE_CORRUPT'),
+    [{code: 'STORE_CORRUPT', path: 'profile.metricPlatform.revisions'}]);
+  const notObject = api.auditMetricStore({profile: 'bad'});
+  assert.equal(notObject.ok, false);
+  assert.deepEqual(issuesOf(notObject, 'STORE_CORRUPT'), [{code: 'STORE_CORRUPT', path: 'profile'}]);
+  // 仅元素损坏：被过滤的元素也要报告
+  const filtered = clone(platformOf(buildStore()));
+  filtered.definitions.push(null);
+  const partial = api.auditMetricStore(withPlatform(buildStore(), filtered));
+  assert.equal(partial.ok, false);
+  assert.equal(issuesOf(partial, 'STORE_CORRUPT')[0].path.indexOf('profile.metricPlatform.definitions['), 0);
+});
+
 // ---------------- (f) 导入 ----------------
 test('(f) 合并导入：来源发布内容被篡改 → 拒绝导入，不并入任何内容，留 HASH_MISMATCH 诊断', () => {
   assert.equal(api.IMPORT_METRIC_HASH_MISMATCH, 'METRIC_IMPORT_HASH_MISMATCH');

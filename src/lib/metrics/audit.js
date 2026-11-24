@@ -12,7 +12,9 @@
 // path 格式：`<集合>[<对象 id>].<字段路径>`，例如 revisions[mrev-1].hash、
 //   revisions[mrev-1].spec.refs[0].revisionId、bindings[bind-1].metricRevisionId；
 //   对象缺 id 时以 `#<数组下标>` 代替 id（如 revisions[#3].hash）。
-// 顺序：先按存储顺序逐个修订（hash → version → 各引用字段按上列顺序），再逐个绑定。
+// - STORE_CORRUPT：存储结构损坏（readMetricPlatform 的 __diagnostics：根/集合类型错误、元素非对象），
+//   path 为诊断路径；损坏时读取已按空/过滤处理，其余检查仅覆盖可读部分；
+// 顺序：先 STORE_CORRUPT 诊断（若有），再按存储顺序逐个修订（hash → version → 各引用字段按上列顺序），再逐个绑定。
 // 注：构建链不识别 ??，使用 == null 三元。
 
 import {verifyRevisionHash} from './hash';
@@ -34,6 +36,9 @@ export const auditMetricStore = (source) => {
 
   const issues = [];
   const push = (code, path) => issues.push({code, path});
+  (data.__diagnostics || []).forEach((diagnostic) => {
+    push(diagnostic.code, diagnostic.path);
+  });
   const seenVersions = new Map(); // definitionId → Set(version)
 
   revisions.forEach((revision, index) => {

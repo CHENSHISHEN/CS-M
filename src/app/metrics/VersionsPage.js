@@ -14,6 +14,10 @@ import {shortHashLabel} from '../../lib/metrics/hash';
 
 const STATUS_FILTERS = ['all', 'draft', 'published', 'deprecated'];
 
+// 审计 issue 码（auditMetricStore）；未知码回落到 other 文案
+const AUDIT_CODES = ['HASH_MISMATCH', 'LEGACY_HASH', 'DUPLICATE_VERSION', 'DANGLING_REFERENCE',
+  'STORE_CORRUPT'];
+
 // M5B 引用角色业务化：英文枚举 → 中文角色（原始码留 title 次级信息）
 const ROLE_LABEL_KEYS = {
   ATOMIC_BASE: 'metrics.lineage.role.atomicBase',
@@ -26,6 +30,7 @@ const VersionsPage = ({source, commandRunner, readOnly, onOpenDefinition}) => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [commandErrors, setCommandErrors] = useState([]);
   const [refsFor, setRefsFor] = useState(null); // {revisionId, code, version}
+  const [auditReport, setAuditReport] = useState(null); // {ok, issues} | null（未检查）
 
   const definitionById = useMemo(() => {
     const map = {};
@@ -107,6 +112,16 @@ const VersionsPage = ({source, commandRunner, readOnly, onOpenDefinition}) => {
     });
   };
 
+  // 完整性检查：只读，损坏存储不抛错（auditMetricStore 以 STORE_CORRUPT 诊断返回）
+  const runAudit = () => {
+    try {
+      setAuditReport(metricApi.auditMetricStore(source));
+    } catch (error) {
+      setAuditReport({ok: false,
+        issues: [{code: 'STORE_CORRUPT', path: String(error && error.message ? error.message : error)}]});
+    }
+  };
+
   const refsList = refsFor == null ? []
     : metricApi.listRevisionDependents(source, refsFor.revisionId);
 
@@ -141,7 +156,47 @@ const VersionsPage = ({source, commandRunner, readOnly, onOpenDefinition}) => {
         </h2>
         <p className='chiner-metrics-page-sub'><FormatMessage id='metrics.versions.subtitle'/></p>
       </div>
+      <button
+        type='button'
+        className='chiner-metrics-btn'
+        data-testid='metrics-versions-audit'
+        onClick={runAudit}
+      >
+        <FormatMessage id='metrics.versions.audit.button'/>
+      </button>
     </header>
+
+    {auditReport != null && <div className='chiner-metrics-side-card' data-testid='metrics-versions-audit-result'>
+      <h3><FormatMessage id='metrics.versions.audit.title'/></h3>
+      {auditReport.issues.length === 0 ? <p className='chiner-metrics-muted'
+        data-testid='metrics-versions-audit-clean'>
+        <FormatMessage id='metrics.versions.audit.clean'/>
+      </p> : <>
+        <p><FormatMessage id='metrics.versions.audit.count' data={{count: auditReport.issues.length}}/></p>
+        <ul className='chiner-metrics-deplist'>
+          {auditReport.issues.map((issue, index) => <li
+            key={`${issue.code}-${issue.path}-${index}`}
+            data-testid='metrics-versions-audit-issue'
+            data-code={issue.code}>
+            <span className='chiner-metrics-tag chiner-metrics-tag-warn'>{issue.code}</span>
+            <span>
+              <FormatMessage id={AUDIT_CODES.indexOf(issue.code) >= 0
+                ? `metrics.versions.audit.code.${issue.code}` : 'metrics.versions.audit.code.other'}/>
+            </span>
+            <code className='chiner-metrics-mono'>{issue.path}</code>
+          </li>)}
+        </ul>
+      </>}
+      <p className='chiner-metrics-table-note'><FormatMessage id='metrics.versions.audit.note'/></p>
+      <button
+        type='button'
+        className='chiner-metrics-btn chiner-metrics-btn-ghost'
+        data-testid='metrics-versions-audit-close'
+        onClick={() => setAuditReport(null)}
+      >
+        <FormatMessage id='metrics.versions.audit.close'/>
+      </button>
+    </div>}
     <div className='chiner-metrics-catalog-filters'>
       <input
         className='chiner-metrics-search'

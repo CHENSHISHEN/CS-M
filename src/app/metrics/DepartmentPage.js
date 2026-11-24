@@ -925,8 +925,11 @@ const DepartmentPage = ({source, commandRunner, readOnly, onOpenDefinition, onDi
         <div className='chiner-metrics-side-column'>
           <div className='chiner-metrics-side-card' data-testid='metrics-dept-upgrade-panel'>
             <h3><FormatMessage id='metrics.department.upgradeTitle'/></h3>
-            {upgrade == null ? <p className='chiner-metrics-muted'>
-              <FormatMessage id='metrics.department.upgradeNone'/>
+            {upgrade == null ? <p className='chiner-metrics-muted'
+              data-testid={upgradeStatus && upgradeStatus.reason === 'FORK'
+                ? 'metrics-dept-upgrade-fork' : undefined}>
+              <FormatMessage id={upgradeStatus && upgradeStatus.reason === 'FORK'
+                ? 'metrics.department.upgradeFork' : 'metrics.department.upgradeNone'}/>
             </p> : <>
               <p className='chiner-metrics-muted'>
                 <FormatMessage id='metrics.department.upgradeAvailable'/>
