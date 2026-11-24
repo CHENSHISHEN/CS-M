@@ -22,6 +22,7 @@ export const humanError = error => {
     PROJECT_CONFLICT:['项目文件已被外部修改，已停止覆盖；请导出恢复副本。','External project changes detected. Export a recovery copy.'],
     PROJECT_BUSY:['另一窗口正在写入该项目，请稍后重试。','Another window is writing this project. Try again shortly.'],
     SESSION_REQUIRED:['保存连接尚未就绪或已中断，正在尝试恢复；请稍候或导出恢复副本。','The save connection is not ready or was interrupted. Recovery is being attempted; wait or export a recovery copy.'],
+    SESSION_STALE:['保存连接已切换到新的会话，正在重新连接；请稍候或导出恢复副本。','The save connection moved to a newer session and is reconnecting. Wait or export a recovery copy.'],
     'weak-entity-key':['部分键只能添加在弱实体上。','A partial key can only be added to a weak entity.'],
     NAMED_VERSION_LIMIT:['命名版本已达20个，请先导出或删除旧版本。','Twenty named versions are retained. Export or delete an older version first.'],
     DUPLICATE_VERSION_NAME:['此版本名称已存在。','A named version already uses this name.'],

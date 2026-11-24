@@ -9,7 +9,7 @@ const assert = require('assert');
 const crypto = require('crypto');
 const {spawnSync} = require('child_process');
 const babel = require('@babel/core');
-const {DrawingPersistence} = require(path.resolve(__dirname, '../public/drawing-persistence'));
+const {DrawingPersistence, decode} = require(path.resolve(__dirname, '../public/drawing-persistence'));
 
 const root = path.resolve(__dirname, '..');
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
@@ -66,6 +66,9 @@ const makeStore = (dir, extra = {}) => new DrawingPersistence(path.join(dir, 'st
 const dispose = store => store.sessions.forEach(s => {clearTimeout(s.timer);clearTimeout(s.maxTimer);s.timer = null;s.maxTimer = null;});
 const codeOf = e => (e && (e.code || e.message)) || '';
 const settle = p => Promise.resolve(p).then(value => ({value}), error => ({error}));
+const sessionOf = (store, file) => store.sessions.get(fs.realpathSync(file));
+const readJournal = (store, file) => {try {return fs.readFileSync(sessionOf(store, file).journal);} catch (e) {if (e.code === 'ENOENT') return Buffer.alloc(0);throw e;}};
+const commandRecords = (store, file) => decode(readJournal(store, file)).records.filter(r => r.type === 'command');
 
 // 渲染端 ES 模块(src/lib/*)用 babel 转成 CJS 后在 vm 里加载;每次调用得到一份全新的模块状态。
 const loadSrc = (file, fakeRequire = {}) => {
@@ -87,8 +90,9 @@ const loadSrc = (file, fakeRequire = {}) => {
 };
 
 // 渲染端桥接:伪造 ipcRenderer.invoke,按 src/main.js 的分发表转给真实的 DrawingPersistence。
-const loadWrapper = store => {
-  const invoke = async (channel, request) => {
+// intercept(request, forward) 可选:用于记录请求或伪造响应(如丢失的 ACK)。
+const loadWrapper = (store, {intercept} = {}) => {
+  const forward = async request => {
     try {
       const {method, file} = request;const owner = 'win-1';let value;
       if (method === 'open') value = await store.open(file, request.baseline, owner);
@@ -99,6 +103,7 @@ const loadWrapper = store => {
       return {ok: true, value};
     } catch (error) {return {ok: false, error: error.message};}
   };
+  const invoke = async (channel, request) => (intercept ? intercept(request, forward) : forward(request));
   const mod = loadSrc('src/lib/drawing_persistence.js', {electron: {ipcRenderer: {invoke, on: () => {}, send: () => {}}}});
   return mod.drawingPersistence;
 };
@@ -164,7 +169,7 @@ const deadPid = () => {const r = spawnSync(process.execPath, ['-e', '0']);return
     } finally {dispose(store);}
   });
 
-  await knownFailing('DRW-02 open(A) 后同一 tick change() 不污染 B 且不删除 B 的图纸', async dir => {
+  await ok('DRW-02 open(A) 后同一 tick change() 不污染 B 且不删除 B 的图纸', async dir => {
     const fileA = path.join(dir, 'A.pdma.json'), fileB = path.join(dir, 'B.pdma.json');
     const dB = drawing('B-own', 'B 自有');
     writeProject(fileA, []);writeProject(fileB, [dB]);
@@ -179,6 +184,112 @@ const deadPid = () => {const r = spawnSync(process.execPath, ['-e', '0']);return
       const a = (await store.recovery(fileA, 'win-1')).drawings.map(d => d.id);
       assert.deepStrictEqual(b, ['B-own'], `B 的图纸应保持不变,实际 ${JSON.stringify(b)}`);
       assert.deepStrictEqual(a, ['A-edit'], `编辑应落入 A,实际 A=${JSON.stringify(a)}`);
+    } finally {dispose(store);}
+  });
+
+  await ok('DRW-02 open(A) 之前同一 tick 的 change() 仍落入 B,且离开 B 时不重复应用', async dir => {
+    const fileA = path.join(dir, 'A.pdma.json'), fileB = path.join(dir, 'B.pdma.json');
+    const dB = drawing('B-own', 'B 自有');
+    writeProject(fileA, []);writeProject(fileB, [dB]);
+    const store = makeStore(dir);
+    try {
+      const wrapper = loadWrapper(store);
+      await wrapper.open(fileB, project([dB]));
+      const changing = settle(wrapper.change([dB, drawing('B-2', 'B 新增')]));  // 早于 open(A)
+      const opening = settle(wrapper.open(fileA, project([])));
+      const c = await changing;const o = await opening;
+      assert(!c.error && !o.error, `不应失败: ${c.error || o.error}`);
+      assert.deepStrictEqual((await store.recovery(fileB, 'win-1')).drawings.map(d => d.id), ['B-own', 'B-2']);
+      assert.deepStrictEqual((await store.recovery(fileA, 'win-1')).drawings.map(d => d.id), []);
+      assert.strictEqual(sessionOf(store, fileB).seq, 1, 'B 的草稿只应应用一次(刷盘会压缩日志,故看 seq)');
+      assert.deepStrictEqual(JSON.parse(fs.readFileSync(fileB)).drawings.map(d => d.id), ['B-own', 'B-2'], '离开 B 前应刷盘');
+    } finally {dispose(store);}
+  });
+
+  await ok('DRW-02 open(A) 失败时同一 tick 的 change() 被拒绝,绝不写入仍在会话中的 B', async dir => {
+    const fileA = path.join(dir, 'A.pdma.json'), fileB = path.join(dir, 'B.pdma.json');
+    const dB = drawing('B-own', 'B 自有');
+    writeProject(fileA, []);writeProject(fileB, [dB]);
+    const store = makeStore(dir);
+    try {
+      const wrapper = loadWrapper(store);
+      await wrapper.open(fileB, project([dB]));
+      const opening = settle(wrapper.open(fileA, null));  // 引擎拒绝:INVALID_PROJECT
+      const changing = settle(wrapper.change([drawing('A-edit', 'A 编辑')]));
+      assert.strictEqual(codeOf((await opening).error), 'INVALID_PROJECT');
+      assert((await changing).error, 'open 失败后针对 A 的编辑必须被拒绝');
+      assert.deepStrictEqual((await store.recovery(fileB, 'win-1')).drawings.map(d => d.id), ['B-own']);
+      assert.strictEqual(sessionOf(store, fileB).seq, 0);
+      // open 已落定:界面仍停留在 B,其后的编辑照常写入 B(不被失败的 open 永久阻塞)。
+      await wrapper.change([dB, drawing('B-2', 'B 新增')]);
+      assert.deepStrictEqual((await store.recovery(fileB, 'win-1')).drawings.map(d => d.id), ['B-own', 'B-2']);
+    } finally {dispose(store);}
+  });
+
+  await ok('DRW-02 引擎: 过期 sessionId 的命令以 SESSION_STALE 拒绝且日志不变;匹配或缺省 sessionId 照常', async dir => {
+    const file = path.join(dir, 'p.pdma.json');writeProject(file, []);
+    const store = makeStore(dir);
+    try {
+      const opened = await store.open(file, project([]), 'o');
+      assert(opened.sessionId, '前置: open 返回 sessionId');
+      const before = readJournal(store, file);
+      const stale = await settle(store.command(file, {...addCommand('d1', '订单', [], 'stale'), sessionId: 'journal-other'}, 'o'));
+      assert.strictEqual(codeOf(stale.error), 'SESSION_STALE');
+      assert(readJournal(store, file).equals(before), '被拒绝的命令不得写入日志');
+      assert.strictEqual(sessionOf(store, file).seq, 0);
+      await store.command(file, {...addCommand('d1', '订单', [], 'cur'), sessionId: opened.sessionId}, 'o');
+      await store.command(file, addCommand('d2', '客户', [{id: 'd1'}], 'legacy'), 'o');  // 旧调用方不带 sessionId
+      assert.deepStrictEqual((await store.recovery(file, 'o')).drawings.map(d => d.id), ['d1', 'd2']);
+    } finally {dispose(store);}
+  });
+
+  await ok('DRW-02 渲染端: 会话被重建(sessionId 变化)后透明重开并以同一 commandId 重试,只应用一次', async dir => {
+    const file = path.join(dir, 'A.pdma.json');writeProject(file, []);
+    const store = makeStore(dir);
+    const log = [];
+    try {
+      const wrapper = loadWrapper(store, {intercept: async (request, forward) => {
+        const response = await forward(request);log.push({request, response});return response;
+      }});
+      await wrapper.open(file, project([]));
+      const first = wrapper.getState().sessionId;
+      // 会话关闭后工程被外部改写(图纸不变)→ 引擎重开时重建锚点,换发新的 sessionId。
+      await store.close(file, 'win-1');
+      fs.writeFileSync(file, JSON.stringify(project([])));
+      const rebuilt = (await store.open(file, project([]), 'win-1')).sessionId;
+      assert.notStrictEqual(rebuilt, first, '前置: 引擎应换发新的 sessionId');
+      await wrapper.change([drawing('A-edit', 'A 编辑')]);
+      const commands = log.filter(e => e.request.method === 'command');
+      assert.strictEqual(commands.length, 2, '应恰好一次拒绝 + 一次重试');
+      assert.strictEqual(commands[0].request.command.sessionId, first);
+      assert(/SESSION_STALE/.test(commands[0].response.error), `首次应为 SESSION_STALE,实际 ${commands[0].response.error}`);
+      assert.strictEqual(commands[1].request.command.commandId, commands[0].request.command.commandId, '重试必须沿用同一 commandId');
+      assert.strictEqual(commands[1].request.command.sessionId, rebuilt);
+      assert(commands[1].response.ok);
+      assert.strictEqual(wrapper.getState().sessionId, rebuilt);
+      const records = commandRecords(store, file);
+      assert.strictEqual(records.length, 1);
+      assert.strictEqual(records[0].sessionId, rebuilt);
+      assert.deepStrictEqual((await store.recovery(file, 'win-1')).drawings.map(d => d.id), ['A-edit']);
+    } finally {dispose(store);}
+  });
+
+  await ok('DRW-02 渲染端: 命令已落盘但应答为 SESSION_STALE 时重试被 commandId 去重,不重复应用', async dir => {
+    const file = path.join(dir, 'A.pdma.json');writeProject(file, []);
+    const store = makeStore(dir);
+    let lost = 0;
+    try {
+      const wrapper = loadWrapper(store, {intercept: async (request, forward) => {
+        const response = await forward(request);
+        if (request.method === 'command' && !lost) {lost += 1;assert(response.ok);return {ok: false, error: 'SESSION_STALE'};}
+        return response;
+      }});
+      await wrapper.open(file, project([]));
+      await wrapper.change([drawing('A-edit', 'A 编辑')]);
+      assert.strictEqual(lost, 1);
+      assert.strictEqual(commandRecords(store, file).length, 1, '同一 commandId 只能写入一次');
+      assert.strictEqual(sessionOf(store, file).seq, 1);
+      assert.strictEqual(wrapper.getState().status, 'local');
     } finally {dispose(store);}
   });
 

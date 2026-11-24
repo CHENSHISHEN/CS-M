@@ -81,6 +81,10 @@ class DrawingPersistence {
   session(file,owner='default'){const key=file?this.canonical(file):`untitled:${owner}`;const s=this.sessions.get(key);if(!s || s.owner!==owner)throw codeError('SESSION_REQUIRED');return s;}
   async command(file, command, owner='default') {
     const s=this.session(file,owner);return this.enqueue(s,async()=>{
+      // Session fence: a command bound to another journal (an older session of this
+      // path, or another project) is never applied. Checked inside the queue because
+      // repair() swaps s.sessionId. Callers without sessionId keep the old behaviour.
+      if(command?.sessionId!=null&&command.sessionId!==s.sessionId)throw codeError('SESSION_STALE');
       if(s.corrupt)throw codeError('DAMAGED_JOURNAL');
       if(!command?.commandId || forbidden(command))throw codeError('INVALID_COMMAND');
       if(s.commands.has(command.commandId))return this.state(s,false);
