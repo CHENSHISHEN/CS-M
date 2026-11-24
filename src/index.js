@@ -9,7 +9,7 @@ import Welcome from './app/welcome';
 import reducers from './reducers';
 import './style/detault.less';
 import { writeLog, showErrorLogFolder } from './lib/middle';
-import { toErrorFallbackInfo } from './lib/errorBoundaryState';
+import { toErrorFallbackInfo, toLoggableError } from './lib/errorBoundaryState';
 //import { sendMessage } from './lib/electron-window-opt';
 
 const store = createStore(reducers,
@@ -49,15 +49,21 @@ class Container extends React.Component{
     return {error: toErrorFallbackInfo(error)};
   }
   componentDidCatch(error) {
-    writeLog(error).then((file) => {
-      this.setState({logFile: file});
-      Modal.error({
-        title: '出错了',
-        message: <span>
-          程序出现异常，请前往日志文件查看出错日志：<a onClick={() => showErrorLogFolder(file)}>{file}</a>
-        </span>,
-      });
-    });
+    // 边界自身绝不能再抛错(否则 React 16 继续上抛、整树卸载白屏):
+    // 先把 throw null/undefined/字符串等归一为 Error,同步异常与写日志失败都吞掉,兜底界面照常显示
+    try {
+      writeLog(toLoggableError(error)).then((file) => {
+        this.setState({logFile: file});
+        Modal.error({
+          title: '出错了',
+          message: <span>
+            程序出现异常，请前往日志文件查看出错日志：<a onClick={() => showErrorLogFolder(file)}>{file}</a>
+          </span>,
+        });
+      }).catch(() => {});
+    } catch (e) {
+      // 写日志同步失败:忽略,兜底界面已由 getDerivedStateFromError 切换
+    }
   }
   render() {
     const { error, logFile } = this.state;

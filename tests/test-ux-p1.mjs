@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {moduleRegistry} from '../src/lib/moduleRegistry.js';
-import {toErrorFallbackInfo} from '../src/lib/errorBoundaryState.js';
+import {toErrorFallbackInfo, toLoggableError} from '../src/lib/errorBoundaryState.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -56,6 +56,46 @@ ok('超长 message 截断 <=203 字符并带省略号', () => {
 ok('message getter 抛错时不抛出', () => {
   const evil = {get message() { throw new Error('getter'); }};
   assert.ok(toErrorFallbackInfo(evil).message.length > 0);
+});
+
+// ---- UX-22:toLoggableError(componentDidCatch 写日志前归一化,throw null 等不得让边界自身抛错) ----
+ok('toLoggableError: Error 原样返回', () => {
+  const e = new Error('x');
+  assert.equal(toLoggableError(e), e);
+});
+ok('toLoggableError: null/undefined -> Error 且 message 非空', () => {
+  for (const v of [null, undefined]) {
+    const e = toLoggableError(v);
+    assert.ok(e instanceof Error);
+    assert.ok(e.message.includes(String(v)), e.message);
+    assert.equal(typeof e.stack, 'string');
+  }
+});
+ok('toLoggableError: 字符串 -> 以该字符串为 message', () => {
+  const e = toLoggableError('boom');
+  assert.ok(e instanceof Error);
+  assert.equal(e.message, 'boom');
+});
+ok('toLoggableError: 普通对象 -> Error,优先取 message,否则 JSON', () => {
+  assert.equal(toLoggableError({message: 'm1'}).message, 'm1');
+  const e = toLoggableError({a: 1});
+  assert.ok(e instanceof Error);
+  assert.equal(e.message, '{"a":1}');
+  assert.ok(toLoggableError(42).message.includes('42'));
+});
+ok('toLoggableError: 恶意对象(getter 抛错/循环引用/toString 抛错)不抛出', () => {
+  const evil = {get message() { throw new Error('getter'); }, toString() { throw new Error('ts'); }};
+  const cyc = {}; cyc.self = cyc;
+  for (const v of [evil, cyc, Object.create(null)]) {
+    const e = toLoggableError(v);
+    assert.ok(e instanceof Error);
+    assert.ok(e.message.length > 0);
+  }
+});
+ok('index.js componentDidCatch 写日志经 toLoggableError 且吞掉失败', () => {
+  const src = read('src/index.js');
+  assert.ok(src.includes('writeLog(toLoggableError(error))'));
+  assert.ok(/\.catch\(\(\) => \{/.test(src));
 });
 
 // ---- UX-01:顶栏品牌(源码断言) ----

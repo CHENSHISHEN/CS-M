@@ -20,6 +20,7 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import ProviderSettings from '../ProviderSettings';
 import {PROVIDER_PROTOCOL_OPTIONS} from './providerOptions';
+import {credentialStatusFromReceipt} from './credentialStatus';
 
 export {PROVIDER_PROTOCOL_OPTIONS};
 
@@ -214,7 +215,8 @@ const ProviderController = ({
   /** 配置真实送达后的本地落账：清 ref（key 不静默重复发）、credential 状态真实、签名/回执对齐 */
   const applyConfigured = useCallback((masked, deliveredKey, sig) => {
     secretRef.current = ''; // key 只发一次，发完即清；不回显、不保留
-    if (deliveredKey) setCredentialStatus('session');
+    // 以 Host 回执的 hasCredential 为准：改 endpoint 未重输 key 时 broker 已清除 key，界面须回到 none
+    setCredentialStatus((prev) => credentialStatusFromReceipt(masked, deliveredKey, prev));
     configuredSigRef.current = sig;
     if (masked) {
       maskedRef.current = masked;

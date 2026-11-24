@@ -18,6 +18,7 @@ import {
   validateQualityRuleSet, runModelQuality, readQualityProfile,
 } from '../src/lib/quality/modelRules.js';
 import {redactSensitiveText} from '../src/lib/ai/orchestration/context.js';
+import {credentialStatusFromReceipt} from '../src/app/ai/integration/credentialStatus.js';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
@@ -1104,6 +1105,30 @@ console.log('context redaction');
     assert.strictEqual(redactSensitiveText(`a ${pem} b`).text, `a ${MASK} b`);
     assert.strictEqual(redactSensitiveText(`-----BEGIN PRIVATE KEY-----\ntruncated\n${pem}`).text,
       `-----BEGIN PRIVATE KEY-----\ntruncated\n${MASK}`);
+  });
+}
+
+// ===================== 11. credential status from configure receipt (AI-01 follow-up) =====================
+{
+  // broker 在「改 endpoint/协议但没重输 key」时会清除 key，回执 hasCredential=false：界面必须回到 none
+  test('hasCredential=false overrides previous session status', () => {
+    assert.strictEqual(credentialStatusFromReceipt({id: 'p', hasCredential: false}, false, 'session'), 'none');
+  });
+  test('hasCredential=false wins even if a key was just delivered (Host is authoritative)', () => {
+    assert.strictEqual(credentialStatusFromReceipt({id: 'p', hasCredential: false}, true, 'none'), 'none');
+  });
+  test('delivered key -> session', () => {
+    assert.strictEqual(credentialStatusFromReceipt({id: 'p', hasCredential: true}, true, 'none'), 'session');
+    assert.strictEqual(credentialStatusFromReceipt({id: 'p'}, true, 'none'), 'session');
+  });
+  test('no new key but Host still holds one -> session (e.g. controller remounted)', () => {
+    assert.strictEqual(credentialStatusFromReceipt({id: 'p', hasCredential: true}, false, 'none'), 'session');
+  });
+  test('receipt without hasCredential / no receipt keeps previous status', () => {
+    assert.strictEqual(credentialStatusFromReceipt({id: 'p'}, false, 'session'), 'session');
+    assert.strictEqual(credentialStatusFromReceipt({id: 'p'}, false, 'none'), 'none');
+    assert.strictEqual(credentialStatusFromReceipt(null, false, 'session'), 'session');
+    assert.strictEqual(credentialStatusFromReceipt(undefined, false, 'none'), 'none');
   });
 }
 
