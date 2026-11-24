@@ -13,6 +13,11 @@ const aiIpc = registerAiHostIpc({ipcMain, broker: aiBroker});
 // before-quit 可能被 preventDefault 取消退出，若提前 dispose 会导致取消退出后 AI 通道失效
 app.on('will-quit', () => {aiIpc.dispose();});
 
+// 导航守卫：窗口开启了 nodeIntegration，禁止被导航到/弹出远程或本地任意页面（外链交系统浏览器打开），
+// 仅放行同一文档（刷新/hash）与应用自身页面的新窗口（成品经 webpack 复制到 build/lib，路径一致）
+const {installNavigationGuard} = require('./lib/navigationGuard');
+app.on('web-contents-created', (event, contents) => {installNavigationGuard(contents);});
+
 // 保持一个对于 window 对象的全局引用，如果你不这样做，
 // 当 JavaScript 对象被垃圾回收， window 会被自动地关闭
 let win;

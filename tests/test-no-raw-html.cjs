@@ -197,9 +197,58 @@ walk(srcDir, []).forEach((file) => {
   found.forEach(v => violations.push(`${path.relative(path.join(__dirname, '..'), file)}:${v.line}  ${v.token}`));
 });
 
+// ---- 外链门禁(ARCH-06 / 终审 M2):shell.openExternal 只允许出现在 src/lib/safeExternal.js ----
+// 其它位置一律改用 safeOpenExternal(http/https/mailto 白名单)。注释中的提及不计。
+const OPEN_EXTERNAL = /shell\s*\.\s*openExternal\b/g;
+const OPEN_EXTERNAL_ALLOWED = path.join(srcDir, 'lib', 'safeExternal.js');
+function scanOpenExternal(rawSrc) {
+  const src = blankComments(rawSrc);
+  const lines = [];
+  let m;
+  OPEN_EXTERNAL.lastIndex = 0;
+  while ((m = OPEN_EXTERNAL.exec(src))) lines.push(src.slice(0, m.index).split('\n').length);
+  return lines;
+}
+const OPEN_SELF_CASES = [
+  ['违规 直接调用', "require('electron').shell.openExternal(url);", 1],
+  ['违规 解构前的成员访问', 'const {shell} = x; shell . openExternal(u);', 1],
+  ['合规 注释提及', '// shell.openExternal 已禁止\n/* shell.openExternal */', 0],
+  ['合规 safeOpenExternal', 'safeOpenExternal(url);', 0],
+];
+OPEN_SELF_CASES.forEach(([name, code, expected]) => {
+  const n = scanOpenExternal(code).length;
+  if (n === expected) console.log(`ok - 自检(openExternal): ${name}`);
+  else {
+    selfFail += 1;
+    console.error(`FAIL - 自检(openExternal): ${name}(期望 ${expected} 处,实际 ${n} 处)`);
+  }
+});
+if (selfFail) {
+  console.error(`FAIL: openExternal 门禁自检 ${selfFail} 项失败`);
+  process.exit(1);
+}
+const openViolations = [];
+walk(srcDir, []).forEach((file) => {
+  if (file === OPEN_EXTERNAL_ALLOWED) return;
+  scanOpenExternal(fs.readFileSync(file, 'utf8')).forEach((line) => {
+    openViolations.push(`${path.relative(path.join(__dirname, '..'), file)}:${line}  shell.openExternal`);
+  });
+});
+if (!scanOpenExternal(fs.readFileSync(OPEN_EXTERNAL_ALLOWED, 'utf8')).length) {
+  openViolations.push('src/lib/safeExternal.js  未找到 shell.openExternal(门禁目标文件已变化,请同步更新本测试)');
+}
+
+let failedGate = false;
 if (violations.length) {
   console.error(`FAIL: 发现 ${violations.length} 处未经 sanitizeHtml/renderMarkdownSafe 的 HTML 注入点:`);
   violations.forEach(v => console.error(`  ${v}`));
-  process.exit(1);
+  failedGate = true;
 }
+if (openViolations.length) {
+  console.error(`FAIL: shell.openExternal 只允许出现在 src/lib/safeExternal.js,请改用 safeOpenExternal:`);
+  openViolations.forEach(v => console.error(`  ${v}`));
+  failedGate = true;
+}
+if (failedGate) process.exit(1);
 console.log(`PASS: ${checked} 处 HTML 注入点(含纯字面量豁免)均已直接经过 sanitizeHtml/renderMarkdownSafe 或为字面量`);
+console.log('PASS: shell.openExternal 仅出现在 src/lib/safeExternal.js');

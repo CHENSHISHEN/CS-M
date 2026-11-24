@@ -42,6 +42,15 @@ if (platform === 'json') {
     from: path.resolve(__dirname, '../src/host/ai'),
     to: path.resolve(__dirname, '../app/build/host/ai')
   });
+  // 主进程导航守卫（CommonJS，与 src/main.js 的 require('./lib/navigationGuard') 路径一致）及其依赖的外链白名单
+  cpDir.push({
+    from: path.resolve(__dirname, '../src/lib/navigationGuard.js'),
+    to: path.resolve(__dirname, '../app/build/lib')
+  });
+  cpDir.push({
+    from: path.resolve(__dirname, '../src/lib/safeExternal.js'),
+    to: path.resolve(__dirname, '../app/build/lib')
+  });
 }
 
 module.exports = {

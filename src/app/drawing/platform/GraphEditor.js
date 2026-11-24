@@ -41,6 +41,7 @@ const register = () => {
   }});
 };
 import {chenPorts, compensateScroll, workareaBox} from './chenGeometry';
+import {safeOpenExternal} from '../../../lib/safeExternal';
 const decorate = cell => {
   const c = clone(cell);if (c.data?.chen && !c.source) c.ports = chenPorts(); const kind = c.data?.kind;
   if (['class', 'interface', 'enum'].includes(kind)) {
@@ -667,7 +668,7 @@ export default ({doc, source, onChange, readOnly, onOpenAsset, onLocate, locateI
   const align = direction => mutate(() => {if(selectedNodes.length<2)return;const b=selectedNodes[0].getBBox();selectedNodes.slice(1).forEach(n=>{const r=n.getBBox();let x=r.x,y=r.y;if(direction==='left')x=b.x;if(direction==='right')x=b.x+b.width-r.width;if(direction==='center')x=b.x+(b.width-r.width)/2;if(direction==='top')y=b.y;if(direction==='bottom')y=b.y+b.height-r.height;if(direction==='middle')y=b.y+(b.height-r.height)/2;n.position(x,y);});});
   const imageInput = useRef(null);
   const addImage = async event => {const file=event.target.files?.[0];event.target.value='';if(!file||readOnly)return;try{if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>10*1024*1024)throw Error(t('fileTooLarge'));const images=new Set();const collect=v=>{if(typeof v==='string'&&/^data:image\/(png|jpeg|webp);base64,/i.test(v))images.add(v);else if(v&&typeof v==='object')Object.values(v).forEach(collect);};collect(latest.current.doc);const total=[...images].reduce((n,v)=>n+Math.floor((v.length-v.indexOf(',')-1)*.75),0);if(total+file.size>50*1024*1024)throw Error(t('fileTooLarge'));const uri=await new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=reject;r.readAsDataURL(file);});const image=new Image();await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=reject;image.src=uri;});mutate(()=>{const cell=graph.addNode({id:platformId('image'),shape:'image',x:150,y:150,width:Math.min(480,image.width),height:Math.min(480,image.width)*image.height/image.width,data:{kind:'image',layer},attrs:{image:{'xlink:href':uri}}});graph.resetSelection([cell]);});}catch(err){setError(err.message);}};
-  const openLink = cell => {const link=cell?.getData()?.link;if(!link||!/^https?:\/\/|^mailto:/i.test(link))return;if(window.confirm(link)){try{require('electron').shell.openExternal(link);}catch(e){window.open(link,'_blank','noopener');}}};
+  const openLink = cell => {const link=cell?.getData()?.link;if(!link||!/^https?:\/\/|^mailto:/i.test(link))return;if(window.confirm(link)){safeOpenExternal(link).then(opened=>{if(!opened)window.open(link,'_blank','noopener');});}};
 
   useEffect(() => {if (onCommands) onCommands({
     selection: () => selection.map(c => c.id),

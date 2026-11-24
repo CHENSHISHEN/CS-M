@@ -1,11 +1,15 @@
 // 外部链接打开的统一白名单(ARCH-06)
 // 渲染进程开启了 nodeIntegration,shell.openExternal 若打开 file:// / smb:// / 自定义协议,
 // 可能成为代码执行入口。所有 openExternal 调用必须经过这里,仅放行 http / https / mailto。
+//
+// 模块格式:CommonJS。主进程(src/main.js,Electron 13 / Node 14,不经 webpack 打包)的导航守卫
+// 也通过 require 复用这里的白名单;渲染进程照常 `import {safeOpenExternal} from '.../safeExternal'`
+// (webpack 对 CommonJS 的具名导入互操作),node 测试经 ESM 具名导入同样可用。
 
 const SAFE_PROTOCOLS = ['http:', 'https:', 'mailto:'];
 
 // 判断 URL 是否允许交给系统打开。不 trim 输入:带前导空白的 URL 视为不安全。
-export function isSafeExternalUrl(url) {
+function isSafeExternalUrl(url) {
   if (typeof url !== 'string') {
     return false;
   }
@@ -30,7 +34,7 @@ function defaultOpener(url) {
 // 安全地用系统默认程序打开外部链接。
 // 不安全 URL 不会触碰 electron,直接返回 false;打开失败同样返回 false,不抛出。
 // 第二个参数 opener 仅供测试注入,业务代码只需调用 safeOpenExternal(url)。
-export async function safeOpenExternal(url, opener = defaultOpener) {
+async function safeOpenExternal(url, opener = defaultOpener) {
   if (!isSafeExternalUrl(url)) {
     return false;
   }
@@ -41,3 +45,6 @@ export async function safeOpenExternal(url, opener = defaultOpener) {
     return false;
   }
 }
+
+exports.isSafeExternalUrl = isSafeExternalUrl;
+exports.safeOpenExternal = safeOpenExternal;
