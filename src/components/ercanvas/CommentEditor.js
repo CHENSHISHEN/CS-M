@@ -2,20 +2,15 @@ import React, {useRef, useState} from 'react';
 import {Button, FormatMessage, Icon, openDrawer, Text, Tooltip} from 'components';
 
 import './style/index.less';
-import marked from 'marked';
 import {renderer} from 'components/ercanvas/components/util';
 import {getPrefix} from '../../lib/prefixUtil';
+import {renderMarkdownSafe} from '../../lib/safeHtml';
 
 const Edit = React.memo(({ prefix, data, onOK, onCancel, readOnly = false }) => {
     const [edit, setEdit] = useState(false);
     const valueRef = useRef(data || '');
     const _onChange = (e) => {
         valueRef.current = e.target.value;
-    };
-    const getHtml = (str) => {
-        marked.use({ renderer });
-        const reg = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi;
-        return marked(str).replace(reg, '');
     };
     const currentPrefix = getPrefix(prefix);
     return <div className={`${currentPrefix}-comment-editor`}>
@@ -24,7 +19,7 @@ const Edit = React.memo(({ prefix, data, onOK, onCancel, readOnly = false }) => 
               // eslint-disable-next-line no-nested-ternary
               edit ? <Text placeholder={FormatMessage.string({id: 'canvas.node.commentPlaceholder'})} defaultValue={valueRef.current} onChange={_onChange}/>
                   // eslint-disable-next-line max-len,react/no-danger
-                  : (valueRef.current ? <pre dangerouslySetInnerHTML={{__html: getHtml(valueRef.current)}} />
+                  : (valueRef.current ? <pre dangerouslySetInnerHTML={{__html: renderMarkdownSafe(valueRef.current, {renderer})}} />
                       : <span><FormatMessage id='canvas.node.commentEmpty'/></span>)
           }
       </div>

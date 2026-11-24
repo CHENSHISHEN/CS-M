@@ -1,11 +1,11 @@
 import React, { forwardRef, useRef, useEffect } from 'react';
 import { Graph, Markup } from '@antv/x6';
 import {Icon, Tooltip} from 'components';
-import marked from 'marked';
 import FormatMessage from '../../../formatmessage';
 import '@antv/x6-react-shape';
 import './style/index.less';
 import { renderer } from '../util';
+import { renderMarkdownSafe } from '../../../../lib/safeHtml';
 // eslint-disable-next-line import/named
 import { platform } from '../../../../lib/middle';
 import info from './style/info.png';
@@ -87,13 +87,6 @@ const EditNode = forwardRef(({node}, ref) => {
     }
     return  {};
   };
-  const getHtml = (str) => {
-    marked.use({ renderer });
-    const reg = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi;
-    return marked(str, {
-      breaks: true,
-    }).replace(reg, '');
-  };
   return <div
     ref={ref}
     className={`chiner-er-editnode ${(node.shape === 'edit-node-circle' || node.shape === 'mind-topic-branch' || node.shape === 'mind-topic') ? 'chiner-er-editnode-circle' : ''}`}
@@ -115,13 +108,13 @@ const EditNode = forwardRef(({node}, ref) => {
       <><pre
         ref={preRef}
           // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{__html: getHtml(label || '')}}
+        dangerouslySetInnerHTML={{__html: renderMarkdownSafe(label || '', {renderer, breaks: true})}}
       />
         {note && <Tooltip
           placement='top'
           title={<pre
               // eslint-disable-next-line react/no-danger
-            dangerouslySetInnerHTML={{__html: getHtml(note || '')}}
+            dangerouslySetInnerHTML={{__html: renderMarkdownSafe(note || '', {renderer, breaks: true})}}
           />}
           force>
           <Icon

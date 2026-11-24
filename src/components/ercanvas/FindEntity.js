@@ -3,6 +3,7 @@ import React, {useState, useEffect, useRef, useMemo, forwardRef, useImperativeHa
 import SearchInput from '../searchinput';
 import FormatMessage from '../formatmessage';
 import {addBodyClick, removeBodyClick} from '../../lib/listener';
+import {sanitizeHtml} from '../../lib/safeHtml';
 
 export default React.memo(forwardRef(({prefix, getGraph, dataSource}, ref) => {
   const id = useMemo(() => Math.uuid(), []);
@@ -86,7 +87,7 @@ export default React.memo(forwardRef(({prefix, getGraph, dataSource}, ref) => {
               onClick={() => jump(c.value)}
               key={c.value}
               /* eslint-disable-next-line react/no-danger */
-              dangerouslySetInnerHTML={{__html: c.name}}
+              dangerouslySetInnerHTML={{__html: sanitizeHtml(c.name)}}
             />;
           })
         }

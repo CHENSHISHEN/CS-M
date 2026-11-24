@@ -1,18 +1,11 @@
 import React, { forwardRef } from 'react';
 import { Graph, Markup } from '@antv/x6';
 import '@antv/x6-react-shape';
-import marked from 'marked';
 import { renderer } from '../util';
+import { renderMarkdownSafe } from '../../../../lib/safeHtml';
 
 const EditNode = forwardRef(({node}, ref) => {
   const label = node.getProp('label');
-  const getLabel = () => {
-    marked.use({ renderer });
-    const reg = /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi;
-    return marked(label, {
-        breaks: true,
-    }).replace(reg, '');
-  };
   return <div
     ref={ref}
     style={{
@@ -31,7 +24,7 @@ const EditNode = forwardRef(({node}, ref) => {
   >
     <pre
       // eslint-disable-next-line react/no-danger
-      dangerouslySetInnerHTML={{__html: getLabel()}}
+      dangerouslySetInnerHTML={{__html: renderMarkdownSafe(label, {renderer, breaks: true})}}
       style={{
         boxSizing: 'border-box',
         margin: 0,
