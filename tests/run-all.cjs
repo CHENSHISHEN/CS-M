@@ -2,8 +2,9 @@
 // 统一测试入口: 每个测试文件在独立子进程运行,汇总 PASS/FAIL/SKIP。
 // 任一 FAIL 则退出码 1。用法: node tests/run-all.cjs   (npm test 同)
 //
-// 约定: 新增测试文件时,请追加到下方 TESTS 数组(不要用 glob,也不要重复列出
-// 已被其他测试内部 spawn 的文件,如 tests/metrics/*.cjs 由 test-metric-platform.cjs 统一运行)。
+// 约定: 新增测试文件时,请追加到下方 TESTS 数组(不要用 glob)。不要重复列出已被其他测试内部
+// spawn 的文件:test-metric-platform.cjs 会运行 tests/metrics/ 下的 core-test、dictionary-test、
+// binding-test、lineage-test 这 4 个,它们不得再列出;tests/metrics/ 下其余(后来新增的)测试需在此显式列出。
 const {spawnSync} = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -34,7 +35,7 @@ const TESTS = [
   {file: 'tests/test-enterprise-modeling.mjs'},
   {file: 'tests/test-platform-ai.mjs'},
   {file: 'tests/test-platform-host.cjs'},
-  {file: 'tests/test-metric-platform.cjs'}, // 内部会 spawn tests/metrics/*.cjs
+  {file: 'tests/test-metric-platform.cjs'}, // 内部会 spawn tests/metrics/ 的 core/dictionary/binding/lineage 4 个测试
   {file: 'tests/test-canvas.cjs'},
   {file: 'tests/test-catalog.mjs'},
   {file: 'tests/test-catalog-data.cjs'},

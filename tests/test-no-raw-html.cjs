@@ -1,5 +1,6 @@
 // 防回归扫描(ARCH-01):src 下所有 dangerouslySetInnerHTML / `.innerHTML =` / `.innerHTML +=` / `.outerHTML =`
-// 的非字面量内容,必须在同一语句内直接调用 sanitizeHtml( 或 renderMarkdownSafe( 。
+// / `['innerHTML'] =`(方括号写法)/ insertAdjacentHTML(pos, html) / document.write(ln)(...)
+// 的非字面量内容,必须在同一语句(调用类为对应 HTML 参数)内直接调用 sanitizeHtml( 或 renderMarkdownSafe( 。
 // 违规时列出 文件:行号 并以非 0 退出;门禁本身带自检用例(SELF_CASES)。
 //
 // 已知局限:这是静态文本扫描,只检查“该语句内出现了清洗调用”,
@@ -12,7 +13,13 @@ const srcDir = path.join(__dirname, '..', 'src');
 // 清洗库本身会在注释里提到这些关键字,排除
 const EXCLUDE = [path.join(srcDir, 'lib', 'safeHtml.js')];
 const SAFE_CALL = /\b(sanitizeHtml|renderMarkdownSafe)\s*\(/;
-const TOKEN = /dangerouslySetInnerHTML|\.(?:innerHTML|outerHTML)\s*\+?=(?!=)/g;
+const TOKEN = new RegExp([
+  'dangerouslySetInnerHTML',
+  '\\.(?:innerHTML|outerHTML)\\s*\\+?=(?!=)',
+  '\\[\\s*[\'"](?:innerHTML|outerHTML)[\'"]\\s*\\]\\s*\\+?=(?!=)',
+  '\\binsertAdjacentHTML\\s*\\(',
+  '\\bdocument\\s*\\.\\s*write(?:ln)?\\s*\\(',
+].join('|'), 'g');
 
 function walk(dir, out) {
   fs.readdirSync(dir, {withFileTypes: true}).forEach((e) => {
@@ -113,6 +120,21 @@ function readExpression(src, i) {
   return src.slice(i, j);
 }
 
+// 调用类 sink:openIdx 为 '(' 位置,返回按深度 0 逗号切分的实参文本数组
+function getCallArgs(src, openIdx) {
+  const close = skipBalanced(src, openIdx, '(', ')');
+  const args = [];
+  let i = openIdx + 1;
+  while (i < close - 1) {
+    const arg = readExpression(src, i);
+    if (arg.trim()) args.push(arg);
+    i += arg.length;
+    if (src[i] !== ',') break;
+    i += 1;
+  }
+  return args;
+}
+
 // 返回 token 之后“被注入的表达式”文本
 function getExpression(src, token, end) {
   let i = end;
@@ -149,6 +171,15 @@ function scanSource(rawSrc) {
   TOKEN.lastIndex = 0;
   while ((m = TOKEN.exec(src))) {
     const token = m[0].startsWith('dangerous') ? 'dangerouslySetInnerHTML' : m[0].replace(/\s+/g, '');
+    if (token.endsWith('(')) {
+      // insertAdjacentHTML(position, html):只看 HTML 参数;document.write(ln)(...):每个实参都是 HTML
+      const args = getCallArgs(src, m.index + m[0].length - 1);
+      const htmlArgs = token.startsWith('insertAdjacentHTML') ? args.slice(1) : args;
+      if (htmlArgs.some(arg => !isPureLiteral(arg) && !SAFE_CALL.test(arg))) {
+        found.push({line: src.slice(0, m.index).split('\n').length, token});
+      }
+      continue;
+    }
     const expr = getExpression(src, token, m.index + m[0].length);
     if (token !== 'dangerouslySetInnerHTML' && isPureLiteral(expr)) continue;
     if (!SAFE_CALL.test(expr)) {
@@ -171,6 +202,20 @@ const SELF_CASES = [
   ['合规 JSX 同行含 //', '<a href="https://x.com" dangerouslySetInnerHTML={{__html: sanitizeHtml(x)}} />;', false],
   ['合规 多行续行表达式', 'el.innerHTML = cond ?\n  sanitizeHtml(a) : sanitizeHtml(b);', false],
   ['合规 注释里的提及', '// el.innerHTML = userInput\n/* dangerouslySetInnerHTML */', false],
+  ['违规 insertAdjacentHTML 变量', "el.insertAdjacentHTML('beforeend', userInput);", true],
+  ['违规 insertAdjacentHTML 清洗了位置参数而非 HTML', 'el.insertAdjacentHTML(sanitizeHtml(p), userInput);', true],
+  ['违规 insertAdjacentHTML 多行', "el.insertAdjacentHTML(\n  'afterbegin',\n  html\n);", true],
+  ['合规 insertAdjacentHTML sanitizeHtml', "el.insertAdjacentHTML('beforeend', sanitizeHtml(x));", false],
+  ['合规 insertAdjacentHTML 字面量', "el.insertAdjacentHTML('beforeend', '<br>');", false],
+  ['违规 document.write 变量', 'document.write(userInput);', true],
+  ['违规 document.writeln 任一实参为变量', "document.writeln('<p>', x);", true],
+  ['合规 document.write sanitizeHtml', 'document.write(sanitizeHtml(x));', false],
+  ['合规 document.write 字面量', "document.write('<p></p>');", false],
+  ['违规 方括号 innerHTML =', "el['innerHTML'] = userInput;", true],
+  ['违规 方括号 outerHTML +=', 'el["outerHTML"] += userInput;', true],
+  ['合规 方括号 sanitizeHtml', "el['innerHTML'] = sanitizeHtml(x);", false],
+  ['合规 方括号 空字面量', "el['innerHTML'] = '';", false],
+  ['合规 方括号比较不是赋值', "if (el['innerHTML'] === x) {}", false],
 ];
 let selfFail = 0;
 SELF_CASES.forEach(([name, code, shouldFail]) => {

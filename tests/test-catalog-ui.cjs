@@ -280,6 +280,9 @@ test('新建分类后所属分层自动展开', () => {
   assert(state[1].has('ods'));
 });
 test('只读状态禁止打开创建菜单', () => {
+  // 先确认 MENU_HOOK 槽位正确:可写时根节点能打开非空菜单(hook 顺序漂移时这里失败,
+  // 避免下面的只读断言因读错槽位而空洞通过)
+  assert.ok(menu({kind: 'root'}).length > 0, `MENU_HOOK=${MENU_HOOK} 不是菜单 state 槽位`);
   assert.equal(menu({kind: 'root'}, true).length, 0);
   assert.equal(state[MENU_HOOK], null);
   assert.equal(form, null);
