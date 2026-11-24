@@ -169,6 +169,12 @@ export const upgradeDepartmentDraft = (source, input) => {
       'metric.error.unknownReference',
       'upgrade requires a published department revision with a locked baseline')]};
   }
+  // 分叉口径没有可继承的基线契约：重放 patch 会静默覆盖分叉自己的修改（MET-01），拒绝升级
+  if (departmentRevision.fork === true) {
+    return {ok: false, errors: [metricError('FORK_NOT_UPGRADABLE', 'departmentRevisionId',
+      'metric.error.forkNotUpgradable',
+      'forked department revision cannot be upgraded; edit it via a new revision draft instead')]};
+  }
   const definition = findDefinition(data, departmentRevision.definitionId);
   if (definition == null) {
     return {ok: false, errors: [metricError('UNKNOWN_REFERENCE', 'definitionId',

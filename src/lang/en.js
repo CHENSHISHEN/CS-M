@@ -2167,6 +2167,7 @@ projectTemplate: {
             cycleDependency: 'Dependency cycle: {path}',
             scopePolicy: 'Public metrics cannot depend on department-scoped definitions ({ref})',
             semanticFork: 'This is a core semantic change and requires forking a new definition',
+            forkNotUpgradable: 'A forked definition cannot be upgraded; create a new revision of it instead',
             patchKey: 'Department patch key not allowed',
             conceptInUse: 'Concept is referenced by metrics ({refs}); it cannot be deleted or moved to another domain. Create a new concept instead.',
             schemaUnsupported: 'Metric store schema version is unsupported',

@@ -576,6 +576,9 @@ export const createRevisionDraft = (source, definitionId, options) => {
     // baseline/patch 与已发布版本隔离副本（R1）：旧发布对象不被新草案引用悄悄改变
     ...(base.baseline == null ? {} : {baseline: cloneJson(base.baseline)}),
     ...(base.patch == null ? {} : {patch: cloneJson(base.patch)}),
+    // 显式分叉的定义继续修订时保留分叉标记与原因（MET-02），否则核心语义编辑会被拒绝
+    ...(base.fork === true ? {fork: true} : {}),
+    ...(base.forkNote == null || base.forkNote === '' ? {} : {forkNote: base.forkNote}),
   };
   revision.etag = draftEtag(revision);
   const next = {...data, revisions: data.revisions.concat([revision])};

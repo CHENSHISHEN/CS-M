@@ -1,46 +1,9 @@
 // 指标版本号测试（MET-05）：版本按最大值递增、废弃定义不可再发布、旧数据重复版本只读兼容。
 // 复跑：node tests/metrics/version-test.cjs（仓库根目录）。合成数据，真实加载 src/lib/metric_platform。
-const path = require('path');
-const fs = require('fs');
 const assert = require('assert/strict');
-const babel = require('@babel/core');
+const {loadMetricApi} = require('./loader.cjs');
 
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
-
-// ---- 窄加载器：经 Babel(commonjs) 编译并求值 ES 模块，相对路径补 .js / /index.js ----
-const moduleCache = new Map();
-function loadEsModule(file) {
-  const key = path.resolve(file);
-  if (moduleCache.has(key)) return moduleCache.get(key);
-  const code = fs.readFileSync(key, 'utf8');
-  const transformed = babel.transformSync(code, {
-    filename: key,
-    babelrc: false,
-    configFile: false,
-    sourceType: 'module',
-    presets: [[require.resolve('@babel/preset-env'), {targets: {node: '18'}, modules: 'commonjs'}]],
-  }).code;
-  const moduleObject = {exports: {}};
-  moduleCache.set(key, moduleObject);
-  const localRequire = (specifier) => {
-    if (specifier.startsWith('.')) {
-      const base = path.resolve(path.dirname(key), specifier);
-      for (const suffix of ['.js', '/index.js', '']) {
-        const candidate = base + suffix;
-        if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
-          return loadEsModule(candidate).exports;
-        }
-      }
-      throw new Error(`cannot resolve ${specifier} from ${key}`);
-    }
-    return require(specifier);
-  };
-  const fn = new Function('exports', 'require', 'module', '__filename', '__dirname', transformed);
-  fn(moduleObject.exports, localRequire, moduleObject, key, path.dirname(key));
-  return moduleObject;
-}
-
-const api = loadEsModule(path.join(PROJECT_ROOT, 'src', 'lib', 'metric_platform.js')).exports;
+const api = loadMetricApi();
 const fixtures = require('./core-fixtures.cjs');
 
 let passed = 0;
