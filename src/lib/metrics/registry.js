@@ -808,7 +808,7 @@ export const deprecateMetricDefinition = (source, definitionId) => {
 };
 
 // ---- 丢弃草案（MET-14）：仅删除活动草案；从未发布过的定义连同定义一并删除（释放 code）。
-// 已发布/已废弃版本不动；并发以草案 rev/etag 前置校验（同 updateMetricDraft）。
+// 已发布/已废弃版本不动；并发以草案 id（expectedRevisionId）+ rev/etag 前置校验（同 updateMetricDraft）。
 // 指向被删草案/定义的关联记录一并移除，不留悬挂引用（auditMetricStore 的 DANGLING_REFERENCE）。
 export const discardMetricDraft = (source, definitionId, options) => {
   const data = readMetricPlatform(source);
@@ -822,6 +822,14 @@ export const discardMetricDraft = (source, definitionId, options) => {
   if (draft == null) {
     return {ok: false, errors: [error('INVALID_VALUE', 'definitionId', 'metric.error.invalidValue',
       'definition has no active draft to discard')]};
+  }
+  // 防 ABA：草案按定义查找，新草案 rev 总从 1 起；调用方持有的草案 id 与当前活动草案不同
+  // （原草案已被丢弃/发布，后又新建同号草案）即并发冲突，不误删后建的草案
+  const opts = options == null ? {} : options;
+  if (opts.expectedRevisionId != null && opts.expectedRevisionId !== draft.id) {
+    return {ok: false, errors: [error('REVISION_CONFLICT', 'revisionId', 'metric.error.revisionConflict',
+      `active draft is ${draft.id}, expected ${opts.expectedRevisionId}`,
+      {actual: draft.id, expected: opts.expectedRevisionId})]};
   }
   const conflict = preconditionErrors(draft, options);
   if (conflict.length) return {ok: false, errors: conflict};

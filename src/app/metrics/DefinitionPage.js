@@ -486,7 +486,7 @@ const DefinitionPage = ({source, commandRunner, readOnly, focus, onDirtyChange})
   };
 
   // 丢弃草案（MET-14）：从未发布的定义连同定义删除（释放 code），已发布过的只删草案；
-  // 用加载时的 rev 做并发前置校验，冲突时由既有冲突提示引导重载
+  // 用加载时的草案 id + rev 做并发前置校验（防误删后建的同号草案），冲突时由既有冲突提示引导重载
   const discardDraft = () => {
     const detail = metricApi.getMetricDefinition(latestSource(), editor.definitionId);
     const everPublished = !!detail
@@ -499,7 +499,7 @@ const DefinitionPage = ({source, commandRunner, readOnly, focus, onDirtyChange})
           data: {code: detail ? detail.definition.code : ''}}),
       onOk: () => {
         runCommand(latest => metricApi.discardMetricDraft(latest, editor.definitionId,
-          {expectedRevision: editor.baseRev}), (result) => {
+          {expectedRevision: editor.baseRev, expectedRevisionId: editor.revisionId}), (result) => {
           const after = metricApi.getMetricDefinition(result.source, editor.definitionId);
           const remain = after == null ? null
             : (after.latestPublished

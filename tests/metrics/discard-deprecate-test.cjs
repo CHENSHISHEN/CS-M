@@ -102,6 +102,25 @@ test('(a2) expectedRevision 不符返回 REVISION_CONFLICT，存储不变', () =
   ok(api.discardMetricDraft(edited.source, 'metric-dd-conflict', {expectedRevision: 2}));
 });
 
+test('(a4) ABA：A 被丢弃后新建同为 rev 1 的草案 B，持有 A 的过期丢弃返回 REVISION_CONFLICT，B 保留', () => {
+  const source = atomicWithV10();
+  const draftA = ok(api.createRevisionDraft(source, DEF_ID, {revisionId: 'mrev-dd-aba-a'}));
+  const goneA = ok(api.discardMetricDraft(draftA.source, DEF_ID,
+    {expectedRevision: 1, expectedRevisionId: 'mrev-dd-aba-a'}));
+  const draftB = ok(api.createRevisionDraft(goneA.source, DEF_ID, {revisionId: 'mrev-dd-aba-b'}));
+  assert.equal(draftB.revision.rev, 1);
+  const before = JSON.stringify(draftB.source);
+  const stale = api.discardMetricDraft(draftB.source, DEF_ID,
+    {expectedRevision: 1, expectedRevisionId: 'mrev-dd-aba-a'});
+  assert.equal(stale.ok, false);
+  assert.equal(stale.errors[0].code, 'REVISION_CONFLICT');
+  assert.equal(stale.errors[0].messageKey, 'metric.error.revisionConflict');
+  assert.equal(JSON.stringify(draftB.source), before);
+  assert.notEqual(api.getMetricRevision(draftB.source, 'mrev-dd-aba-b'), null);
+  // 未传 expectedRevisionId 的既有调用方式保持可用
+  ok(api.discardMetricDraft(draftB.source, DEF_ID, {expectedRevision: 1}));
+});
+
 test('(a3) 没有草案 / 定义不存在：ok:false 且存储不变；损坏存储走写前守卫', () => {
   const source = atomicWithV10();
   const before = JSON.stringify(source);
