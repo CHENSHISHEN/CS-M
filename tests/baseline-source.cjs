@@ -50,12 +50,20 @@ for (const file of files) {
   assert(!/https?:\/\/www\.yuque\.com\/pdmaner|https?:\/\/pdmaas\.pdmaner\.com/.test(text), `外链泄露：${path.relative(root, file)}`);
 }
 // 隐私/安全：桌面窗口启用 nodeIntegration，入口 HTML 不得引入统计或任何远程脚本。
-for (const htmlFile of ['public/index.html', 'app/build/index.html']) {
-  if (!fs.existsSync(path.join(root, htmlFile))) continue;
+function assertNoRemoteScript(htmlFile, hint) {
   const html = read(htmlFile).toString();
-  assert(!/hm\.baidu\.com/i.test(html), `入口 HTML 含百度统计脚本：${htmlFile}`);
-  assert(!/<script\b[^>]*\bsrc\s*=\s*["']?\s*(https?:)?\/\//i.test(html), `入口 HTML 含远程 <script src>：${htmlFile}`);
-  assert(!/createElement\(\s*['"]script['"]\s*\)/i.test(html), `入口 HTML 动态创建 script 标签：${htmlFile}`);
+  assert(!/hm\.baidu\.com/i.test(html), `入口 HTML 含百度统计脚本：${htmlFile}${hint}`);
+  assert(!/<script\b[^>]*\bsrc\s*=\s*["']?\s*(https?:)?\/\//i.test(html), `入口 HTML 含远程 <script src>：${htmlFile}${hint}`);
+  assert(!/createElement\(\s*['"]script['"]\s*\)/i.test(html), `入口 HTML 动态创建 script 标签：${htmlFile}${hint}`);
+}
+// 源文件是硬性回归门。
+assertNoRemoteScript('public/index.html', '');
+// 构建产物（已 gitignore）只是二道防线：仅当其不早于源文件时才断言，过期或缺失则不让结果依赖本地环境。
+const builtHtml = 'app/build/index.html';
+if (fs.existsSync(path.join(root, builtHtml))) {
+  const mtime = name => fs.statSync(path.join(root, name)).mtimeMs;
+  if (mtime(builtHtml) >= mtime('public/index.html')) assertNoRemoteScript(builtHtml, '（构建产物不应含远程脚本，请检查 public/index.html 并重新 npm run build）');
+  else console.log('NOTE: app/build/index.html 早于 public/index.html，已跳过产物检查（请先 npm run build）');
 }
 assert(pkg.dependencies['node-sql-parser'], 'node-sql-parser 核心依赖必须安装');
 assert.deepStrictEqual(pkg.build.win.target[0].arch, ['x64']);
