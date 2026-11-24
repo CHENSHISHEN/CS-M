@@ -1386,6 +1386,10 @@ const DefinitionPage = ({source, commandRunner, readOnly, focus, onDirtyChange})
   const definition = detail.definition;
   const spec = revision.spec || {};
   const resolved = revision.resolvedSpec || {};
+  // MET-10：计算就绪以当前项目动态判定为准；resolvedSpec.computeReady 只是发布时快照
+  const snapshotReady = resolved.computeReady === true;
+  const readiness = metricApi.getMetricReadiness(source, revision.id)
+    || {ready: snapshotReady, reasons: []};
   const dependencies = metricApi.getMetricDependencies(source, revision.id);
   const versionRows = (detail.revisions || []).slice().sort((a, b) => {
     const order = (v) => {
@@ -1561,8 +1565,20 @@ const DefinitionPage = ({source, commandRunner, readOnly, focus, onDirtyChange})
             {resolved.reAggregableReason ? renderFact('metrics.resolved.reason',
               resolved.reAggregableReason) : null}
             {renderFact('metrics.resolved.computeReady',
-              <FormatMessage id={resolved.computeReady
+              <FormatMessage id={readiness.ready
                 ? 'metrics.common.yes' : 'metrics.common.no'}/>)}
+            {readiness.ready !== snapshotReady ? <p className='chiner-metrics-muted'
+              data-testid='metrics-ready-snapshot'>
+              <FormatMessage id={snapshotReady
+                ? 'metrics.resolved.snapshotReady' : 'metrics.resolved.snapshotNotReady'}/>
+            </p> : null}
+            {readiness.reasons.length ? <ul className='chiner-metrics-deplist'
+              data-testid='metrics-ready-reasons'>
+              {readiness.reasons.map(item => <li key={`${item.code}:${item.path}`}>
+                <FormatMessage id={`metrics.resolved.readinessReason.${item.code}`}/>
+                {' '}<code>{item.path}</code>
+              </li>)}
+            </ul> : null}
             {resolved.designOnly ? <div className='chiner-metrics-notice'
               data-testid='metrics-design-only'>
               <FormatMessage id='metrics.view.designOnly'/>

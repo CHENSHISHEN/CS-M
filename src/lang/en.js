@@ -2468,6 +2468,14 @@ projectTemplate: {
             reAggregable: 'Re-aggregable',
             reason: 'Reason',
             computeReady: 'Compute-ready (metadata)',
+            snapshotReady: 'Snapshot at publish: ready',
+            snapshotNotReady: 'Snapshot at publish: not ready',
+            readinessReason: {
+                SOURCE_MISSING: 'Source model or field no longer exists',
+                NO_CONFIRMED_BINDING: 'No confirmed compute-source binding',
+                MAPPING_INCOMPLETE: 'Binding mapping is incomplete',
+                SOURCE_NOT_PHYSICAL: 'Source is not a physical entity',
+            },
         },
         dirty: {
             title: 'Uncommitted form changes',
