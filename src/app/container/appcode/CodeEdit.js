@@ -3,6 +3,7 @@ import {Button, CodeEditor, FormatMessage, openModal} from 'components';
 import Preview from '../../container/database/Preview';
 // eslint-disable-next-line import/named
 import { platform } from '../../../lib/middle';
+import { safeOpenExternal } from '../../../lib/safeExternal';
 
 export default ({prefix, data, onBlur, update, dataSource, type, name}) => {
     const openOptModal = (t) => {
@@ -45,8 +46,7 @@ export default ({prefix, data, onBlur, update, dataSource, type, name}) => {
         } else {
             const href = 'https://gitee.com/robergroup/chiner-hub/tree/master/CodeTemplate';
             if (platform === 'json') {
-                // eslint-disable-next-line global-require,import/no-extraneous-dependencies
-                require('electron').shell.openExternal(href);
+                safeOpenExternal(href);
             } else {
                 const a = document.createElement('a');
                 a.href = href;

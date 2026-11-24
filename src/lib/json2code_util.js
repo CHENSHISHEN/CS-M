@@ -6,6 +6,7 @@ import { Message, FormatMessage } from '../components';
 import { separator } from '../../profile';
 import {getDefaultTemplate, transform} from './datasource_util';
 import {platform} from './middle';
+import {safeOpenExternal} from './safeExternal';
 import {
   _camel, _getAllDataSQLByFilter,
   _getDataByChanges,
@@ -493,9 +494,10 @@ const demoChanges =  [
 export const openUrl = (url) => {
   const href = url;
   if (platform === 'json') {
-    // eslint-disable-next-line global-require,import/no-extraneous-dependencies
-    require('electron').shell.openExternal(href).catch(() => {
-      Message.error({title: `${FormatMessage.string({id: 'canvas.node.invalidLink'})}`});
+    safeOpenExternal(href).then((opened) => {
+      if (!opened) {
+        Message.error({title: `${FormatMessage.string({id: 'canvas.node.invalidLink'})}`});
+      }
     });
   } else {
     const a = document.createElement('a');

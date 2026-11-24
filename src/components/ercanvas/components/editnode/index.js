@@ -8,6 +8,7 @@ import { renderer } from '../util';
 import { renderMarkdownSafe } from '../../../../lib/safeHtml';
 // eslint-disable-next-line import/named
 import { platform } from '../../../../lib/middle';
+import { safeOpenExternal } from '../../../../lib/safeExternal';
 import info from './style/info.png';
 
 const EditNode = forwardRef(({node}, ref) => {
@@ -60,8 +61,7 @@ const EditNode = forwardRef(({node}, ref) => {
         link.addEventListener('click', (e) => {
           const url = link.getAttribute('href');
           e.preventDefault();
-          // eslint-disable-next-line global-require,import/no-extraneous-dependencies
-          require('electron').shell.openExternal(url);
+          safeOpenExternal(url);
         });
       });
     }
