@@ -190,6 +190,27 @@ test('(h) 映射字段被删（绑定尚未失效）→ MAPPING_INCOMPLETE', () 
   ]);
 });
 
+test('(k) 计算绑定只落在逻辑层 → SOURCE_NOT_PHYSICAL；另有物理层绑定 → ready', () => {
+  let source = publishedAmount();
+  source = {...source, logicEntities: [{id: 'logic-order', defKey: 'order_l', defName: '订单逻辑',
+    fields: [
+      {id: 'l-order-id', defKey: 'order_id'}, {id: 'l-amount', defKey: 'paid_amount'},
+      {id: 'l-paid-at', defKey: 'paid_at'}, {id: 'l-status', defKey: 'status'},
+      {id: 'l-channel', defKey: 'channel'},
+    ]}]};
+  // 写命令放行（COMPUTES_FROM 不限集合），映射完整
+  source = bind(source, {id: 'bind-rd-logic-b',
+    modelRef: {collection: 'logicEntities', objectId: 'logic-order', fieldId: 'l-amount'},
+    mapping: {timeFieldId: 'l-paid-at', qualifierFieldIds: ['l-status'],
+      dimensionFieldIds: ['l-channel'], factKeyFieldIds: ['l-order-id']}});
+  assert.deepEqual(api.getMetricReadiness(source, REV), {
+    ready: false,
+    reasons: [{code: 'SOURCE_NOT_PHYSICAL', path: 'bindings[bind-rd-logic-b].modelRef.collection'}],
+  });
+  const withPhysical = bind(source, {id: 'bind-rd-phys', mapping: fullMapping()});
+  assert.deepEqual(api.getMetricReadiness(withPhysical, REV), {ready: true, reasons: []});
+});
+
 // 直接改写存储里的绑定元素（模拟旧/损坏数据：普通对象但缺字段）
 const withCorruptBinding = (source, mutate) => {
   const copy = JSON.parse(JSON.stringify(source));

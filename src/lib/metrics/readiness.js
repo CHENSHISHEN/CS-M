@@ -4,8 +4,9 @@
 // D5 只判四件事（原子版本）：
 //   ① 声明来源端点在场（按稳定 ID，复用 getDeclaredSpecSources 的在场投影）→ SOURCE_MISSING
 //   ② 来源为物理实体（entities；逻辑/概念层只是语义设计）              → SOURCE_NOT_PHYSICAL
-//   ③ 至少一条 confirmed COMPUTES_FROM 绑定且端点在场（bindingEndpoint 投影；
+//   ③ 至少一条 confirmed COMPUTES_FROM 绑定且端点在场、落在物理层（bindingEndpoint 投影；
 //      suggested/unresolved/released 不算）                              → NO_CONFIRMED_BINDING
+//      （仅有逻辑/概念层的确认计算绑定时报 SOURCE_NOT_PHYSICAL @ bindings[id].modelRef.collection）
 //   ④ 必需 mapping 齐备（至少一条有效绑定齐备即可）                    → MAPPING_INCOMPLETE
 // 派生/复合：D5 明确不做上游传递就绪判定，原样返回发布快照、不给原因（不在此沿依赖链下钻）。
 // 约定：不修改入参；损坏绑定元素（null、缺 modelRef/mapping/events）跳过或按缺失处理，不抛错。
@@ -65,15 +66,28 @@ const sourceReasons = (source, revisionId, spec) => {
 const bindingReasons = (source, revisionId, spec) => {
   const bindings = readMetricPlatform(source).bindings || [];
   const effective = [];
+  const nonPhysical = [];
   bindings.forEach((binding) => {
     if (binding == null || typeof binding !== 'object' || binding.modelRef == null) return;
     if (binding.role !== 'COMPUTES_FROM' || binding.state !== 'confirmed') return;
     if (binding.metricRevisionId !== revisionId) return;
     const endpoint = bindingEndpoint(source, binding);
     if (!endpoint.present) return;
+    // COMPUTES_FROM 写入不限集合：落在逻辑/概念层的计算绑定只是语义设计，不构成有效计算来源
+    if (endpoint.collection !== 'entities') {
+      nonPhysical.push(binding);
+      return;
+    }
     effective.push({binding, endpoint});
   });
-  if (!effective.length) return [reason('NO_CONFIRMED_BINDING', 'bindings')];
+  if (!effective.length) {
+    // 仅有非物理层的确认绑定时，SOURCE_NOT_PHYSICAL 比"无确认绑定"更准确
+    if (nonPhysical.length) {
+      return nonPhysical.map(binding => reason('SOURCE_NOT_PHYSICAL',
+        `bindings[${binding.id}].modelRef.collection`));
+    }
+    return [reason('NO_CONFIRMED_BINDING', 'bindings')];
+  }
   const missingPerBinding = effective.map(({binding, endpoint}) => {
     const fieldIds = modelFieldIdsOf(endpoint.object);
     return requiredMappingKeys(spec, binding)
