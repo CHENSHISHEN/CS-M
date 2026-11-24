@@ -2165,6 +2165,7 @@ projectTemplate: {
             unknownKey: 'Field not allowed for this metric kind: {field}',
             invalidValue: 'Invalid value',
             invalidExpression: 'Expression violates the restricted grammar (only + - * / parentheses, double-brace refs and SAFE_DIVIDE)',
+            expressionTooComplex: 'Expression exceeds the complexity limit ({limit}; length counts characters, nesting counts parenthesis levels). Split it into several metrics',
             duplicateCode: 'Metric code already exists in the namespace: {code}',
             duplicateId: 'Id already exists and cannot be overwritten: {id}',
             unknownReference: 'Reference does not exist: {ref}',

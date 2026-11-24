@@ -291,7 +291,11 @@ const validateCompoundSemantics = (data, definition, spec, errors) => {
   try {
     ast = parseExpression(spec.expression, 'spec.expression');
   } catch (parseError) {
-    errors.push(parseError);
+    // 非结构化异常（无 code）统一包装为 INVALID_VALUE，errors[] 只含结构化错误
+    errors.push(parseError != null && typeof parseError.code === 'string'
+      ? parseError
+      : error('INVALID_VALUE', 'spec.expression', 'metric.error.invalidExpression',
+        `expression could not be parsed: ${parseError != null && parseError.message ? parseError.message : String(parseError)}`));
     return null;
   }
   const declaredKeys = (spec.refs || []).map(ref => ref.key);
