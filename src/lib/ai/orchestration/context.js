@@ -77,8 +77,10 @@ const SENSITIVE_PATTERNS = [
   // 行文中的 Bearer <token>：token 须含数字或 ≥20 个 token 字符，"Bearer authentication" 等不动
   {re: /\b(Bearer\s+)(?=[A-Za-z0-9._~+/-]*[0-9]|[A-Za-z0-9._~+/-]{20,})([A-Za-z0-9._~+/-]{8,}=*)/gi,
     kind: 'credential', hasPrefix: true},
-  // URL userinfo 口令：scheme://user:pass@host → 保留 scheme/user/host，遮蔽 pass
-  {re: /\b([a-z][a-z0-9+.-]*:\/\/[^\s:@/?#]+:)([^\s/?#]+)(@)/gi,
+  // URL userinfo 口令：scheme://user:pass@host → 保留 scheme/user/host，遮蔽 pass。
+  // 各段量词有上限（scheme ≤32、user ≤256、pass ≤512）：无上限时在 a-a-a…/v1.v1.… 这类
+  // 词边界密集的长串上每个 \b 都扫到串尾，二次方回溯（ReDoS）。不用 lookbehind（webpack 4 解析风险）。
+  {re: /\b([a-z][a-z0-9+.-]{0,31}:\/\/[^\s:@/?#]{1,256}:)([^\s/?#]{1,512})(@)/gi,
     kind: 'credential', hasPrefix: true, hasSuffix: true},
   // key=value / key: value / "key": "value"（保留标签，遮蔽值）；
   // 标签可带 _key/_id/_token/_secret 后缀（secret_key、secret-key、client_secret、access_token…）
@@ -90,7 +92,8 @@ const SENSITIVE_PATTERNS = [
   // well-known token shapes (no label needed)；LTAI… 为阿里云 AccessKey ID
   {re: /\b(?:sk-[A-Za-z0-9_-]{12,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|LTAI[0-9A-Za-z]{12,}|xox[baprs]-[A-Za-z0-9-]{10,})\b/g,
     kind: 'credential', hasPrefix: false},
-  {re: /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/g,
+  // PEM 私钥块：正文不得跨越下一个 BEGIN（否则多个未闭合 BEGIN 各自扫到串尾，二次方），类型词限长
+  {re: /-----BEGIN [A-Z0-9 ]{0,40}PRIVATE KEY-----(?:(?!-----BEGIN )[\s\S])*?-----END [A-Z0-9 ]{0,40}PRIVATE KEY-----/g,
     kind: 'credential', hasPrefix: false},
   // local OS paths (never shipped to the model)
   {re: /(?:\/(?:Users|home)\/[A-Za-z0-9._-]+(?:\/[^\s"',;，。）)]*)?|[A-Za-z]:\\Users\\[^\s"',;，。）)]*)/g,

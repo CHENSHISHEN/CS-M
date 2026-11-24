@@ -1040,6 +1040,71 @@ console.log('context redaction');
     assert.strictEqual(both.notices.length, 2, 'credential + path notices');
     assert.deepStrictEqual(redactSensitiveText(42), {text: '', maskCount: 0, notices: []});
   });
+
+  // ---- 性能回归（ReDoS 守卫）：对抗输入在修复后为数毫秒，限 200ms 足够宽松不抖动 ----
+  const LIMIT_MS = 200;
+  const N = 100000;
+  const rep = (s, n = N) => s.repeat(Math.ceil(n / s.length)).slice(0, n);
+  const timeRedact = (input) => {
+    let best = Infinity;
+    for (let i = 0; i < 2; i += 1) { // 取两次中较快者，排除偶发 GC/调度抖动
+      const t0 = process.hrtime.bigint();
+      redactSensitiveText(input);
+      best = Math.min(best, Number(process.hrtime.bigint() - t0) / 1e6);
+    }
+    return best;
+  };
+  test('adversarial inputs redact in linear time (no polynomial backtracking)', () => {
+    const adversarial = {
+      'a- x15000 (30KB)': 'a-'.repeat(15000),
+      'a- 100KB': rep('a-'),
+      'v1. 100KB': rep('v1.'),
+      'ab. 100KB': rep('ab.'),
+      'a+b. 100KB': rep('a+b.'),
+      ':// 100KB': rep('://'),
+      'x://u: 100KB': rep('x://u:'),
+      'a://b:c 100KB': rep('a://b:c'),
+      'x://u:+p… 100KB': 'x://u:' + 'p'.repeat(N),
+      'password: 100KB': rep('password:'),
+      '"password":" 100KB': rep('"password":"'),
+      '"password":"+x… (unterminated)': '"password":"' + 'x'.repeat(N),
+      'secret_key_id 100KB': rep('secret_key_id '),
+      '密码: 100KB': rep('密码:'),
+      '密码:"+a… (unterminated)': '密码:"' + 'a'.repeat(N),
+      'Bearer 100KB': rep('Bearer '),
+      'Bearer 1 100KB': rep('Bearer 1'),
+      'Bearer +a… 100KB': 'Bearer ' + 'a'.repeat(N),
+      'authorization:"Bearer 100KB': rep('authorization:"Bearer '),
+      'LTAI+a… 100KB': 'LTAI' + 'a'.repeat(N),
+      'PEM BEGIN without END 100KB': rep('-----BEGIN PRIVATE KEY-----\n'),
+      'PEM BEGIN without END 300KB': rep('-----BEGIN PRIVATE KEY-----\n', 300000),
+      'PEM type run 100KB': '-----BEGIN ' + rep('A ') + 'X',
+      '/home/ 100KB': rep('/home/'),
+    };
+    const slow = Object.entries(adversarial)
+      .map(([name, input]) => [name, timeRedact(input)])
+      .filter(([, ms]) => ms > LIMIT_MS);
+    assert.deepStrictEqual(slow.map(([name, ms]) => `${name}: ${ms.toFixed(0)}ms`), [], 'slow redaction');
+  });
+  test('userinfo/PEM positives still masked after the ReDoS fix; scheme boundary is 32 chars', () => {
+    const s32 = 'a'.repeat(32);
+    const s33 = 'a'.repeat(33);
+    // 32 字符 scheme（RFC 3986 scheme 实际都很短）仍识别
+    assert.strictEqual(redactSensitiveText(`${s32}://root:S3cret@db/x`).text, `${s32}://root:${MASK}@db/x`);
+    // 33 个连续字母的 scheme 超出上限且内部无词边界：不识别（已知且接受的边界，见报告）
+    const over = `${s33}://root:S3cret@db/x`;
+    assert.strictEqual(redactSensitiveText(over).text, over);
+    // 带分隔符的长 scheme：从最后 ≤32 字符的词边界起识别，口令仍被遮蔽
+    assert.ok(!redactSensitiveText(`${'x'.repeat(40)}+ssh://root:S3cret@db/x`).text.includes('S3cret'));
+    // 对抗前缀后紧跟真实 userinfo：仍遮蔽
+    assert.ok(!redactSensitiveText(`${'a-'.repeat(5000)} mysql://root:S3cret@db:3306/x`).text.includes('S3cret'));
+    assert.strictEqual(redactSensitiveText('git+ssh://u:pw12@h/x').text, `git+ssh://u:${MASK}@h/x`);
+    // PEM：正常私钥块整体遮蔽；前面有一个不闭合的 BEGIN 时，后面完整的块仍被遮蔽
+    const pem = '-----BEGIN EC PRIVATE KEY-----\nMHcCAQEE\n-----END EC PRIVATE KEY-----';
+    assert.strictEqual(redactSensitiveText(`a ${pem} b`).text, `a ${MASK} b`);
+    assert.strictEqual(redactSensitiveText(`-----BEGIN PRIVATE KEY-----\ntruncated\n${pem}`).text,
+      `-----BEGIN PRIVATE KEY-----\ntruncated\n${MASK}`);
+  });
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
