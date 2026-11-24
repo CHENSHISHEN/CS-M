@@ -137,14 +137,25 @@ test('(b) 篡改 resolvedSpec / 置空 hash / 非法格式 hash 均判不一致'
 });
 
 // ---------------- (c) 读取返回副本 ----------------
+// A.1 起 getMetricRevision 返回深冻结拷贝：修改尝试要么抛 TypeError（严格模式/数组 push），
+// 要么静默无效（非严格赋值）；两种情况都不得影响存储
+const tryMutate = (fn) => {
+  try {
+    fn();
+  } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
+  }
+};
 test('(c) 修改 getMetricRevision 返回对象不影响存储内数据', () => {
   const source = buildStore();
   const before = JSON.stringify(source);
   const revision = api.getMetricRevision(source, 'mrev-au-amount-1');
-  revision.spec.unit = 'USD';
-  revision.resolvedSpec.unit = 'USD';
-  revision.hash = 'sha256:forged';
-  revision.spec.baseQualifiers.push({dimensionId: 'x', op: 'eq', value: 1});
+  tryMutate(() => { revision.spec.unit = 'USD'; });
+  tryMutate(() => { revision.resolvedSpec.unit = 'USD'; });
+  tryMutate(() => { revision.hash = 'sha256:forged'; });
+  tryMutate(() => revision.spec.baseQualifiers.push({dimensionId: 'x', op: 'eq', value: 1}));
+  assert.equal(revision.spec.unit, 'CNY', '返回对象已冻结，修改无效');
+  assert.equal(revision.spec.baseQualifiers.length, 3);
   const reread = api.getMetricRevision(source, 'mrev-au-amount-1');
   assert.equal(reread.spec.unit, 'CNY');
   assert.equal(reread.resolvedSpec.unit, 'CNY');

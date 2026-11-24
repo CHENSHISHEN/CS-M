@@ -12,7 +12,7 @@
 
 import {invalidValueError, metricError, missingFieldError, unknownKeyError} from './errors';
 import {hashValue, newMetricId} from './hash';
-import {isStoreWritable, readMetricPlatform, writeMetricPlatform} from './store';
+import {readMetricPlatform, storeWriteErrors, writeMetricPlatform} from './store';
 import {QUALIFIER_OPS} from './validate';
 import {validateWindow} from './window';
 
@@ -463,13 +463,8 @@ const writeCategory = (source, data, category, list) => {
   });
 };
 
-const storeGuardErrors = (data) => {
-  if (!isStoreWritable(data)) {
-    return [metricError('SCHEMA_VERSION_UNSUPPORTED', 'profile.metricPlatform.schemaVersion',
-      'metric.error.schemaUnsupported', 'metric platform schema version unsupported')];
-  }
-  return [];
-};
+// 写前守卫统一走 store.storeWriteErrors（STORE_CORRUPT / SCHEMA_VERSION_UNSUPPORTED）
+const storeGuardErrors = data => storeWriteErrors(data);
 
 const inUseError = (category, entry, refs) => metricError('DICTIONARY_IN_USE',
   `dictionary.${category}.${entry.id}`, 'metric.error.dictionaryInUse',

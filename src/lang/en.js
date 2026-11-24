@@ -2189,6 +2189,7 @@ projectTemplate: {
             patchKey: 'Department patch key not allowed',
             conceptInUse: 'Concept is referenced by metrics ({refs}); it cannot be deleted or moved to another domain. Create a new concept instead.',
             schemaUnsupported: 'Metric store schema version is unsupported',
+            storeCorrupt: 'Metric store structure is corrupt and read-only; repair metricPlatform in the project file before editing',
             dictionaryInUse: 'Dictionary entry is referenced ({refs}; metric references and intra-dictionary qualifier→dimension deps included); disable it instead of deleting or changing semantics.',
             duplicateDictionaryCode: 'Dictionary code already exists in this category: {code}',
             disabledDictionaryEntry: 'Dictionary entry is disabled and cannot be referenced by a new publish: {ref} (pick an active entry or re-enable it in the dictionary)',

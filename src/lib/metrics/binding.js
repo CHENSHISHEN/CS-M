@@ -15,7 +15,7 @@
 
 import {metricError, missingFieldError} from './errors';
 import {hashValue, newMetricId} from './hash';
-import {isStoreWritable, readMetricPlatform, writeMetricPlatform} from './store';
+import {readMetricPlatform, storeWriteErrors, writeMetricPlatform} from './store';
 import {AGGREGATIONS} from './validate';
 
 export const BINDING_ROLES = ['COMPUTES_FROM', 'MATERIALIZES_INTO', 'CONSUMED_BY', 'SEMANTIC_MATCH'];
@@ -77,13 +77,8 @@ export const bindingFingerprintStatus = (source, binding) => {
 };
 
 // ---- 内部查找 ----
-const storeGuard = (data) => {
-  if (!isStoreWritable(data)) {
-    return [error('SCHEMA_VERSION_UNSUPPORTED', 'profile.metricPlatform.schemaVersion',
-      'metric.error.schemaUnsupported', 'metric platform schema version unsupported')];
-  }
-  return [];
-};
+// 写前守卫统一走 store.storeWriteErrors（STORE_CORRUPT / SCHEMA_VERSION_UNSUPPORTED）
+const storeGuard = data => storeWriteErrors(data);
 const findDefinition = (data, id) =>
   (data.definitions || []).filter(item => item.id === id)[0] || null;
 const findRevision = (data, id) =>

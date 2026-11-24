@@ -35,7 +35,8 @@ const dataStandardLibrary = load('src/lib/data_standard_library.js', {'./field_r
 const modelRules = load('src/lib/quality/modelRules.js', {'../data_standard_library.js': dataStandardLibrary});
 const projectMetadata = load('src/lib/quality/projectMetadata.js', {'./modelRules.js': modelRules});
 const metricHash = load('src/lib/metrics/hash.js');
-const metricStore = load('src/lib/metrics/store.js', {'./hash': metricHash});
+const metricErrors = load('src/lib/metrics/errors.js');
+const metricStore = load('src/lib/metrics/store.js', {'./hash': metricHash, './errors': metricErrors});
 const metricPersistence = load('src/lib/metrics/persistence.js', {'./store': metricStore, './hash': metricHash});
 const util = load('src/lib/utils.js', {
   './template/教学管理系统.pdma.json': {}, '../lang': {}, lodash, dot: {},

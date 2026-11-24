@@ -1,6 +1,7 @@
 // 指标平台 M1：领域层出口（纯函数，UI 只经此处或 metric_platform.js 使用）。
 export * from './errors';
 export * from './hash';
+export * from './freeze';
 export * from './store';
 export * from './window';
 export * from './ast';

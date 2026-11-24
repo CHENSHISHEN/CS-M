@@ -5,8 +5,9 @@
 
 import {metricError, missingFieldError} from './errors';
 import {contentHash, hashValue, newMetricId} from './hash';
+import {frozenClone} from './freeze';
 import {
-  draftEtag, ensureNamespace, isStoreWritable, readMetricPlatform, writeMetricPlatform,
+  draftEtag, ensureNamespace, readMetricPlatform, storeWriteErrors, writeMetricPlatform,
 } from './store';
 import {
   atomicReAggregable, compoundReAggregable, dependencyCycleError, findDependencyCycle, metricDependencies,
@@ -75,13 +76,8 @@ const deprecatedDefinitionErrors = (data, revision) => {
     `definition ${revision.definitionId} is deprecated, cannot publish`, {id: revision.definitionId})];
 };
 
-const storeGuard = (data) => {
-  if (!isStoreWritable(data)) {
-    return [error('SCHEMA_VERSION_UNSUPPORTED', 'profile.metricPlatform.schemaVersion',
-      'metric.error.schemaUnsupported', 'metric platform schema version unsupported')];
-  }
-  return [];
-};
+// 写前守卫统一走 store.storeWriteErrors（STORE_CORRUPT / SCHEMA_VERSION_UNSUPPORTED）
+const storeGuard = data => storeWriteErrors(data);
 
 // 并发前置校验：rev 与 etag 任一不匹配即冲突，不发生后写覆盖
 const preconditionErrors = (revision, options) => {
@@ -169,9 +165,20 @@ export const getMetricDefinition = (source, definitionId) => {
   });
 };
 
-// 深拷贝返回（MET-22）：修改返回对象不影响存储，已发布快照与 hash 不会被读取方悄悄改写
+// 深冻结拷贝返回（MET-22 / MET-03 余项）：返回对象不可改（严格模式赋值抛 TypeError），
+// 也与存储隔离；已发布快照与 hash 不会被读取方悄悄改写。需要可编辑副本时调用方自行深拷贝
 export const getMetricRevision = (source, revisionId) =>
-  cloneJson(findRevision(readMetricPlatform(source), revisionId));
+  frozenClone(findRevision(readMetricPlatform(source), revisionId));
+
+// 修订列表（存储顺序），可选 filter {definitionId, status}；返回深冻结拷贝（数组本身也冻结）
+export const listMetricRevisions = (source, filter) => {
+  const f = filter == null ? {} : filter;
+  return frozenClone((readMetricPlatform(source).revisions || []).filter((item) => {
+    if (f.definitionId != null && item.definitionId !== f.definitionId) return false;
+    if (f.status != null && item.status !== f.status) return false;
+    return true;
+  }));
+};
 
 export const getMetricDependencies = (source, revisionId) =>
   metricDependencies(readMetricPlatform(source), revisionId);

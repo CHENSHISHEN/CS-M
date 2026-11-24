@@ -7,7 +7,7 @@
 
 import {metricError, missingFieldError} from './errors';
 import {newMetricId} from './hash';
-import {isStoreWritable, readMetricPlatform, writeMetricPlatform} from './store';
+import {readMetricPlatform, storeWriteErrors, writeMetricPlatform} from './store';
 import {compareBaselineUpgrade} from './baseline';
 
 const findDefinition = (data, id) =>
@@ -25,13 +25,8 @@ const latestPublished = (data, definitionId) =>
     .filter(item => item.status === 'published')
     .sort((a, b) => (versionOrder(a.version) < versionOrder(b.version) ? 1 : -1))[0] || null;
 
-const storeGuard = (data) => {
-  if (!isStoreWritable(data)) {
-    return [metricError('SCHEMA_VERSION_UNSUPPORTED', 'profile.metricPlatform.schemaVersion',
-      'metric.error.schemaUnsupported', 'metric platform schema version unsupported')];
-  }
-  return [];
-};
+// 写前守卫统一走 store.storeWriteErrors（STORE_CORRUPT / SCHEMA_VERSION_UNSUPPORTED）
+const storeGuard = data => storeWriteErrors(data);
 
 // ---- 概念引用（复用 concepts 事实源；引用位置=定义归属 definition.conceptId） ----
 export const listConceptReferences = (source, conceptId) => {

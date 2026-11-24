@@ -17,7 +17,7 @@ export const renderMetricErrorText = (error) => {
 // M5B 错误业务化：按错误码类别给出“业务影响 + 下一步”摘要（真实失败不被隐藏，
 // 不伪造成功）；错误码 / 开发期 message 留在可展开技术详情中
 const ERROR_GUIDANCE_STATE = ['REVISION_CONFLICT', 'ACTIVE_DRAFT_EXISTS', 'IMMUTABLE_PUBLISHED',
-  'DUPLICATE_CODE', 'DUPLICATE_ID', 'SCHEMA_VERSION_UNSUPPORTED'];
+  'DUPLICATE_CODE', 'DUPLICATE_ID', 'SCHEMA_VERSION_UNSUPPORTED', 'STORE_CORRUPT'];
 const guidanceOf = (code) => {
   if (code === 'READ_ONLY') {
     return {impactKey: 'metrics.err.impactReadonly', nextKey: 'metrics.err.nextReadonly'};
