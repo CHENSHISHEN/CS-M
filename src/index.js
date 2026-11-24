@@ -15,8 +15,11 @@ import { toErrorFallbackInfo, toLoggableError } from './lib/errorBoundaryState';
 const store = createStore(reducers,
   {},
   applyMiddleware(
-    thunkMiddleware,
-    logger,
+    ...[
+      thunkMiddleware,
+      // redux-logger 会把完整 state/action 打到控制台:仅开发环境启用(webpack mode 会注入 NODE_ENV)
+      ...(process.env.NODE_ENV !== 'production' ? [logger] : []),
+    ],
 () => {
       return next => (action) => {
         // 发送上一次的数据

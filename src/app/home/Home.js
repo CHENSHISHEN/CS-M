@@ -545,7 +545,7 @@ export default React.memo(({
                         <div className='card-preview' style={{ background: m.tintColor }}>
                           {IllustrationComponent && <IllustrationComponent />}
                           {!m.isReady && (
-                            <span className='coming-soon-badge' style={{ background: m.accentColor }}>
+                            <span className='coming-soon-badge' style={{ background: m.buttonColor || m.accentColor }}>
                               <FormatMessage id={m.badgeKey} />
                             </span>
                           )}
@@ -567,8 +567,8 @@ export default React.memo(({
                               type='primary'
                               onClick={() => handleModuleAction(m)}
                               style={{
-                                background: m.accentColor,
-                                borderColor: m.accentColor,
+                                background: m.buttonColor || m.accentColor,
+                                borderColor: m.buttonColor || m.accentColor,
                               }}
                             >
                               <FormatMessage id={m.actionKey} />

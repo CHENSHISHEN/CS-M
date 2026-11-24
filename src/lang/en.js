@@ -2682,6 +2682,7 @@ projectTemplate: {
             deprecateTitle: 'Deprecate this metric definition',
             deprecateMessage: 'Historical versions stay readable with hash unchanged; new publishes referencing it are rejected. This definition currently has {count} downstream references.',
             revised: 'Revision draft created; continue editing and publish on the definition page.',
+            reviseConfirm: 'A new revision draft will be created from this version. Published versions stay unchanged; edit the draft on the definition page before publishing.',
             hashImmutable: 'Published historical hash is immutable; the first 12 chars of the publish-fixed value are shown.',
             unpublished: 'Unpublished',
         },

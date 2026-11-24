@@ -43,6 +43,7 @@ const TESTS = [
   {file: 'tests/test-safe-html.mjs'},
   {file: 'tests/test-safe-external.mjs'},
   {file: 'tests/test-ux-p1.mjs'},
+  {file: 'tests/test-tier1-tail.mjs'},
   {file: 'tests/test-no-raw-html.cjs'},
   {file: 'tests/test-process-ports.mjs'},
   {file: 'tests/test-i18n-parity.mjs'},

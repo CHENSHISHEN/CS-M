@@ -65,7 +65,7 @@ const VersionsPage = ({source, commandRunner, readOnly, onOpenDefinition}) => {
   const reviseFrom = (row) => {
     Modal.confirm({
       title: FormatMessage.string({id: 'metrics.versions.revise'}),
-      message: FormatMessage.string({id: 'metrics.publish.message'}),
+      message: FormatMessage.string({id: 'metrics.versions.reviseConfirm'}),
       onOk: () => {
         runVersion(latest => metricApi.createRevisionDraft(latest,
           row.definition.id, {baseRevisionId: row.revision.id}), (result) => {
