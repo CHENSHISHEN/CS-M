@@ -226,6 +226,91 @@ const deadPid = () => {const r = spawnSync(process.execPath, ['-e', '0']);return
     } finally {dispose(store);}
   });
 
+  // 连续 open:在途 open 的草稿只属于它自己的工程,绝不写入"正在离开"的另一个工程。
+  const threeProjects = dir => {
+    const files = {A: path.join(dir, 'A.pdma.json'), B: path.join(dir, 'B.pdma.json'), C: path.join(dir, 'C.pdma.json')};
+    const dB = drawing('B-own', 'B 自有'), dC = drawing('C-own', 'C 自有');
+    writeProject(files.A, []);writeProject(files.B, [dB]);writeProject(files.C, [dC]);
+    const disk = () => Object.fromEntries(Object.entries(files).map(([k, f]) => [k, fs.readFileSync(f, 'utf8')]));
+    return {files, dB, dC, disk};
+  };
+  const idsOf = async (store, file) => (await store.recovery(file, 'win-1')).drawings.map(d => d.id);
+
+  await ok('DRW-02 连续 open: open(A) 失败 + 其间 change() + open(B),C 不被写入/删除,A 的编辑被丢弃', async dir => {
+    const {files, dB, dC, disk} = threeProjects(dir);
+    const store = makeStore(dir);
+    try {
+      const wrapper = loadWrapper(store);
+      await wrapper.open(files.C, project([dC]));
+      const before = disk();
+      const oA = settle(wrapper.open(files.A, null));  // 引擎拒绝:INVALID_PROJECT
+      const ch = settle(wrapper.change([drawing('A-edit', 'A 编辑')]));
+      const oB = settle(wrapper.open(files.B, project([dB])));
+      assert.strictEqual(codeOf((await oA).error), 'INVALID_PROJECT');
+      assert((await ch).error, '针对失败工程 A 的编辑必须被拒绝');
+      assert(!(await oB).error, `open(B) 应成功: ${(await oB).error}`);
+      assert.deepStrictEqual(await idsOf(store, files.C), ['C-own'], 'C 的图纸不得被替换或删除');
+      assert.strictEqual(sessionOf(store, files.C).seq, 0, 'C 不得收到任何命令');
+      assert.deepStrictEqual(await idsOf(store, files.B), ['B-own']);
+      assert.strictEqual(sessionOf(store, files.B).seq, 0);
+      assert(!store.sessions.has(fs.realpathSync(files.A)), 'A 不应建立会话');
+      await wrapper.flush();
+      assert.deepStrictEqual(disk(), before, '任何工程文件都不应被改写');
+    } finally {dispose(store);}
+  });
+
+  await ok('DRW-02 连续 open: open(A) 成功 + 其间 change() + open(B),编辑只进 A 且离开 A 时刷盘、不重复应用', async dir => {
+    const {files, dB, dC, disk} = threeProjects(dir);
+    const store = makeStore(dir);
+    try {
+      const wrapper = loadWrapper(store);
+      await wrapper.open(files.C, project([dC]));
+      const before = disk();
+      const oA = settle(wrapper.open(files.A, project([])));
+      const ch = settle(wrapper.change([drawing('A-edit', 'A 编辑')]));
+      const oB = settle(wrapper.open(files.B, project([dB])));
+      for (const r of [await oA, await ch, await oB]) assert(!r.error, `不应失败: ${r.error}`);
+      assert.deepStrictEqual(await idsOf(store, files.C), ['C-own']);
+      assert.strictEqual(sessionOf(store, files.C).seq, 0);
+      assert.deepStrictEqual(await idsOf(store, files.A), ['A-edit']);
+      assert.strictEqual(sessionOf(store, files.A).seq, 1, 'A 的编辑只应用一次');
+      assert.deepStrictEqual(JSON.parse(fs.readFileSync(files.A)).drawings.map(d => d.id), ['A-edit'], '离开 A 前应刷盘');
+      assert.deepStrictEqual(await idsOf(store, files.B), ['B-own']);
+      assert.strictEqual(sessionOf(store, files.B).seq, 0);
+      await wrapper.flush();
+      assert.strictEqual(sessionOf(store, files.B).seq, 0, 'flush 不得把其他工程的草稿写入 B');
+      const after = disk();
+      assert.strictEqual(after.B, before.B);assert.strictEqual(after.C, before.C);
+    } finally {dispose(store);}
+  });
+
+  await ok('DRW-02 连续 open: 被取代且失败的 open 不把旧工程草稿留给新工程,之后 flush() 不写入 B', async dir => {
+    const {files, dB, dC, disk} = threeProjects(dir);
+    const store = makeStore(dir);
+    let failC = false;
+    try {
+      const realC = fs.realpathSync(files.C);
+      const wrapper = loadWrapper(store, {intercept: async (request, forward) => (
+        failC && request.method === 'command' && request.file === realC ? {ok: false, error: 'DISK_FULL'} : forward(request))});
+      await wrapper.open(files.C, project([dC]));
+      const before = disk();
+      failC = true;
+      assert.strictEqual((await settle(wrapper.change([dC, drawing('C-2', 'C 新增')]))).error.message, 'DISK_FULL');
+      const oA = settle(wrapper.open(files.A, project([])));  // 离开 C 时写草稿失败 → open(A) 失败
+      const oB = settle(wrapper.open(files.B, project([dB])));  // 在 A 失败之前已调用:A 被取代
+      assert.strictEqual((await oA).error.message, 'DISK_FULL');
+      failC = false;
+      assert(!(await oB).error, `open(B) 应成功: ${(await oB).error}`);
+      await wrapper.flush();
+      assert.deepStrictEqual(await idsOf(store, files.B), ['B-own'], 'C 的草稿不得写入 B');
+      assert.strictEqual(sessionOf(store, files.B).seq, 0);
+      assert.deepStrictEqual(await idsOf(store, files.C), ['C-own']);
+      assert(!store.sessions.has(fs.realpathSync(files.A)));
+      const after = disk();
+      assert.strictEqual(after.A, before.A);assert.strictEqual(after.B, before.B);assert.strictEqual(after.C, before.C);
+    } finally {dispose(store);}
+  });
+
   await ok('DRW-02 引擎: 过期 sessionId 的命令以 SESSION_STALE 拒绝且日志不变;匹配或缺省 sessionId 照常', async dir => {
     const file = path.join(dir, 'p.pdma.json');writeProject(file, []);
     const store = makeStore(dir);

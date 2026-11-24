@@ -7,6 +7,11 @@ let file = '';let baseline = [];let pendingDrawings = null;let projectMeta = nul
 // readyPromise/readyTarget: the latest open() while still in flight; change() calls
 // issued meanwhile are bound to it (they belong to the project being opened).
 let sessionId = '';let readyPromise = null;let readyTarget = '';
+// Draft ownership by identity token (never by path spelling): openToken = the latest
+// open() call (the project new edits are for), sessionToken = the open whose session
+// is live, draftToken = the open pendingDrawings were issued for. A draft is only
+// ever written into the session whose token it carries.
+let openToken = {};let sessionToken = openToken;let draftToken = openToken;
 const listeners = new Set();
 const publish = next => {state = {...state, ...next};listeners.forEach(fn => fn(state));};
 const serial = fn => {const p = queue.catch(() => {}).then(fn);queue = p;return p;};
@@ -33,7 +38,7 @@ const ensureOpen = async () => {
   // The unconfirmed draft is intentionally kept: it may only be cleared after the
   // retried command is acknowledged, never by the re-open itself. The baseline is
   // a full project frame (metadata + confirmed drawings), never a bare array.
-  const drawings = baseline.length ? baseline : (pendingDrawings || []);
+  const drawings = baseline.length ? baseline : (pendingDrawings && draftToken === sessionToken ? pendingDrawings : []);
   const result = await invoke('open', {file:file || '',baseline:{...(projectMeta || {}),drawings}});
   adopt(result);
   return result;
@@ -94,23 +99,30 @@ export const drawingPersistence = {
     if (file && file !== target && !savedCopy && typeof window !== 'undefined') {window.dispatchEvent(new Event('pdmaner-drawing-flush'));document.activeElement?.blur();}
     // Drafts issued before this call belong to the project being left; detach them
     // now so edits issued after it (the new project's) are never wiped or misrouted.
-    const leavingDraft = pendingDrawings;pendingDrawings = null;
+    // A detached draft may belong to an earlier open still in flight (not to the
+    // project actually left): its token decides whether leaving may write it.
+    const leavingDraft = pendingDrawings, leavingToken = draftToken, token = {};
+    pendingDrawings = null;openToken = token;
     const ready = serial(async () => {
       const crossing = file !== target;
       try {
-        if (file && crossing && !savedCopy) await leaveSession(leavingDraft);
+        if (file && crossing && !savedCopy) await leaveSession(leavingToken === sessionToken ? leavingDraft : null);
         const result = await invoke('open', {file:target,baseline:data});
         // Retain project-level metadata (name, version, …) so an offline recovery
         // export is still a recognizable .pdma.json even when storage is unreachable.
         if (data && !Array.isArray(data)) {const {drawings, ...meta} = data;projectMeta = meta;}
-        adopt(result);
+        adopt(result);sessionToken = token;
         return result;
       } catch (err) {
-        // The previous project's session is still the live one: its own draft is
-        // restored (unless leaving already confirmed it), and edits issued for the
-        // project that failed to open are dropped here (their queued writes are
-        // rejected) so they can never land in it.
-        if (crossing) pendingDrawings = leavingDraft && JSON.stringify(leavingDraft) !== JSON.stringify(baseline) ? leavingDraft : null;
+        // Only an open no newer call superseded may touch the draft slot (a newer
+        // open already owns it). Then the live session stays the target of new
+        // edits: crossing, its own unconfirmed draft is restored and the edits
+        // issued for the project that failed to open are dropped (their queued
+        // writes are rejected) so they can never land in it.
+        if (openToken === token) {
+          if (crossing) pendingDrawings = leavingToken === sessionToken && leavingDraft && JSON.stringify(leavingDraft) !== JSON.stringify(baseline) ? leavingDraft : null;
+          openToken = sessionToken;draftToken = sessionToken;
+        }
         throw err;
       } finally {if (readyPromise === ready) readyPromise = null;}
     });
@@ -120,7 +132,7 @@ export const drawingPersistence = {
   },
   change(drawings) {
     if (!ipc?.invoke) {publish({status: 'error', error: 'Desktop persistence unavailable'});return Promise.reject(new Error(state.error));}
-    pendingDrawings = JSON.parse(JSON.stringify(drawings));publish({status: 'pending', error: ''});
+    pendingDrawings = JSON.parse(JSON.stringify(drawings));draftToken = openToken;publish({status: 'pending', error: ''});
     // Queued synchronously, so writes keep call order relative to open(): an edit
     // issued while an open is in flight runs after it, against the new session.
     const bound = readyPromise ? {promise: readyPromise, target: readyTarget} : null;
