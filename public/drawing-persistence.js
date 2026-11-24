@@ -19,6 +19,8 @@ async function atomic(file, content, beforeRename) {
     let dir;try{dir=await fs.promises.open(path.dirname(file),'r');await dir.sync();}catch(e){if(!['EINVAL','ENOTSUP','EPERM','EISDIR'].includes(e.code))throw e;}finally{if(dir)await dir.close();}
   }finally{if(h)await h.close().catch(()=>{});await fs.promises.unlink(tmp).catch(()=>{});}
 }
+// 工程文件缺失(被删除/移走/卸载)是可恢复状态:统一成带码错误,绝不向上抛原始 ENOENT。
+const missingOk = promise => promise.catch(e => {throw e && e.code === 'ENOENT' ? codeError('PROJECT_FILE_MISSING') : e;});
 function encode(record) {const text=JSON.stringify(record);return `${Buffer.byteLength(text)}:${hash(text)}:${text}\n`;}
 function decode(content) {
   const records=[];const lines=content.toString('utf8').split('\n');let damaged=false;
@@ -40,7 +42,15 @@ class DrawingPersistence {
   constructor(root, options={}) {this.root=root;this.sessions=new Map();this.notify=options.notify || (()=>{});this.writeRecord=options.writeRecord || ((handle,content)=>handle.writeFile(content));this.beforeSync=options.beforeSync || (async()=>{});this.delay=options.delay == null?750:options.delay;this.maxDelay=options.maxDelay || 3000;
     // onLockStale: test-only interleaving hook awaited after a write lock is judged stale, before reclaiming it.
     this.lockOptions={onStale:options.onLockStale};}
-  canonical(file){if(!file)return '';const full=path.resolve(file);return fs.realpathSync(full);}
+  // 会话键 = 路径的真实路径。工程文件被删除/移走后 realpath 会 ENOENT:此时取“最近的现存祖先目录的真实路径 + 其余路径段”,
+  // 与文件存在时得到的键一致(含 macOS /var→/private/var 之类的符号链接目录),会话与日志因此保持可寻址。
+  // 局限:文件本身是符号链接且其目标被删除时,键无法还原为链接目标的真实路径。
+  canonical(file){if(!file)return '';const full=path.resolve(file);
+    try{return fs.realpathSync(full);}catch(e){if(e.code!=='ENOENT')throw e;}
+    const tail=[path.basename(full)];let dir=path.dirname(full);
+    for(;;){try{return path.join(fs.realpathSync(dir),...tail);}catch(e){if(e.code!=='ENOENT')throw e;}
+      const parent=path.dirname(dir);if(parent===dir)return full;tail.unshift(path.basename(dir));dir=parent;}
+  }
   enqueue(s, operation){const next=s.queue.catch(()=>{}).then(operation);s.queue=next;return next;}
   async append(s, record){await this.beforeSync(record);const h=await fs.promises.open(s.journal,'a');try{const initial=(await h.stat()).size;try{const content=encode(record);await this.writeRecord(h,content);await h.sync();s.logBytes=initial+Buffer.byteLength(content);}catch(e){try{await h.truncate(initial);await h.sync();}catch(rollbackError){s.corrupt=true;}throw e;}}finally{await h.close();}}
   state(s,includeDrawings=true){return {file:s.file,sessionId:s.sessionId,seq:s.seq,checkpointSeq:s.checkpointSeq,status:s.corrupt?'damaged':s.conflict?'conflict':s.lastError?'error':!s.file||s.seq>s.checkpointSeq?'local':'saved',error:s.lastError || '',...(includeDrawings?{drawings:clone(s.drawings)}:{}),recovered:s.recovered};}
@@ -48,7 +58,9 @@ class DrawingPersistence {
     const canonical=this.canonical(file);const key=canonical || `untitled:${owner}`;
     const existing=this.sessions.get(key);if(existing){
       if(existing.owner!==owner)throw codeError('PROJECT_BUSY');await existing.queue.catch(()=>{});
-      const changed=canonical && hash(await fs.promises.readFile(canonical))!==existing.expectedHash;
+      // 工程文件已不在磁盘:保留现有会话与日志,以 error 状态上报,而不是抛原始 ENOENT。
+      let current=null;if(canonical){try{current=await fs.promises.readFile(canonical);}catch(e){if(e.code!=='ENOENT')throw e;existing.lastError='PROJECT_FILE_MISSING';this.notify(this.state(existing,false));return this.state(existing);}}
+      const changed=canonical && hash(current)!==existing.expectedHash;
       if(changed && existing.seq===existing.checkpointSeq){clearTimeout(existing.timer);clearTimeout(existing.maxTimer);this.sessions.delete(key);}
       else {if(changed)existing.conflict=true;return this.state(existing);}
     }
@@ -103,13 +115,15 @@ class DrawingPersistence {
     // Shared lock protocol (write-lock.js): content {pid,startTime,host,createdAt}, stale = dead PID or
     // unparsable and older than 60s, serialized rename-based reclaim; any lost race is PROJECT_BUSY.
     const lock=`${s.file}.pdmaner-write-lock`;let held;
+    // 先确认工程文件还在:目录被删时加锁/atomic 的 mkdir 会抛 ENOENT,甚至把已删除的目录重新建出来。
+    await missingOk(fs.promises.stat(s.file));
     try{
       held=await writeLock.acquireWriteLock(fs,lock,this.lockOptions);if(!held)throw codeError('PROJECT_BUSY');
-      const current=await fs.promises.readFile(s.file);if(hash(current)!==s.expectedHash){s.conflict=true;throw codeError('PROJECT_CONFLICT');}
+      const current=await missingOk(fs.promises.readFile(s.file));if(hash(current)!==s.expectedHash){s.conflict=true;throw codeError('PROJECT_CONFLICT');}
       const target={...clone(data),drawings:clone(s.drawings),profile:{...data.profile,drawingPersistence:{journalId:s.sessionId,lastAppliedSeq:seq}}};
       const content=bytes(target),targetFileHash=hash(content);
       await this.append(s,{type:'prepare',sessionId:s.sessionId,seq,previousFileHash:s.expectedHash,targetFileHash});
-      await atomic(s.file,content,async()=>{if(hash(await fs.promises.readFile(s.file))!==s.expectedHash){s.conflict=true;throw codeError('PROJECT_CONFLICT');}});s.expectedHash=targetFileHash;s.baseline=target;s.checkpointSeq=seq;
+      await atomic(s.file,content,async()=>{if(hash(await missingOk(fs.promises.readFile(s.file)))!==s.expectedHash){s.conflict=true;throw codeError('PROJECT_CONFLICT');}});s.expectedHash=targetFileHash;s.baseline=target;s.checkpointSeq=seq;
       await this.append(s,{type:'commit',sessionId:s.sessionId,seq,targetFileHash});
       // A complete snapshot is also a local version and a recovery anchor candidate.
       const versions=path.join(s.dir,'versions');await atomic(path.join(versions,`${Date.now()}-${seq}.json`),content);
@@ -130,7 +144,9 @@ class DrawingPersistence {
     const s=this.session(file,owner);clearTimeout(s.timer);clearTimeout(s.maxTimer);s.timer=null;s.maxTimer=null;
     return this.enqueue(s,async()=>{
       try{if(candidate || s.seq>s.checkpointSeq){const data=clone(candidate || s.baseline);await this.guardedWrite(s,data,s.seq);}this.notify(this.state(s,false));return {...this.state(s),project:clone(s.baseline)};}
-      catch(e){s.lastError=e.message;this.notify(this.state(s,false));throw e;}
+      catch(e){s.lastError=e.message;this.notify(this.state(s,false));
+        // 工程文件缺失不抛:会话与日志原样保留(已 ACK 的编辑都在日志里),以 error 状态返回,恢复副本仍可导出。
+        if(e.code==='PROJECT_FILE_MISSING')return this.state(s);throw e;}
     });
   }
   async recovery(file,owner='default'){const s=this.session(file,owner);await s.queue.catch(()=>{});return {...clone(s.baseline),drawings:clone(s.drawings)};}
@@ -223,6 +239,11 @@ class DrawingPersistence {
   async deleteVersion(file,name,owner='default'){
     const s=this.session(file,owner);if(!/^named-[a-z0-9-]+\.json$/.test(name))throw codeError('INVALID_VERSION');await fs.promises.unlink(path.join(s.dir,'named',name));
   }
-  async close(file,owner='default'){await this.flush(file,owner);this.sessions.delete(file?this.canonical(file):`untitled:${owner}`);}
+  async close(file,owner='default'){
+    const state=await this.flush(file,owner);const s=this.session(file,owner);
+    // 仍有未落盘的编辑(如工程文件缺失)时保留会话与日志,以带码错误拒绝关闭,而不是丢弃内存会话。
+    if(state.status==='error'&&s.seq>s.checkpointSeq)throw codeError(state.error);
+    this.sessions.delete(file?this.canonical(file):`untitled:${owner}`);
+  }
 }
 module.exports={DrawingPersistence,atomic,encode,decode,applyDelta,hash};

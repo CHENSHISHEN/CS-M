@@ -91,7 +91,7 @@ const loadSrc = (file, fakeRequire = {}) => {
 
 // 渲染端桥接:伪造 ipcRenderer.invoke,按 src/main.js 的分发表转给真实的 DrawingPersistence。
 // intercept(request, forward) 可选:用于记录请求或伪造响应(如丢失的 ACK)。
-const loadWrapper = (store, {intercept} = {}) => {
+const loadWrapper = (store, {intercept, on = () => {}, send = () => {}} = {}) => {
   const forward = async request => {
     try {
       const {method, file} = request;const owner = 'win-1';let value;
@@ -104,7 +104,7 @@ const loadWrapper = (store, {intercept} = {}) => {
     } catch (error) {return {ok: false, error: error.message};}
   };
   const invoke = async (channel, request) => (intercept ? intercept(request, forward) : forward(request));
-  const mod = loadSrc('src/lib/drawing_persistence.js', {electron: {ipcRenderer: {invoke, on: () => {}, send: () => {}}}});
+  const mod = loadSrc('src/lib/drawing_persistence.js', {electron: {ipcRenderer: {invoke, on, send}}});
   return mod.drawingPersistence;
 };
 
@@ -736,7 +736,7 @@ const lockLeftovers = dir => fs.readdirSync(dir).filter(n => n.includes('pdmaner
   });
 
   // DRW-11:工程文件被删除/移动。
-  await knownFailing('DRW-11 工程文件被删/移走后 command/flush/recovery/close 不抛原始 ENOENT,且 recovery 可导出重放后的工程', async dir => {
+  await ok('DRW-11 工程文件被删/移走后 command/flush/recovery/close 不抛原始 ENOENT,且 recovery 可导出重放后的工程', async dir => {
     const problems = [];
     for (const mode of ['deleted', 'moved']) {
       const sub = path.join(dir, mode);fs.mkdirSync(sub);
@@ -759,6 +759,152 @@ const lockLeftovers = dir => fs.readdirSync(dir).filter(n => n.includes('pdmaner
       } finally {dispose(store);}
     }
     assert.strictEqual(problems.length, 0, problems.join(', '));
+  });
+
+  // DRW-11 细节:会话键稳定、日志与恢复副本、文件重现。
+  const missingSetup = async (dir, mode, {symlinked = false, owner = 'o'} = {}) => {
+    const real = path.join(dir, 'real');fs.mkdirSync(real);
+    let sub = real;
+    if (symlinked) {sub = path.join(dir, 'link');fs.symlinkSync(real, sub);}  // 类似 macOS /var→/private/var
+    const file = path.join(sub, 'p.pdma.json');writeProject(file, []);
+    const store = makeStore(dir);
+    await store.open(file, project([]), owner);
+    await store.command(file, addCommand('d1', '订单', [], 'a'), owner);
+    const key = sessionOf(store, file).key;
+    const away = path.join(real, 'elsewhere.pdma.json');
+    const remove = () => (mode === 'deleted' ? fs.unlinkSync(path.join(real, 'p.pdma.json')) : fs.renameSync(path.join(real, 'p.pdma.json'), away));
+    const restore = () => (mode === 'deleted' ? null : fs.renameSync(away, path.join(real, 'p.pdma.json')));
+    return {store, file, key, remove, restore, real};
+  };
+  for (const mode of ['deleted', 'moved']) {
+    for (const symlinked of [false, true]) {
+      await ok(`DRW-11 ${mode}${symlinked ? '(符号链接目录)' : ''}: 会话键不变,编辑继续入日志,flush 返回 error 而非抛错,recovery 含删除前后的编辑`, async dir => {
+        const {store, file, key, remove} = await missingSetup(dir, mode, {symlinked});
+        try {
+          remove();
+          assert.strictEqual(store.canonical(file), key, '文件缺失后 canonical 必须仍映射到同一会话键');
+          assert(store.sessions.has(store.canonical(file)));
+          const c = await store.command(file, addCommand('d2', '客户', [{id: 'd1'}], 'b'), 'o');
+          assert(c.seq === 2);
+          const f = await store.flush(file, 'o');
+          assert.strictEqual(f.status, 'error');assert.strictEqual(f.error, 'PROJECT_FILE_MISSING');
+          assert(f.seq === 2 && f.checkpointSeq === 0, '会话保持,编辑未落盘');
+          assert(store.sessions.has(key), '会话保持');
+          const again = await store.flush(file, 'o');   // 重复 flush 同样不抛
+          assert.strictEqual(again.error, 'PROJECT_FILE_MISSING');
+          assert.deepStrictEqual(decode(fs.readFileSync(store.sessions.get(key).journal)).records.filter(r => r.type === 'command').map(r => r.seq), [1, 2], '日志保持');
+          const r = await store.recovery(file, 'o');
+          assert.deepStrictEqual(r.drawings.map(d => d.id), ['d1', 'd2']);
+          assert.strictEqual(r.name, '回归项目', '恢复副本带工程元数据');
+          const x = await settle(store.close(file, 'o'));
+          assert.strictEqual(codeOf(x.error), 'PROJECT_FILE_MISSING', 'close 以带码错误拒绝,不是原始 ENOENT');
+          assert(store.sessions.has(key), '仍有未落盘编辑时 close 不丢会话');
+          assert.deepStrictEqual((await store.recovery(file, 'o')).drawings.map(d => d.id), ['d1', 'd2']);
+        } finally {dispose(store);}
+      });
+    }
+  }
+
+  await ok('DRW-11 工程所在目录整体被删除: command/flush/recovery 仍不抛原始 ENOENT,也不重建目录', async dir => {
+    const {store, file, key, real} = await missingSetup(dir, 'deleted');
+    try {
+      fs.rmSync(real, {recursive: true, force: true});
+      assert.strictEqual(store.canonical(file), key);
+      await store.command(file, addCommand('d2', '客户', [{id: 'd1'}], 'b'), 'o');
+      const f = await store.flush(file, 'o');
+      assert.strictEqual(f.error, 'PROJECT_FILE_MISSING');
+      assert(!fs.existsSync(real), 'flush 不得把已删除的目录重新建出来');
+      assert.deepStrictEqual((await store.recovery(file, 'o')).drawings.map(d => d.id), ['d1', 'd2']);
+    } finally {dispose(store);}
+  });
+
+  for (const mode of ['deleted', 'moved']) {
+    await ok(`DRW-11 ${mode}后文件原内容重现(改回/还原): 下一次 flush 正常落盘,含缺失期间的编辑`, async dir => {
+      const {store, file, remove, restore, real} = await missingSetup(dir, mode);
+      try {
+        const original = fs.readFileSync(path.join(real, 'p.pdma.json'));
+        remove();
+        await store.command(file, addCommand('d2', '客户', [{id: 'd1'}], 'b'), 'o');
+        assert.strictEqual((await store.flush(file, 'o')).error, 'PROJECT_FILE_MISSING');
+        if (mode === 'deleted') fs.writeFileSync(path.join(real, 'p.pdma.json'), original);else restore();
+        const saved = await store.flush(file, 'o');
+        assert.strictEqual(saved.status, 'saved');assert.strictEqual(saved.error, '');
+        assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(real, 'p.pdma.json'))).drawings.map(d => d.id), ['d1', 'd2']);
+        await store.close(file, 'o');assert(store.sessions.size === 0);
+      } finally {dispose(store);}
+    });
+  }
+
+  await ok('DRW-11 文件被删后以不同内容重现: flush 为 PROJECT_CONFLICT,绝不覆盖,恢复副本仍可导出', async dir => {
+    const {store, file, remove, real, key} = await missingSetup(dir, 'deleted');
+    try {
+      remove();
+      await store.command(file, addCommand('d2', '客户', [{id: 'd1'}], 'b'), 'o');
+      assert.strictEqual((await store.flush(file, 'o')).error, 'PROJECT_FILE_MISSING');
+      const other = JSON.stringify(project([drawing('x', '别人写的')]), null, 2);
+      fs.writeFileSync(path.join(real, 'p.pdma.json'), other);
+      const r = await settle(store.flush(file, 'o'));
+      assert.strictEqual(codeOf(r.error), 'PROJECT_CONFLICT');
+      assert.strictEqual(fs.readFileSync(path.join(real, 'p.pdma.json'), 'utf8'), other, '不得覆盖重现的文件');
+      assert.deepStrictEqual((await store.recovery(file, 'o')).drawings.map(d => d.id), ['d1', 'd2']);
+      assert.strictEqual(store.state(store.sessions.get(key), false).status, 'conflict');
+    } finally {dispose(store);}
+  });
+
+  await ok('DRW-11 已落盘后文件被删: 无待写入时 flush 不报错;重开(open)已有会话时返回 error 状态而非抛 ENOENT', async dir => {
+    const {store, file, remove, key} = await missingSetup(dir, 'deleted');
+    try {
+      assert.strictEqual((await store.flush(file, 'o')).status, 'saved');
+      remove();
+      assert.strictEqual((await store.flush(file, 'o')).status, 'saved');
+      const reopened = await store.open(file, project([]), 'o');
+      assert.strictEqual(reopened.status, 'error');assert.strictEqual(reopened.error, 'PROJECT_FILE_MISSING');
+      assert(store.sessions.has(key));
+    } finally {dispose(store);}
+  });
+
+  // 渲染端:flush 返回 status error 时发布错误状态、不触发重开循环、且对调用方(关闭屏障/返回/保存)仍是失败。
+  await ok('DRW-11 渲染端: flush 遇 PROJECT_FILE_MISSING 发布 error 并抛出,不重开;commit 同样不当作已保存', async dir => {
+    const {store, file, remove} = await missingSetup(dir, 'deleted', {owner: 'win-1'});
+    try {
+      const calls = [];
+      const wrapper = loadWrapper(store, {intercept: (request, forward) => {calls.push(request.method);return forward(request);}});
+      await wrapper.open(file, project([]));
+      await wrapper.change([drawing('d1', '订单'), drawing('d9', '新图')]);
+      remove();
+      const before = calls.length;
+      const f = await settle(wrapper.flush());
+      assert.strictEqual(f.error && f.error.message, 'PROJECT_FILE_MISSING');
+      assert.deepStrictEqual(calls.slice(before), ['flush'], '不得触发 open 重开循环');
+      assert.strictEqual(wrapper.getState().status, 'error');assert.strictEqual(wrapper.getState().error, 'PROJECT_FILE_MISSING');
+      const cm = await settle(wrapper.commit(file, project([drawing('d1', '订单')])));
+      assert.strictEqual(cm.error && cm.error.message, 'PROJECT_FILE_MISSING', 'commit 不得返回 baseline 当作已保存');
+      const rec = await wrapper.recovery();
+      assert(rec.drawings.some(d => d.id === 'd9'), '恢复副本含缺失期间的编辑');
+    } finally {dispose(store);}
+  });
+
+  await ok('DRW-11 关闭屏障: 文件缺失时 drawing-before-close 回报 ok:false 且 recoveryAvailable(不得静默放行)', async dir => {
+    const {store, file, remove} = await missingSetup(dir, 'deleted', {owner: 'win-1'});
+    const handlers = {}, sent = [];
+    const hadWindow = 'window' in global, oldWindow = global.window, hadDocument = 'document' in global, oldDocument = global.document;
+    global.window = {dispatchEvent: () => {}};global.document = {activeElement: null};  // 渲染端 settleInputs 需要的最小 DOM 桩
+    try {
+      const wrapper = loadWrapper(store, {on: (channel, fn) => {handlers[channel] = fn;}, send: (channel, payload) => sent.push({channel, payload})});
+      await wrapper.open(file, project([]));
+      await wrapper.change([drawing('d1', '订单'), drawing('d9', '新图')]);
+      remove();
+      await handlers['drawing-before-close']({}, 'req-1');
+      assert.strictEqual(sent.length, 1);
+      const {payload} = sent[0];
+      assert.strictEqual(payload.ok, false, '屏障必须视为未落盘');
+      assert.strictEqual(payload.error, 'PROJECT_FILE_MISSING');
+      assert.strictEqual(payload.recoveryAvailable, true);
+    } finally {
+      if (hadWindow) global.window = oldWindow;else delete global.window;
+      if (hadDocument) global.document = oldDocument;else delete global.document;
+      dispose(store);
+    }
   });
 
   // DRW-13:日志被清空/删除后重开必须能察觉已 ACK 的命令丢失。

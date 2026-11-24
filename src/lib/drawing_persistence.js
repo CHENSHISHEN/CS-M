@@ -29,6 +29,13 @@ const invoke = async (method, data = {}) => {
 // SESSION_STALE (the command named an older session of this path) is recovered the
 // same way: re-open, adopt the current sessionId, retry the same commandId.
 const isSessionError = error => typeof error?.message === 'string' && /SESSION_REQUIRED|SESSION_STALE/.test(error.message);
+// 主进程对“工程文件缺失”等可恢复故障不再抛错,而是返回 status:'error' 的状态(会话与日志保持)。
+// 它不是 SESSION_* 会话错误,不能触发重开;也绝不能被当成“已落盘”:发布错误状态后抛出,
+// 关闭屏障、返回项目、保存等依赖 flush/commit 抛错的调用方就仍把它视为“未保存”。
+const assertDurable = result => {
+  if (result?.status === 'error') {publish(result);throw new Error(result.error || 'Drawing persistence error');}
+  return result;
+};
 const adopt = result => {file = result.file || '';baseline = result.drawings;sessionId = result.sessionId || '';publish(result);};
 const invokeCommand = (commandId, delta) => invoke('command', {command: {commandId, delta, ...(sessionId ? {sessionId} : {})}});
 const settleInputs = async () => {window.dispatchEvent(new Event('pdmaner-drawing-flush'));document.activeElement?.blur();await new Promise(resolve => setTimeout(resolve, 0));};
@@ -70,7 +77,7 @@ const leaveSession = async draft => {
   let result;
   try {result = await invoke('flush');}
   catch (err) {if (!isSessionError(err)) throw err;await ensureOpen();result = await invoke('flush');}
-  publish(result);
+  assertDurable(result);publish(result);
 };
 if (ipc?.on) {
   ipc.on('drawing-save-state', (event, next) => {if (next.file === file) publish(pendingDrawings && ['saved','local'].includes(next.status) ? {...next,status:'pending'} : next);});
@@ -147,16 +154,16 @@ export const drawingPersistence = {
   },
   async flush() {if (!file && state.status === 'idle') return state;await settleSafe();await queue.catch(() => {});
     if(pendingDrawings)await this.change(pendingDrawings);
-    try {const result = await serial(() => invoke('flush'));publish(result);return result;}
+    try {const result = assertDurable(await serial(() => invoke('flush')));publish(result);return result;}
     catch (err) {
-      if (isSessionError(err)) {await ensureOpen();const result = await serial(() => invoke('flush'));publish(result);return result;}
+      if (isSessionError(err)) {await ensureOpen();const result = assertDurable(await serial(() => invoke('flush')));publish(result);return result;}
       throw err;
     }},
   async commit(nextFile, data) {
     if (!ipc?.invoke) return null;
     if (file !== nextFile) await this.open(nextFile, data);
     await queue.catch(() => {});if(pendingDrawings)await this.change(pendingDrawings);
-    const result = await serial(() => invoke('flush', {candidate: data}));publish(result);return result.project;
+    const result = assertDurable(await serial(() => invoke('flush', {candidate: data})));publish(result);return result.project;
   },
   // Explicit damaged-journal recovery: settle current inputs, capture the latest
   // complete snapshot (the unconfirmed draft wins over the last confirmed
