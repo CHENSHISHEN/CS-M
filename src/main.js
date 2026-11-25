@@ -3,6 +3,17 @@ const {app, BrowserWindow, Menu, nativeImage, ipcMain, dialog} = require('electr
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
+
+// 单实例锁：多开会共用 userData/drawing-autosave（自动保存目录与写锁），必须在任何启动副作用
+// （IPC 注册、DrawingPersistence、窗口创建）之前获取。拿不到锁说明已有实例在运行：
+// 已有实例会收到 second-instance 并聚焦主窗口，本实例直接退出。
+// main.js 由 Node CommonJS 包装加载，模块顶层 return 合法（与 bin/start.js 同一做法），
+// 可确保下面注册的 ready/IPC 等逻辑在第二个实例中一行都不执行。
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+  return;
+}
+
 require('@electron/remote/main').initialize();
 
 // AI Host Broker（纯 CommonJS，开发态 src/host/ai、成品经 webpack 复制到 build/host/ai，路径一致）
@@ -251,6 +262,19 @@ function createWindow() {
 // 创建浏览器窗口时，调用这个函数。
 // 部分 API 在 ready 事件触发后才能使用。
 app.on('ready', createWindow);
+
+// 第二个实例启动时（已被上方单实例锁拦下）：恢复并聚焦已有窗口，优先主窗口。
+// 本应用没有从命令行参数打开工程文件的机制，commandLine 不做处理。
+app.on('second-instance', () => {
+  const target = (win && !win.isDestroyed()) ? win : (BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]);
+  if (target) {
+    if (target.isMinimized()) target.restore();
+    target.focus();
+  } else if (win === null && app.isReady() && !quitRequested) {
+    // 与 activate 一致：主窗口已关闭（macOS 不随窗口全关退出）时重新创建
+    createWindow();
+  }
+});
 
 // 当全部窗口关闭时退出。
 app.on('window-all-closed', () => {

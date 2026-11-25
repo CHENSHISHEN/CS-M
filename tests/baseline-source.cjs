@@ -69,4 +69,18 @@ assert(pkg.dependencies['node-sql-parser'], 'node-sql-parser 核心依赖必须�
 assert.deepStrictEqual(pkg.build.win.target[0].arch, ['x64']);
 assert.equal(pkg.build.win.icon, 'assets/branding/app.ico');
 assert.equal(pkg.build.mac.icon, 'assets/branding/app.icns');
+// 单实例锁（DRW-09）：多开会共用 userData/drawing-autosave，锁必须在任何启动副作用之前获取。
+{
+  const mainSrc = read('src/main.js').toString();
+  const lockAt = mainSrc.indexOf('app.requestSingleInstanceLock()');
+  assert(lockAt >= 0, 'src/main.js 必须调用 app.requestSingleInstanceLock()');
+  assert(/app\.on\(\s*['"]second-instance['"]/.test(mainSrc), "src/main.js 必须监听 app.on('second-instance')");
+  for (const marker of ['new DrawingPersistence', 'ipcMain.handle(', 'ipcMain.on(', 'registerAiHostIpc({', "app.on('ready'", 'new BrowserWindow(']) {
+    const at = mainSrc.indexOf(marker);
+    assert(at >= 0, `src/main.js 缺少 ${marker}`);
+    assert(lockAt < at, `单实例锁必须出现在 ${marker} 之前`);
+  }
+  const check = require('child_process').spawnSync(process.execPath, ['--check', path.join(root, 'src/main.js')], {encoding: 'utf8'});
+  assert.equal(check.status, 0, `node --check src/main.js 失败：${check.stderr}`);
+}
 console.log('PASS v0.5.0 基线品牌、锁文件、许可证、图二来源、新架构及平台图标配置');
