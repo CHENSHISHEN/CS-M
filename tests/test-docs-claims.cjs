@@ -46,7 +46,6 @@ const check = (name, fn) => {
 // 在任何位置都不允许出现的不实口径
 const BANNED = [
   [/9\s*大(专业)?图种/, '9 大图种'],
-  [/(?<![\d.-])24\s*个?[^\n,，。;；]{0,8}模板/, '24 个模板'],
   [/(?<![\d.-])98\s*\+/, '98+'],
   [/(?<![\d.-])98\s*项[^\n]{0,8}端到端/, '98 项端到端'],
   [/端到端[^\n]{0,4}测试/, '端到端测试'],
@@ -62,6 +61,28 @@ check('README/CHANGELOG 不含已知不实口径', () => {
   for (const [file, text] of Object.entries(DOCS)) {
     for (const {line, no} of lines(text)) {
       for (const [re, label] of BANNED) assert(!re.test(line), `${file}:${no} 含不实口径「${label}」: ${line}`);
+    }
+  }
+});
+
+// 只对"当前口径"禁用: README 与 CHANGELOG 的未发布节。历史版本的模板数可能真实为 24
+// (v0.3.0/v0.4.0: 画图 18 + 业务 3 + 数据 3),不能用今天的代码口径改写历史。
+const BANNED_CURRENT = [
+  [/(?<![\d.-])24\s*个?[^\n,，。;；]{0,8}模板/, '24 个模板'],
+];
+const unreleasedSection = () => {
+  const start = CHANGELOG.search(/^## 未发布/m);
+  assert(start >= 0, 'CHANGELOG 缺少未发布节');
+  const rest = CHANGELOG.slice(start + 1);
+  const next = rest.search(/^## /m);
+  return next < 0 ? CHANGELOG.slice(start) : CHANGELOG.slice(start, start + 1 + next);
+};
+
+check('README 与 CHANGELOG 未发布节不含过时的模板数口径', () => {
+  const current = {'README.md': README, 'CHANGELOG.md#未发布': unreleasedSection()};
+  for (const [file, text] of Object.entries(current)) {
+    for (const {line, no} of lines(text)) {
+      for (const [re, label] of BANNED_CURRENT) assert(!re.test(line), `${file}:${no} 含过时口径「${label}」: ${line}`);
     }
   }
 });
