@@ -9,7 +9,7 @@ import {
   getCatalogCategories, categoryObjects, physicalDbSupports, readPhysicalDatabases,
 } from '../../lib/model_catalog';
 import {
-  buildForwardCommit, planForwardGeneration, resolveFieldMapping, stripLogicPrefix,
+  buildForwardCommit, ddlLanguageFor, planForwardGeneration, resolveFieldMapping, stripLogicPrefix,
   validateDDLTemplate,
 } from '../../lib/model_forward_engineering';
 // 整改F6：预览与提交统一使用可抛错的严格渲染，不再用吞异常的旧 wrapper
@@ -34,7 +34,8 @@ const norm = v => String(v == null ? '' : v).trim().toLowerCase();
 // S2 R3：逻辑 → 物理正向生成向导（三步：源选择 / 目标与映射 / 预览与生成）
 // 读取最新有效草稿（getDraftSource 复用搜索快照入口，含未保存 tab 草稿）；
 // 预览不写源；提交以已保存源为合并基底、最新有效草稿为规划输入，原子合并，冲突回预览。
-export default React.memo(({getDraftSource, getSource, onCommit, onClose, preselect}) => {
+// UX-13：onFinish({createdEntityIds}) 在提交并关闭后回调，宿主据此定位/打开新表
+export default React.memo(({getDraftSource, getSource, onCommit, onClose, onFinish, preselect}) => {
   // 审阅10：目标相关 state 初值与首帧视觉默认同步（无库=新建模式+首个有效类型；
   // 有库=既有模式+首库），后续路径（下一步/返回）经 effective 兜底保持一致
   const initDraft = getDraftSource();
@@ -258,8 +259,13 @@ export default React.memo(({getDraftSource, getSource, onCommit, onClose, presel
       return;
     }
     onCommit(commit.nextSource);
-    Message.success({title: FormatMessage.string({id: 'optSuccess'})});
     onClose();
+    if (onFinish) {
+      // 成功提示由宿主在定位新表后给出（含“查看 DDL”指引）
+      onFinish({createdEntityIds: commit.plan.entities.map(e => e.id)});
+    } else {
+      Message.success({title: FormatMessage.string({id: 'optSuccess'})});
+    }
   };
 
   const renderStep1 = () => {
@@ -602,7 +608,9 @@ export default React.memo(({getDraftSource, getSource, onCommit, onClose, presel
         </div>}
         {ddlError
           ? <div className='chiner-forward-empty is-error'>{ddlError}</div>
-          : <CodeHighlight mode='mysql' data={() => ddl || ''}/>}
+          : <CodeHighlight
+            mode={ddlLanguageFor(plan.targetSupportId, draft)}
+            data={() => ddl || ''}/>}
       </div>
     </div>;
   };

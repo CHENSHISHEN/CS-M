@@ -483,3 +483,34 @@ export const buildForwardCommit = (latestSource, options, draftSource) => {
     plan: replan.plan,
   };
 };
+
+// ---- UX-13：DDL 预览按目标库方言选择 ace 高亮模式 ----
+// 模式均由 ace-builds/webpack-resolver（codeeditor 已引入）按需加载，无需逐个 import
+const DDL_LANGUAGES = {
+  mysql: 'mysql',
+  postgresql: 'pgsql',
+  oracle: 'plsql',
+  sqlserver: 'sql',
+  default: 'sql',
+};
+// dbTypeId：类型代码（MYSQL/PostgreSQL/ORACLE/SQLServer，大小写无关）；
+// 真实项目里存的是 dataTypeSupports 的 UUID，传入 source 时先解析为该类型的 defKey
+export const ddlLanguageFor = (dbTypeId, source) => {
+  const supports = (source && source.profile && source.profile.dataTypeSupports) || [];
+  const support = dbTypeId == null ? null : supports.filter(s => s && s.id === dbTypeId)[0];
+  const raw = support ? support.defKey : dbTypeId;
+  const key = String(raw == null ? '' : raw).trim().toLowerCase();
+  return key !== 'default' && Object.prototype.hasOwnProperty.call(DDL_LANGUAGES, key)
+    ? DDL_LANGUAGES[key] : DDL_LANGUAGES.default;
+};
+
+// ---- UX-13：向导完成后宿主定位的新表——按生成顺序取第一个确实已并入源的物理表 ----
+export const firstCreatedEntity = (source, createdEntityIds) => {
+  const entities = (source && source.entities) || [];
+  const ids = createdEntityIds || [];
+  for (let i = 0; i < ids.length; i += 1) {
+    const found = entities.filter(e => e && e.id === ids[i])[0];
+    if (found) return found;
+  }
+  return null;
+};

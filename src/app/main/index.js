@@ -114,6 +114,7 @@ import {
 } from '../workbench/navigation';
 import {filterTreeMenus} from '../workbench/treeFilter';
 import {inferDiagramLevel, physicalMetadataPatches, applyPhysicalMetadataPatch} from '../../lib/model_catalog';
+import {firstCreatedEntity} from '../../lib/model_forward_engineering';
 import EnterpriseHome from '../workbench/EnterpriseHome';
 import DatabaseWorkspace from '../workbench/DatabaseWorkspace';
 import ResourceOverview from '../workbench/ResourceOverview';
@@ -1787,21 +1788,52 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
   const _wbCreateObject = (type) => {
     _contextMenuClick(null, getMenu('add', '', type, [], groupTypeRef.current, ''));
   };
+  // UX-13：向导完成后定位新表——回到模型域，打开第一张新表页签并在资源树选中，
+  // 提示去“数据库代码”页签查看 DDL（复用唯一打开入口 _onMenuClick 与目录 locate）
+  const _forwardFinished = ({createdEntityIds}) => {
+    const first = firstCreatedEntity(dataSourceRef.current, createdEntityIds);
+    if (!first) {
+      Message.success({title: FormatMessage.string({id: 'optSuccess'})});
+      return;
+    }
+    const locate = () => {
+      setWbTreeFilter('');
+      _onMenuClick(first.id, 'entity', null, 'entity.svg');
+      // 资源树需按并入新表后的源重建，下一轮事件循环再定位（locate 闭包随渲染刷新）
+      setTimeout(() => catalogRef.current?.jumpSimplePosition(first.id, 'entity'), 0);
+      Message.success({
+        title: FormatMessage.string({
+          id: 'forward.finishHint',
+          data: {count: (createdEntityIds || []).length, name: first.defKey},
+          defaultMessage: FormatMessage.string({id: 'optSuccess'}),
+        }),
+        time: 4000,
+      });
+    };
+    if (menuType !== '1') {
+      // eslint-disable-next-line no-use-before-define
+      _menuTypeChange('1', locate);
+    } else {
+      locate();
+    }
+  };
   // S2 R3：逻辑 → 物理正向生成向导（读最新有效草稿；只读不进入；
   // 提交为纯增量原子合并，不触碰既有实体/其他 tab 草稿）
-  const _wbOpenForwardWizard = (preselect) => {
+  // UX-13：资源树右键/“⋯”、逻辑实体编辑器顶部按钮、顶栏“工具”菜单三处入口共用本函数
+  const openForwardEngineering = (preselect) => {
     if (mode === READING) return;
     let modal;
     const close = () => { modal && modal.close(); };
     modal = openModal(<ForwardEngineering
       getDraftSource={getSearchDataSource}
       getSource={getDataSource}
-      preselect={preselect}
+      preselect={Array.isArray(preselect) ? preselect : []}
       onClose={close}
       onCommit={(next) => {
         dataSourceRef.current = next;
         restProps.update(next);
       }}
+      onFinish={_forwardFinished}
     />, {
       fullScreen: true,
       title: FormatMessage.string({id: 'forward.title'}),
@@ -2173,6 +2205,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
           openCheckRuleConfig={openCheckRuleConfig}
           readOnly={mode === READING}
           openMetric={openMetricTarget}
+          openForwardEngineering={openForwardEngineering}
         />);
     } else if (type === 'view') {
       return <View
@@ -2720,6 +2753,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
         iconClick={iconClick}
         openModal={_openModal}
         onCreateObject={_wbCreateObject}
+        openForwardEngineering={openForwardEngineering}
         hideModelCreate
         onOpenAiAssistant={() => {
           aiKeepAliveRef.current = true; // More→AI 打开即进入保活
@@ -2827,7 +2861,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
                   }}
                   onOpen={_onMenuClick} onCloseObject={(id, type) => _tabClose(id + separator + type, true)}
                   onDrag={createEmptyTable} filter={wbTreeFilter} viewMode={catalogView}
-                  onGenerate={_wbOpenForwardWizard}
+                  openForwardEngineering={openForwardEngineering}
                   readOnly={mode === READING} onHome={openHome} onHomeAdd={_wbHomeAdd}/>
             </div>
           </TabItem>

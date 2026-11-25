@@ -373,6 +373,7 @@ export default {
     "next": "Next · Preview",
     "prev": "Previous",
     "generate": "Generate physical model",
+    "finishHint": "Generated {count} physical table(s) and opened {name}. View its DDL in the \"dbDDL\" tab",
     "previewCard": "Preview",
     "relationColumn": "Relations",
     "sourceColumn": "Source logical entity",

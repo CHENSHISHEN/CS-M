@@ -193,4 +193,93 @@ ok('ForwardEngineering 向导用 renderBlockingErrors 渲染全部阻断错误�
   assert.ok(/Message\.error\(\{title: t\('blockHint'\)\}\)/.test(src), 'goStep(3) 泛化 toast 应保留');
 });
 
+// ---- UX-13：DDL 方言高亮 / 完成后定位新表 / 三处入口共用 openForwardEngineering ----
+const {ddlLanguageFor, firstCreatedEntity} = await import('../src/lib/model_forward_engineering.js');
+
+ok('ddlLanguageFor：按目标库类型代码映射 ace 模式(大小写无关)', () => {
+  assert.equal(ddlLanguageFor('mysql'), 'mysql');
+  assert.equal(ddlLanguageFor('postgresql'), 'pgsql');
+  assert.equal(ddlLanguageFor('oracle'), 'plsql');
+  assert.equal(ddlLanguageFor('sqlserver'), 'sql');
+  // 模板项目实测 defKey：MYSQL / PostgreSQL / ORACLE / SQLServer
+  assert.equal(ddlLanguageFor('MYSQL'), 'mysql');
+  assert.equal(ddlLanguageFor('MySQL'), 'mysql');
+  assert.equal(ddlLanguageFor('PostgreSQL'), 'pgsql');
+  assert.equal(ddlLanguageFor('ORACLE'), 'plsql');
+  assert.equal(ddlLanguageFor('SQLServer'), 'sql');
+  assert.equal(ddlLanguageFor(' Oracle '), 'plsql');
+});
+
+ok('ddlLanguageFor：未知类型/空值回退 sql', () => {
+  assert.equal(ddlLanguageFor('Hive'), 'sql');
+  assert.equal(ddlLanguageFor('DM'), 'sql');
+  assert.equal(ddlLanguageFor('default'), 'sql');
+  assert.equal(ddlLanguageFor('constructor'), 'sql');
+  assert.equal(ddlLanguageFor(''), 'sql');
+  assert.equal(ddlLanguageFor(null), 'sql');
+  assert.equal(ddlLanguageFor(undefined), 'sql');
+});
+
+ok('ddlLanguageFor：传入 source 时把 dataTypeSupports 的 UUID 解析为类型代码', () => {
+  const source = {profile: {dataTypeSupports: [
+    {id: '29D1CE08-4C35-4D2D-AAA9-23D93305B52E', defKey: 'MYSQL'},
+    {id: 'DFBEC1DD-AA84-456E-BBF3-C95DD0DB2022', defKey: 'PostgreSQL'},
+    {id: 'A4E23CB7-BB01-4BD1-9F71-F73F3E15A542', defKey: 'ORACLE'},
+    {id: 'BFC87171-C74F-494A-B7C2-76B9C55FACC9', defKey: 'SQLServer'},
+    {id: '81CCA482-3F4D-4EAC-8CF9-F5E7BC098AD2', defKey: 'Hive'},
+  ]}};
+  assert.equal(ddlLanguageFor('29D1CE08-4C35-4D2D-AAA9-23D93305B52E', source), 'mysql');
+  assert.equal(ddlLanguageFor('DFBEC1DD-AA84-456E-BBF3-C95DD0DB2022', source), 'pgsql');
+  assert.equal(ddlLanguageFor('A4E23CB7-BB01-4BD1-9F71-F73F3E15A542', source), 'plsql');
+  assert.equal(ddlLanguageFor('BFC87171-C74F-494A-B7C2-76B9C55FACC9', source), 'sql');
+  assert.equal(ddlLanguageFor('81CCA482-3F4D-4EAC-8CF9-F5E7BC098AD2', source), 'sql');
+  // 不在 source 中的值按类型代码本身解析；空 source 不抛错
+  assert.equal(ddlLanguageFor('mysql', source), 'mysql');
+  assert.equal(ddlLanguageFor('UNKNOWN-UUID', source), 'sql');
+  assert.equal(ddlLanguageFor('oracle', {}), 'plsql');
+  assert.equal(ddlLanguageFor(null, source), 'sql');
+});
+
+ok('firstCreatedEntity：取 createdEntityIds 中第一个确实存在于源的物理表', () => {
+  const source = {entities: [{id: 'p_exist', defKey: 'CUSTOMER'}, {id: 'p_new1', defKey: 'ORDER'},
+    {id: 'p_new2', defKey: 'ITEM'}]};
+  assert.equal(firstCreatedEntity(source, ['p_new1', 'p_new2']).defKey, 'ORDER');
+  assert.equal(firstCreatedEntity(source, ['p_gone', 'p_new2']).id, 'p_new2');
+  assert.equal(firstCreatedEntity(source, []), null);
+  assert.equal(firstCreatedEntity(source, undefined), null);
+  assert.equal(firstCreatedEntity({}, ['p_new1']), null);
+  assert.equal(firstCreatedEntity(null, ['p_new1']), null);
+});
+
+ok('向导完成回调 onFinish({createdEntityIds}) 且 DDL 预览不再写死 mysql', () => {
+  const src = read('src/app/workbench/ForwardEngineering.js');
+  assert.ok(/onFinish\(\{\s*createdEntityIds\s*:/.test(src), '向导未以 {createdEntityIds} 调用 onFinish');
+  assert.ok(!/<CodeHighlight[^>]*mode=['"]mysql['"]/.test(src), 'DDL 预览仍写死 mode=mysql');
+  assert.ok(/ddlLanguageFor\(/.test(src), 'DDL 预览未按目标库调用 ddlLanguageFor');
+});
+
+ok('三处入口(资源树/逻辑实体编辑器/顶栏)共用宿主的 openForwardEngineering', () => {
+  const host = read('src/app/main/index.js');
+  assert.ok(/const\s+openForwardEngineering\s*=/.test(host), '宿主未定义 openForwardEngineering');
+  // 宿主把同一函数下发给三个入口组件
+  const passed = host.match(/openForwardEngineering\s*=\s*\{\s*openForwardEngineering\s*\}/g) || [];
+  assert.ok(passed.length >= 3, `宿主仅下发 ${passed.length} 处`);
+  assert.ok(/onFinish\s*=\s*\{/.test(host), '宿主未接收 onFinish 定位新表');
+  ['src/app/workbench/ModelCatalog.js', 'src/app/container/logicentity/index.js',
+    'src/app/workbench/WorkbenchShell.js'].forEach((file) => {
+    assert.ok(/\bopenForwardEngineering\b/.test(read(file)), `${file} 未引用 openForwardEngineering`);
+  });
+  assert.ok(!/_wbOpenForwardWizard|\bonGenerate\b/.test(host + read('src/app/workbench/ModelCatalog.js')),
+    '旧入口名仍残留');
+});
+
+ok('forward.finishHint 文案 zh/en 均存在且占位符一致', () => {
+  ['finishHint'].forEach((k) => {
+    assert.equal(typeof zh.forward[k], 'string');
+    assert.equal(typeof en.forward[k], 'string');
+    assert.ok(!CJK.test(en.forward[k]));
+    assert.deepEqual(placeholders(zh.forward[k]), placeholders(en.forward[k]));
+  });
+});
+
 console.log(`${count} passed`);

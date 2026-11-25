@@ -100,7 +100,8 @@ function showForm(title, fields, initial, submit) {
   });
 }
 
-export default forwardRef(({source, getSource, onUpdate, onOpen, onCloseObject, onDrag, onGenerate,
+export default forwardRef(({source, getSource, onUpdate, onOpen, onCloseObject, onDrag,
+  openForwardEngineering,
   filter = '', readOnly, viewMode = 'directory', onHome, onHomeAdd}, ref) => {
   const [selected, setSelected] = useState({kind: 'root'});
   // S3：概念模型节点与两个概念集合默认展开——概念实体/概念关系图一次可达
@@ -620,19 +621,20 @@ export default forwardRef(({source, getSource, onUpdate, onOpen, onCloseObject, 
       add('newDatabase', () => newDatabaseForm(node));
     }
     // S2 R3：逻辑 → 物理正向生成入口——逻辑实体右键预选该实体；
-    // 逻辑集合/逻辑模型分区批量预选其下全部逻辑实体（向导内可再调整）
-    if (onGenerate && node.objectType === 'logicEntity'
+    // 逻辑集合/逻辑模型分区批量预选其下全部逻辑实体（向导内可再调整）；
+    // UX-13：与逻辑实体编辑器按钮、顶栏菜单共用宿主 openForwardEngineering（只读时 showMenu 整体不弹出）
+    if (openForwardEngineering && node.objectType === 'logicEntity'
       && (node.kind === 'object' || node.kind === 'collection')) {
-      add('generatePhysical', () => onGenerate(node.kind === 'object'
+      add('generatePhysical', () => openForwardEngineering(node.kind === 'object'
         ? [node.objectId]
         : (node.children || []).map((c) => c.objectId).filter((id) => id)));
-    } else if (onGenerate && node.kind === 'level' && node.level === 'logical') {
+    } else if (openForwardEngineering && node.kind === 'level' && node.level === 'logical') {
       add('generatePhysical', () => {
         const ids = (node.children || [])
           .filter((c) => c.objectType === 'logicEntity')
           .reduce((all, c) => all.concat((c.children || []).map((o) => o.objectId)), [])
           .filter((id) => id);
-        onGenerate(ids);
+        openForwardEngineering(ids);
       });
     }
     if (node.kind === 'database') {

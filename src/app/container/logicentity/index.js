@@ -1,7 +1,7 @@
 import React, {useContext, useEffect, useRef, useState} from 'react';
 import _ from 'lodash';
 
-import { SimpleTab, FormatMessage } from 'components';
+import { SimpleTab, FormatMessage, Button } from 'components';
 import EntityCode from '../entity/EntityCode';
 
 import './style/index.less';
@@ -15,10 +15,18 @@ import ConceptLogicalLinks, {conceptLogicalLinksLabels} from '../../workbench/Co
 // M4B：逻辑实体“指标关联”页签（仅语义映射角色，语义设计态）
 import ModelMetricPanel from '../../metrics/ModelMetricPanel';
 
+// UX-13：编辑器顶部“生成物理模型”（挂在页签标题栏右侧；SimpleTab 会 clone 并注入 active，此处忽略）
+const ForwardAction = ({className, onClick}) => <div className={className}>
+  <Button onClick={onClick}>
+    {FormatMessage.string({id: 'modelCatalog.generatePhysical'})}
+  </Button>
+</div>;
+
 const LogicEntity = React.memo(({prefix, dataSource, entity, tabDataChange, tabKey,
                              group, getConfig, saveUserData, getDataSource, setMenuType,
                               updateDataSource, param, hasRender, hasDestory, readOnly,
-                                  openCheckRuleConfig, jumpDetail, openMetric}) => {
+                                  openCheckRuleConfig, jumpDetail, openMetric,
+                                  openForwardEngineering}) => {
   const eventId = Math.uuid();
   const [key, setKey] = useState(Math.uuid());
   const tabRef = useRef(null);
@@ -82,6 +90,11 @@ const LogicEntity = React.memo(({prefix, dataSource, entity, tabDataChange, tabK
   return <div className={`${currentPrefix}-logic-entity-content`} key={key}>
     <SimpleTab
       ref={tabRef}
+      // 只读与其他写操作一致隐藏；与资源树右键、顶栏菜单共用宿主 openForwardEngineering
+      customerFooter={!readOnly && openForwardEngineering ? <ForwardAction
+        className={`${currentPrefix}-logic-entity-actions`}
+        onClick={() => openForwardEngineering([entity])}
+      /> : null}
       options={[
           {
             key: 'base',

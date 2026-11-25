@@ -373,6 +373,7 @@ export default {
     "next": "下一步 · 预览结果",
     "prev": "上一步",
     "generate": "生成物理模型",
+    "finishHint": "已生成 {count} 张物理表并打开 {name}，可在“数据库代码”页签查看 DDL",
     "previewCard": "生成预览",
     "relationColumn": "关系",
     "sourceColumn": "来源逻辑实体",
