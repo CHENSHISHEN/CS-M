@@ -31,6 +31,9 @@ import StandardField from '../container/standardfield';
 import {StandardFieldLibraryContext} from '../../lib/context';
 import HeaderTool from './HeaderTool';
 import MessageHelp from './MessageHelp';
+import EmptyStateGuide from './EmptyStateGuide';
+import { shouldShowEmptyStateGuide, ONBOARDING_ACTIONS } from '../../lib/onboarding';
+import { CATALOG_MENU_KEYS } from '../../lib/model_catalog_menu';
 import ToggleCase from '../container/tools/togglecase';
 import CompareTable from '../container/tools/comparetable';
 import History from '../container/tools/operationshistory';
@@ -2463,6 +2466,18 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
   const openHome = () => {
     _onMenuClick('home-cover', 'home', null, 'fa-home');
   };
+  // UX-02：空项目三步引导按钮 → 既有入口（资源树 root 总菜单的概念实体项 / 未归类逻辑实体新建 /
+  // 前向工程向导 / 顶栏“导出 → Word”同一处理 iconClick('word')）
+  const _onboardingAction = (action) => {
+    switch (action) {
+      case ONBOARDING_ACTIONS.createConceptEntity:
+        catalogRef.current?.runRootCreate(CATALOG_MENU_KEYS.createConceptEntity); break;
+      case ONBOARDING_ACTIONS.createLogicEntity: catalogRef.current?.createLogicEntity(); break;
+      case ONBOARDING_ACTIONS.forwardEngineering: openForwardEngineering([]); break;
+      case ONBOARDING_ACTIONS.exportDocument: iconClick(null, 'word'); break;
+      default: break;
+    }
+  };
   // S3：目录“企业首页组件”点击/拖放入口 —— 打开企业首页并按公共合同发起添加请求
   // （addRequest:{kind,nonce}，EnterpriseHome 消费后按 nonce 去重；只读态由首页禁写）
   const _wbHomeAdd = (kind) => {
@@ -2589,7 +2604,15 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
             closeTab={_tabClose}
             onChange={_tabChange}
             excess={standardFieldMemo}
-            empty={<MessageHelp openHome={openHome} prefix={currentPrefix}/>}
+            empty={menuType === '1' && shouldShowEmptyStateGuide({
+              dataSource: restProps.dataSource, tabCount: tabs.length,
+            }) ? <EmptyStateGuide
+              prefix={currentPrefix}
+              dataSource={restProps.dataSource}
+              readOnly={mode === READING}
+              onAction={_onboardingAction}
+              openHome={openHome}
+            /> : <MessageHelp openHome={openHome} prefix={currentPrefix}/>}
             >
             {tabs.map((t) => {
                 const title = getTabTitle(t);
