@@ -1731,6 +1731,12 @@ body[theme=themeNigh] .@{prefix}-home.@{prefix}-home-wb {
 .chiner-forward-note { border: 1px solid var(--wb-line); border-radius: 4px; background: var(--wb-bg); color: var(--wb-muted); padding: 8px 10px; margin: 10px 0; line-height: 1.6; }
 .chiner-forward-summary { margin-top: 8px; color: var(--wb-blue); }
 .chiner-forward-error-item { display: flex; justify-content: space-between; gap: 8px; padding: 4px 2px; color: var(--wb-danger, #d43030); }
+// DM-01：第二步全部阻断错误按 level 分组（标题 + 定位/文案行）
+.chiner-forward-errors { margin-top: 10px; border-top: 1px solid var(--wb-line); padding-top: 6px;
+  .chiner-forward-error-item > span:first-child { flex: 0 0 auto; max-width: 40%; overflow-wrap: anywhere; }
+  .chiner-forward-error-item > span:last-child { text-align: right; overflow-wrap: anywhere; } }
+.chiner-forward-error-group + .chiner-forward-error-group { margin-top: 6px; }
+.chiner-forward-error-title { font-size: 12px; color: var(--wb-muted); padding: 2px; }
 .chiner-forward-ddl { display: flex; flex-direction: column; min-height: 200px;
   .chiner-forward-card-head { flex: 0 0 auto; } }
 .chiner-forward-footer { display: flex; gap: 8px; align-items: center; justify-content: flex-end; padding: 10px 20px; border-top: 1px solid var(--wb-line); flex: 0 0 auto; }

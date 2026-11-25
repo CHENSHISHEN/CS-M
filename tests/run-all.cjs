@@ -58,6 +58,7 @@ const TESTS = [
   {file: 'tests/metrics/readiness-test.cjs'},
   {file: 'tests/test-navigation-guard.cjs'},
   {file: 'tests/test-drawing-persistence.cjs'},
+  {file: 'tests/test-forward-errors.mjs'},
   // gui-smoke.cjs 不纳入: 需要 playwright + Electron
 ];
 // ===== /TESTS =====
