@@ -142,3 +142,78 @@ check('docs/ROADMAP.md 存在、列出未实现项且 README 指向它', () => {
     assert(roadmap.includes(term), `ROADMAP 缺少未实现项「${term}」`));
   assert(README.includes('docs/ROADMAP.md'), 'README 应链接 docs/ROADMAP.md');
 });
+
+// ===== D.2: 基线/验收文档与第三方声明 =====
+// 基线与验收文档的结构: 文首是"当前版本"节(版本号 = package.json version),0.1.0 的原始记录
+// 保留在"## 历史记录（0.1.0）"标题之下,不得改写成当前口径。
+const PKG = JSON.parse(read('package.json'));
+const VERSIONED_DOCS = ['docs/BASELINE.md', 'docs/UAT.md', 'docs/ACCEPTANCE.md'];
+const HISTORY_HEADING = /^## 历史记录[（(]0\.1\.0[)）]/m;
+const currentSection = text => {
+  const at = text.search(HISTORY_HEADING);
+  return at < 0 ? text : text.slice(0, at);
+};
+
+check('BASELINE/UAT/ACCEPTANCE 文首版本号与 package.json 一致,0.1.0 记录保留为历史', () => {
+  for (const file of VERSIONED_DOCS) {
+    const text = read(file);
+    const heading = text.split('\n').find(l => /^#{1,6} /.test(l) && /\d+\.\d+\.\d+/.test(l));
+    assert(heading, `${file} 缺少带版本号的标题`);
+    const version = heading.match(/\d+\.\d+\.\d+/)[0];
+    assert.equal(version, PKG.version, `${file} 文首版本号 ${version} 应为 package.json 的 ${PKG.version}: ${heading}`);
+    assert(HISTORY_HEADING.test(text), `${file} 应在「## 历史记录（0.1.0）」下保留 0.1.0 原始记录`);
+  }
+});
+
+check('BASELINE 当前节保留兼容约束与许可归属', () => {
+  const current = currentSection(read('docs/BASELINE.md'));
+  ['.pdma.json', '.pdmaner-write-lock', 'importPDManer', 'pdmaner-java.jar', 'MulanPubL-2.0', 'NOTICE'].forEach(term =>
+    assert(current.includes(term), `BASELINE 当前节缺少兼容约束「${term}」`));
+});
+
+check('ACCEPTANCE 当前节的测试数与 run-all TESTS 一致,并列出未验证边界', () => {
+  const current = currentSection(read('docs/ACCEPTANCE.md'));
+  const {TESTS} = require('./run-all.cjs');
+  const nums = [...current.matchAll(/(\d+)\s*个测试文件/g)].map(m => Number(m[1]));
+  assert(nums.length > 0, 'ACCEPTANCE 当前节应写明测试文件数');
+  nums.forEach(x => assert.equal(x, TESTS.length, `ACCEPTANCE 写「${x} 个测试文件」,run-all TESTS 实为 ${TESTS.length}`));
+  ['npm test', 'npm run build', '.github/workflows/test.yml', 'GUI', 'ARCH-02', 'ARCH-05', 'CSP'].forEach(term =>
+    assert(current.includes(term), `ACCEPTANCE 当前节缺少「${term}」`));
+});
+
+check('基线/验收文档与第三方声明不含已知不实口径(含"100% 通过")', () => {
+  for (const file of [...VERSIONED_DOCS, 'THIRD_PARTY_NOTICES.md']) {
+    for (const {line, no} of lines(read(file))) {
+      for (const [re, label] of BANNED) assert(!re.test(line), `${file}:${no} 含不实口径「${label}」: ${line}`);
+    }
+  }
+});
+
+// THIRD_PARTY_NOTICES: 表格每行首列为反引号包裹的包名,一行一个包: | `pkg` | 版本 | 许可证 | ...
+// 范围: (1) package.json dependencies 的每个包都必须有一行;(2) 凡在 node_modules 中存在的行,
+// 版本须等于已安装版本、许可证须等于该包 package.json 的 license 字段;(3) 不在 node_modules
+// 的行(随仓库内置的资源,如 luckysheet)打印 SKIP 说明,不做比对。
+check('THIRD_PARTY_NOTICES 覆盖直接依赖,版本与许可证以 node_modules 为准', () => {
+  const notices = read('THIRD_PARTY_NOTICES.md');
+  const rows = new Map();
+  for (const {line} of lines(notices)) {
+    const m = line.match(/^\|\s*`([^`]+)`[^|]*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|/);
+    if (m) rows.set(m[1], {version: m[2], license: m[3]});
+  }
+  ['node-sql-parser', 'ace-builds', 'luckysheet', 'dompurify'].forEach(name =>
+    assert(rows.has(name), `THIRD_PARTY_NOTICES 缺少「${name}」`));
+  Object.keys(PKG.dependencies).forEach(name =>
+    assert(rows.has(name), `THIRD_PARTY_NOTICES 缺少 package.json 直接依赖「${name}」`));
+  assert(/public\/jar/.test(notices) && /META-INF/.test(notices),
+    'THIRD_PARTY_NOTICES 应说明 public/jar 内嵌 jar 的第三方许可证见其 META-INF');
+  for (const [name, row] of rows) {
+    const manifest = path.join(root, 'node_modules', name, 'package.json');
+    if (!fs.existsSync(manifest)) {
+      console.log(`SKIP 第三方声明比对「${name}」: node_modules 中不存在(内置资源,按声明文本保留)`);
+      continue;
+    }
+    const pkg = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+    assert.equal(row.version, pkg.version, `THIRD_PARTY_NOTICES「${name}」版本 ${row.version} 与已安装 ${pkg.version} 不一致`);
+    assert.equal(row.license, String(pkg.license), `THIRD_PARTY_NOTICES「${name}」许可证 ${row.license} 与 package.json license ${pkg.license} 不一致`);
+  }
+});
