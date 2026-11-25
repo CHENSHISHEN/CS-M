@@ -8,6 +8,8 @@ CS-M 是一款开源的桌面端数据建模与业务画图设计工具，面向
 
 ## 功能特性
 
+> 标注“未发布版本起”的能力已合入 `main`，但不包含在 v0.5.0 安装包中，需从 `main` 源码构建后使用（见 [CHANGELOG](CHANGELOG.md) 的“未发布（Unreleased）”节）。
+
 ### v0.5.0 新增核心能力（企业建模、指标平台与平台 AI 终极整合）
 
 - **企业级全域统一建模体系（Enterprise Modeling）**：
@@ -34,12 +36,12 @@ CS-M 是一款开源的桌面端数据建模与业务画图设计工具，面向
   - **现代桌面设计体系**：专业蓝色主题、紧凑图形库、悬浮图形名称提示、右键图形收藏与图层管理器。
 - **连续自适应画布与交互提升**：
   - **连续自适应画布**：取消固定纸张限制与视口裁剪，画布工作区按图形与连线实际包围盒自动延展并支持负坐标。
-  - **平移手势两栏临时收起**：手形工具平移或按住 `Space` 拖动画布时临时折叠侧边栏扩大视野，松开鼠标精准还原面板与选区，杜绝坐标跳动。
+  - **平移手势两栏临时收起**：手形工具平移或按住 `Space` 拖动画布时临时折叠侧边栏扩大视野，松开鼠标后还原面板与选区。
   - **无缝连接与原位编辑**：图形端口直接拖拽建立连接线；原位文字双击编辑、点击画布空白即提交并合并为单步撤销。
 - **绘图日志自动保存与生命周期屏障（Persistence Engine）**：
-  - **主进程增量日志 (WAL)**：毫秒级响应图形拖拽与编辑，后台自动合并检查点，彻底防御意外断电与异常崩溃。
+  - **主进程增量日志 (WAL)**：图形拖拽与编辑以增量日志写入本机恢复日志，后台自动合并检查点；应用异常退出后，可在重新打开工程时从本机恢复日志恢复。
   - **安全生命周期关闭屏障**：应用退出、窗口关闭或快捷键重载时拦截未落盘状态，提供保存等待与本机恢复副本导出能力。
-  - **损坏日志受控恢复**：支持坏日志前缀安全隔离、原样备份与应急恢复，保障工程资产万无一失。
+  - **损坏日志受控恢复**：支持坏日志前缀隔离、原样备份与应急恢复；未发布版本起，恢复日志被截断（已确认的编辑丢失）时标记为“恢复日志损坏”并提供修复，修复前绘图与项目保存被阻止。已知限制见 [CHANGELOG](CHANGELOG.md) 与 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)。
 
 ### 业务建模与分类画图平台（v0.3.0 引入，以下按当前版本 v0.5.x 能力描述）
 
@@ -105,8 +107,8 @@ CS-M 是一款开源的桌面端数据建模与业务画图设计工具，面向
 
 | 依赖 | 要求 | 说明 |
 | --- | --- | --- |
-| Node.js | 本次验证环境：24.11.1 | 构建脚本已内置 webpack 4 与新版 Node/OpenSSL 3 的兼容处理（自动以 `--openssl-legacy-provider` 启动），无需手工设置环境变量；其他版本需通过 preflight 和实际构建验证 |
-| npm | 本次验证环境：11.6.2 | 使用仓库锁文件执行 `npm ci` |
+| Node.js | 24（CI 工作流使用 Node 24；最近一次验收的具体版本见 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)） | 构建脚本已内置 webpack 4 与新版 Node/OpenSSL 3 的兼容处理（自动以 `--openssl-legacy-provider` 启动），无需手工设置环境变量；其他版本需通过 preflight 和实际构建验证 |
+| npm | 随 Node 24 安装的 npm（具体版本见 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)） | 使用仓库锁文件执行 `npm ci` |
 | Java（可选） | JRE/JDK 8+ | 以下能力依赖 Java（内置 `pdmaner-java.jar`，通过 `java` 命令或应用内设置的 JAVA_HOME 调用）：**Word 文档导出、Excel 导入/导出（含标准字段 Excel）、PowerDesigner/DDL 文件导入解析、数据库连接/逆向工程/在线执行 DDL**。未安装 Java 时上述功能不可用，但建模、ER 图、工程文件（.chnr/.json）保存与导入导出、Markdown/HTML 导出、数据字典、版本管理等不依赖 Java，仍可正常使用 |
 
 开发步骤：
@@ -143,7 +145,7 @@ npm run package-mac          # macOS 双架构各出一个 .dmg
 
 说明：
 
-- **macOS 交叉构建 Windows**：本次 electron-builder 23.3.3 实际构建会自动下载 Wine 等兼容工具到构建缓存，无需全局手工安装 Wine。Apple Silicon 主机需能运行 x86_64 构建工具（本机 Rosetta 检查通过）；也可使用仓库的 Windows 原生 CI 工作流。Windows 安装包的构建验证与实机安装运行验证分别记录。
+- **macOS 交叉构建 Windows**：electron-builder 23.3.3 交叉构建时会自动下载 Wine 等兼容工具到构建缓存，无需全局手工安装 Wine（0.1.0 首发构建时在 Apple Silicon 主机上实测，见 [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) 的历史记录）。Apple Silicon 主机需能运行 x86_64 构建工具（Rosetta）；也可使用仓库的 Windows 原生 CI 工作流。Windows 安装包的构建验证与实机安装运行验证分别记录。
 - 首次打包需联网下载 Electron 运行时与 NSIS 等构建工具（国内网络已在 `.npmrc` 配置镜像）。
 - 本项目未配置代码签名证书，产物为**未签名**安装包；macOS 首次打开需在"系统设置-隐私与安全性"中允许，Windows SmartScreen 可能提示未知发布者。
 - `npm run build` 仅产出 Web/主进程构建文件到 `app/build`，不打安装包。
@@ -153,7 +155,7 @@ npm run package-mac          # macOS 双架构各出一个 .dmg
 - CS-M 基于 [PDManer](https://github.com/roberGroup/PDManer)（v4.9.4）二次开发，继承并保留了其关系建模、ER 图、多数据库方言、数据字典等核心能力，在此对原作者及社区贡献者表示感谢。
 - 上游与其修改均遵循 [木兰公共许可证 第2版（MulanPubL-2.0）](./LICENSE)，本项目的修改同样以 MulanPubL-2.0 提供。
 - 第三方组件声明见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) 与 [NOTICE](./NOTICE)。
-- **随包法律文件与源码获取**：构建产物（`app/build`，随安装包分发）内附 `LICENSE`、`NOTICE`、`THIRD_PARTY_NOTICES.md`；对应完整源码见本仓库 <https://github.com/CHENSHISHEN/CS-M>（当前未发布任何 Release，获取方式为克隆源码自行构建）。
+- **随包法律文件与源码获取**：构建产物（`app/build`，随安装包分发）内附 `LICENSE`、`NOTICE`、`THIRD_PARTY_NOTICES.md`；对应完整源码见本仓库 <https://github.com/CHENSHISHEN/CS-M>；安装包见 [GitHub Releases](https://github.com/CHENSHISHEN/CS-M/releases)，也可克隆源码自行构建。
 
 ## 许可证
 
@@ -161,7 +163,7 @@ npm run package-mac          # macOS 双架构各出一个 .dmg
 
 ## 基线与验收
 
-- [首发基线与兼容边界](docs/BASELINE.md)
+- [源码基线（兼容约束与仓库边界）](docs/BASELINE.md)
 - [构建与验收记录](docs/ACCEPTANCE.md)
 - [UAT 操作说明](docs/UAT.md)
 - [路线图（尚未实现的能力）](docs/ROADMAP.md)

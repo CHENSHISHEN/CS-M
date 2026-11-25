@@ -31,6 +31,10 @@
 - 恢复日志高水位 `highwater.json`（`{seq, sessionId}`）：已确认的编辑从日志中丢失时标记“恢复日志损坏”并写入 `diagnostic.json`（`JOURNAL_TRUNCATED`）。
 - 会话栅栏：切换项目时，进行中的编辑只写入原项目。
 
+### 业务建模
+
+- 业务流程画布：悬停节点时显示连接桩、移出后隐藏，恢复从连接桩拖出连线建立流转；只读画布不显示连接桩。
+
 ### 前向工程与上手
 
 - 生成向导第二步按层级分组列出全部阻断错误（补齐 13 个错误文案）；目标库无效时不再逐字段误报“缺少目标类型映射”，已有库缺类型时给出目标级阻断。
@@ -41,8 +45,10 @@
 ### 测试与文档
 
 - `npm test` 改为逐个文件独立运行并汇总 PASS/FAIL/SKIP，无 Java 时显式 SKIP；新增 CI 测试工作流（依赖审计仅报告）。
-- 新增 `tests/test-docs-claims.cjs`：README 中的图类型数、模板数与测试文件数由代码计算并比对；README 与 CHANGELOG 均检查不实口径。
+- 新增 `tests/test-docs-claims.cjs`：README 中的图类型数、模板数与测试文件数由代码计算并比对；README 与 CHANGELOG 均检查不实口径（过时的模板数口径只在 README 与本节检查）；BASELINE/UAT/ACCEPTANCE 文首版本号须与 `package.json` 一致并保留 0.1.0 历史记录；THIRD_PARTY_NOTICES 须覆盖全部直接依赖，版本与许可证以 `node_modules` 为准。
 - README 与 CHANGELOG 按实际能力改写；新增 `docs/ROADMAP.md` 列出尚未实现的能力。
+- `docs/BASELINE.md`、`docs/UAT.md`、`docs/ACCEPTANCE.md` 按当前版本重写（0.1.0 原文保留在“历史记录”节）；UAT 列出待人工验收的界面项，ACCEPTANCE 写明未验证范围与已知限制。
+- THIRD_PARTY_NOTICES 改为一行一个包，版本按 `node_modules` 实际安装版本更正（如 lodash、moment）；补充 node-sql-parser、ace-builds、dompurify，新增随仓库内置的 luckysheet、font-awesome，并说明 `public/jar/pdmaner-java.jar` 内嵌的第三方 jar。
 
 ### 行为变化与已知限制（升级前请阅读）
 

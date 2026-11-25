@@ -25,7 +25,7 @@ CS-M 基于 [PDManer 4.9.4](https://github.com/roberGroup/PDManer) 的源码二�
 
 ## 仓库边界
 
-- 纳入版本管理：`src/`、`public/`（含 `public/jar/`、`public/file/`、`public/asset/`）、`bin/`、`config/`、`app/`（第二套运行时依赖清单与锁文件）、`vendor/xlsx-0.20.3.tgz`、`assets/branding/`、`.github/`、README/CHANGELOG/LICENSE/NOTICE/THIRD_PARTY_NOTICES、`docs/`、`tests/`。
+- 纳入版本管理：完整清单以 `git ls-files` 为准；主要包括 `src/`、`public/`（含 `public/jar/`、`public/file/`、`public/asset/`）、`bin/`、`config/`、`app/`（第二套运行时依赖清单与锁文件）、`vendor/xlsx-0.20.3.tgz`、`assets/branding/`、`.github/`、`docs/`、`tests/`，根目录的 `package.json`/`package-lock.json`、`profile.js`、`.babelrc`、`.eslintrc`、`.npmrc` 等构建配置，以及 README/CHANGELOG/LICENSE/NOTICE/THIRD_PARTY_NOTICES。
 - 不纳入：`node_modules/`、`build/`、`app/build/`、`dist/` 等可再生成的依赖与构建产物；缓存、日志、IDE 配置与本地 agent 状态；真实业务工程、数据库凭据、私钥、签名证书。具体规则以 `.gitignore` 为准；`.gitignore` 只约束未跟踪文件，提交前仍需检查暂存内容，不要用 `git add -f` 绕过。
 - 安装包不进入源码仓库，通过 GitHub Releases 附件分发；源码构建与测试方式见 [ACCEPTANCE.md](./ACCEPTANCE.md)。
 

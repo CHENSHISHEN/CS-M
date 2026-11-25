@@ -1,6 +1,6 @@
 # 第三方组件声明（Third Party Notices）
 
-CS-M 构建与运行使用了以下第三方开源组件。各组件的完整许可证文本以其发布包内的
+CS-M 构建与运行使用了以下第三方组件。各组件的完整许可证文本以其发布包内的
 LICENSE / NOTICE 文件为准。上游 [PDManer](https://github.com/roberGroup/PDManer)
 v4.9.4 已包含其中大部分依赖。
 
@@ -61,9 +61,10 @@ webpack、Babel、ESLint 及相关 loader/插件、electron-builder 23.3.3 等�
 
 ## 内置资源
 
-- `public/jar/pdmaner-java.jar`：数据库逆向 / DDL 解析能力的 Java 组件，随上游
-  PDManer 引入，遵循 MulanPubL-2.0（与上游一致）。
-- `public/jar/pdmaner-java.jar` 是内嵌依赖的可执行 jar，`BOOT-INF/lib/` 下打包了多个第三方
-  jar（如 Spring、各数据库 JDBC 驱动）；这些第三方库的许可证见各自 jar 内的 `META-INF`，
-  本文未逐一声明。
+- `public/jar/pdmaner-java.jar`：数据库逆向 / DDL 解析与 Word/Excel 导入导出能力的 Java
+  组件，随上游 PDManer 引入；该 jar 自身代码遵循 MulanPubL-2.0（与上游一致）。
+- `public/jar/pdmaner-java.jar` 是内嵌依赖的可执行 jar，`BOOT-INF/lib/` 下打包了 89 个第三方
+  jar（例如 Apache POI、Apache Batik、Jackson 以及多种数据库 JDBC 驱动）。这些第三方库的
+  许可证各不相同，本文未逐一列出，也未逐一核实；请以各库的上游发布及其 jar 内 `META-INF`
+  中的许可声明（如有）为准。
 - 导入导出模板（`public/file/`）沿用上游 PDManer 附带模板。

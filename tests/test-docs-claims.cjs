@@ -1,8 +1,16 @@
-// D.1 文档口径守卫: README.md 与 CHANGELOG.md 只能描述已实现的能力,数字以代码为准。
-// - 反向: 不得出现已知不成立的宣称(图种/模板数量口径、职责矩阵、流式 SSE、本地安全代理、
-//   "98+ 项端到端"、未限定的哈希校验)。CHANGELOG 历史条目采取"原位更正 + 更正说明"策略,
-//   因此整份 CHANGELOG 都受检;路线图类词汇只允许出现在带"未实现/尚未/暂不"等标记的行内。
-// - 正向: 图类型数、模板数(按模块拆分)、npm test 测试文件数均由代码计算后与 README 比对。
+// 文档口径守卫: README/CHANGELOG 与基线/验收/UAT/第三方声明只能描述已实现的能力,数字以代码为准。
+// D.1(README.md 与 CHANGELOG.md):
+// - 反向: 整份 README 与 CHANGELOG(含原位更正过的历史条目)不得出现 BANNED 中的不实口径
+//   ("9 大图种"、"98+"、"端到端测试"、"100% 通过");路线图类词汇(职责矩阵、流式/SSE、本地安全
+//   代理等)只允许出现在带"未实现/尚未/暂不/ROADMAP"标记的行内;"哈希"必须带完整性/非防篡改限定。
+// - 过时的"24 个模板"口径只在 README 与 CHANGELOG 未发布节禁用(历史版本可能真实为 24)。
+// - 正向: 图类型数、模板数(按模块拆分)、npm test 测试文件数由代码计算后与 README 比对;
+//   CHANGELOG 首节为未发布节;docs/ROADMAP.md 列出未实现项且 README 链接它。
+// D.2(docs/BASELINE.md、docs/UAT.md、docs/ACCEPTANCE.md、THIRD_PARTY_NOTICES.md):
+// - 三份文档文首版本号 = package.json version,0.1.0 原文保留在"## 历史记录（0.1.0）"下;
+// - BASELINE 当前节保留兼容约束与许可归属;ACCEPTANCE 当前节写明测试文件数(日期记录,不与
+//   TESTS 实时绑定)、验收依据与未验证边界;上述文档与第三方声明同样不得含 BANNED 口径;
+// - THIRD_PARTY_NOTICES 覆盖 package.json 的全部直接依赖,已安装包的版本/许可证以 node_modules 为准。
 const fs = require('fs');
 const path = require('path');
 const assert = require('assert');
@@ -123,10 +131,14 @@ check('README 模板数以 PLATFORM_TEMPLATES 为准并按模块拆分', () => {
   assert(README.includes(phrase), `README 应写明「${phrase}」`);
 });
 
+// README 描述的是当前 main,测试文件数与 TESTS 实时绑定。逐个提取每一处"N 个测试文件"
+// 精确比对数字,避免 includes 子串误判(例如 "140 个测试文件" 包含 "40 个测试文件")。
+const TEST_COUNT_RE = /(?<!\d)(\d+)\s*个测试文件/g;
 check('README 测试数量口径与 npm test(run-all TESTS)一致', () => {
   const {TESTS} = require('./run-all.cjs');
-  const phrase = `${TESTS.length} 个测试文件`;
-  assert(README.includes(phrase), `README 应写明「${phrase}」`);
+  const nums = [...README.matchAll(TEST_COUNT_RE)].map(m => Number(m[1]));
+  assert(nums.length > 0, `README 应写明「${TESTS.length} 个测试文件」`);
+  nums.forEach(x => assert.equal(x, TESTS.length, `README 写「${x} 个测试文件」,run-all TESTS 实为 ${TESTS.length}`));
   assert(README.includes('单元/契约测试'), 'README 应注明测试为单元/契约测试');
 });
 
@@ -171,12 +183,14 @@ check('BASELINE 当前节保留兼容约束与许可归属', () => {
     assert(current.includes(term), `BASELINE 当前节缺少兼容约束「${term}」`));
 });
 
-check('ACCEPTANCE 当前节的测试数与 run-all TESTS 一致,并列出未验证边界', () => {
+// ACCEPTANCE 是带日期的验收记录:其中的测试文件数是验收当天的事实,之后新增测试不应让这份
+// 历史记录"变错"。因此这里只要求写明了测试文件数,不与 TESTS.length 实时绑定(README 仍实时绑定);
+// 重新验收时由验收人连同日期一起更新该数字。
+check('ACCEPTANCE 当前节写明测试文件数(日期记录)与验收依据,并列出未验证边界', () => {
   const current = currentSection(read('docs/ACCEPTANCE.md'));
-  const {TESTS} = require('./run-all.cjs');
-  const nums = [...current.matchAll(/(\d+)\s*个测试文件/g)].map(m => Number(m[1]));
+  const nums = [...current.matchAll(TEST_COUNT_RE)].map(m => Number(m[1]));
   assert(nums.length > 0, 'ACCEPTANCE 当前节应写明测试文件数');
-  nums.forEach(x => assert.equal(x, TESTS.length, `ACCEPTANCE 写「${x} 个测试文件」,run-all TESTS 实为 ${TESTS.length}`));
+  assert(/日期：\d{4}-\d{2}-\d{2}/.test(current), 'ACCEPTANCE 当前节应写明验收日期');
   ['npm test', 'npm run build', '.github/workflows/test.yml', 'GUI', 'ARCH-02', 'ARCH-05', 'CSP'].forEach(term =>
     assert(current.includes(term), `ACCEPTANCE 当前节缺少「${term}」`));
 });
@@ -191,14 +205,25 @@ check('基线/验收文档与第三方声明不含已知不实口径(含"100% �
 
 // THIRD_PARTY_NOTICES: 表格每行首列为反引号包裹的包名,一行一个包: | `pkg` | 版本 | 许可证 | ...
 // 范围: (1) package.json dependencies 的每个包都必须有一行;(2) 凡在 node_modules 中存在的行,
-// 版本须等于已安装版本、许可证须等于该包 package.json 的 license 字段;(3) 不在 node_modules
-// 的行(随仓库内置的资源,如 luckysheet)打印 SKIP 说明,不做比对。
+// 版本须等于已安装版本、许可证须等于该包 package.json 的 license 字段;(3) "随仓库内置的前端资源"
+// 节下的行(如 luckysheet)不经 npm 安装,打印 SKIP 说明,不做比对;(4) 其他节下但 node_modules
+// 中不存在的行(npm 包未安装,例如未执行 npm ci)同样 SKIP,但提示原因不同。
+const VENDORED_HEADING = /^## 随仓库内置的前端资源/;
+// license 字段可能是字符串(SPDX 表达式)、旧式对象 {type} 或旧式 licenses 数组,统一为字符串比较
+const licenseOf = pkg => {
+  const l = pkg.license != null ? pkg.license : pkg.licenses;
+  const one = x => (x && typeof x === 'object' ? String(x.type) : String(x));
+  if (Array.isArray(l)) return l.length === 1 ? one(l[0]) : `(${l.map(one).join(' OR ')})`;
+  return one(l);
+};
 check('THIRD_PARTY_NOTICES 覆盖直接依赖,版本与许可证以 node_modules 为准', () => {
   const notices = read('THIRD_PARTY_NOTICES.md');
   const rows = new Map();
+  let vendored = false;
   for (const {line} of lines(notices)) {
+    if (/^## /.test(line)) vendored = VENDORED_HEADING.test(line);
     const m = line.match(/^\|\s*`([^`]+)`[^|]*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|/);
-    if (m) rows.set(m[1], {version: m[2], license: m[3]});
+    if (m) rows.set(m[1], {version: m[2], license: m[3], vendored});
   }
   ['node-sql-parser', 'ace-builds', 'luckysheet', 'dompurify'].forEach(name =>
     assert(rows.has(name), `THIRD_PARTY_NOTICES 缺少「${name}」`));
@@ -208,12 +233,17 @@ check('THIRD_PARTY_NOTICES 覆盖直接依赖,版本与许可证以 node_modules
     'THIRD_PARTY_NOTICES 应说明 public/jar 内嵌 jar 的第三方许可证见其 META-INF');
   for (const [name, row] of rows) {
     const manifest = path.join(root, 'node_modules', name, 'package.json');
+    if (row.vendored) {
+      console.log(`SKIP 第三方声明比对「${name}」: 随仓库内置的前端资源,不经 npm 安装,按声明文本保留`);
+      continue;
+    }
     if (!fs.existsSync(manifest)) {
-      console.log(`SKIP 第三方声明比对「${name}」: node_modules 中不存在(内置资源,按声明文本保留)`);
+      console.log(`SKIP 第三方声明比对「${name}」: npm 包未安装(node_modules 中不存在),无法比对版本与许可证`);
       continue;
     }
     const pkg = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+    const license = licenseOf(pkg);
     assert.equal(row.version, pkg.version, `THIRD_PARTY_NOTICES「${name}」版本 ${row.version} 与已安装 ${pkg.version} 不一致`);
-    assert.equal(row.license, String(pkg.license), `THIRD_PARTY_NOTICES「${name}」许可证 ${row.license} 与 package.json license ${pkg.license} 不一致`);
+    assert.equal(row.license, license, `THIRD_PARTY_NOTICES「${name}」许可证 ${row.license} 与 package.json license ${license} 不一致`);
   }
 });
