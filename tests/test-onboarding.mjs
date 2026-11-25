@@ -16,7 +16,8 @@ import {
   CATALOG_MENU_KEYS, getRootCreateMenu, getConceptModelCreateMenu,
 } from '../src/lib/model_catalog_menu.js';
 import {
-  isProjectEmpty, shouldShowEmptyStateGuide, getEmptyStateGuideSteps, ONBOARDING_ACTIONS,
+  isProjectEmpty, shouldShowEmptyStateGuide, shouldAutoOpenHomeCover, getEmptyStateGuideSteps,
+  ONBOARDING_ACTIONS,
 } from '../src/lib/onboarding.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -89,6 +90,30 @@ ok('只读不影响是否显示(只读空项目同样显示引导,但隐藏写�
   assert.equal(shouldShowEmptyStateGuide({dataSource: {}, tabCount: 0, readOnly: true}), true);
 });
 
+ok('数据源未加载时不显示引导(只按已加载数据源判断)', () => {
+  assert.equal(shouldShowEmptyStateGuide({dataSource: null, tabCount: 0}), false);
+  assert.equal(shouldShowEmptyStateGuide({dataSource: undefined, tabCount: 0}), false);
+});
+
+// ---- 打开项目时是否自动打开首页封面(空项目让位给引导) ----
+ok('shouldAutoOpenHomeCover:空数据项目不打开封面,非空数据项目照旧打开', () => {
+  assert.equal(shouldAutoOpenHomeCover({module: undefined, dataSource: {entities: []}}), false);
+  assert.equal(shouldAutoOpenHomeCover({module: 'data', dataSource: {}}), false);
+  assert.equal(shouldAutoOpenHomeCover({module: undefined, dataSource: {entities: [{id: 'e'}]}}), true);
+  assert.equal(shouldAutoOpenHomeCover({module: 'data', dataSource: {conceptEntities: [{id: 'c'}]}}), true);
+});
+
+ok('shouldAutoOpenHomeCover:绘图/业务平台项目保持不打开(与原行为一致)', () => {
+  ['drawing', 'business'].forEach((module) => {
+    assert.equal(shouldAutoOpenHomeCover({module, dataSource: {}}), false, module);
+    assert.equal(shouldAutoOpenHomeCover({module, dataSource: {entities: [{id: 'e'}]}}), false, module);
+  });
+});
+
+ok('shouldAutoOpenHomeCover:数据源缺失时保持原行为(打开)', () => {
+  assert.equal(shouldAutoOpenHomeCover({module: undefined, dataSource: null}), true);
+});
+
 // ---- 3) 引导步骤 ----
 ok('三步依次为 概念实体 / 逻辑物理模型 / 导出文档,可写空项目第②步先建逻辑实体', () => {
   const steps = getEmptyStateGuideSteps({dataSource: {}, readOnly: false});
@@ -107,12 +132,15 @@ ok('已有逻辑实体时第②步直接打开前向工程', () => {
   assert.equal(steps[1].hintKey, undefined);
 });
 
-ok('只读:创建/生成类按钮隐藏,导出文档保留', () => {
-  const steps = getEmptyStateGuideSteps({dataSource: {}, readOnly: true});
-  assert.deepEqual(steps.map(s => s.action), [null, null, ONBOARDING_ACTIONS.exportDocument]);
-  assert.equal(steps[0].actionKey, undefined);
-  assert.equal(steps[1].actionKey, undefined);
-  assert.equal(steps[1].hintKey, undefined);
+ok('只读:三步均不给按钮(导出与顶栏只读禁用一致,导出模板确认会走保存路径)', () => {
+  [{}, {logicEntities: [{id: 'l'}]}].forEach((dataSource) => {
+    const steps = getEmptyStateGuideSteps({dataSource, readOnly: true});
+    assert.deepEqual(steps.map(s => s.action), [null, null, null]);
+    steps.forEach((s) => {
+      assert.equal(s.actionKey, undefined, s.key);
+      assert.equal(s.hintKey, undefined, s.key);
+    });
+  });
 });
 
 // ---- 4) 文案 ----
@@ -142,6 +170,10 @@ ok('ModelCatalog 经由纯函数构建 root 与企业概念模型菜单', () => 
 ok('工作台宿主按 shouldShowEmptyStateGuide 渲染 EmptyStateGuide', () => {
   const src = read('src/app/main/index.js');
   assert.match(src, /shouldShowEmptyStateGuide\(/);
+  // 挂载时自动打开封面的判定经由纯函数(空项目让位给引导)
+  assert.match(src, /shouldAutoOpenHomeCover\(\{module: dataSource\?\.module, dataSource\}\)/);
+  // 回到模型域时的默认封面同样让位给空项目引导
+  assert.match(src, /key === '1' && tabsRef\.current\.length === 0 && !isProjectEmpty\(dataSourceRef\.current\)/);
   assert.match(src, /<EmptyStateGuide\b/);
   assert.ok(fs.existsSync(path.join(ROOT, 'src/app/main/EmptyStateGuide.js')));
 });

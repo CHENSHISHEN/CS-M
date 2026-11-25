@@ -773,7 +773,7 @@ codeKeepHint: '已确认代码保持不变：',
     onboarding: {
         title: '从这里开始建模',
         subtitle: '三步完成第一个模型：概念 → 逻辑/物理 → 文档',
-        readOnlyHint: '当前为只读模式，创建与生成操作已隐藏。',
+        readOnlyHint: '当前为只读模式，创建、生成与导出操作已隐藏。',
         concept: {
             title: '新建概念实体',
             desc: '在“企业概念模型”下描述核心业务对象，例如客户、订单。',

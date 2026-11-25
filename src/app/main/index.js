@@ -32,7 +32,9 @@ import {StandardFieldLibraryContext} from '../../lib/context';
 import HeaderTool from './HeaderTool';
 import MessageHelp from './MessageHelp';
 import EmptyStateGuide from './EmptyStateGuide';
-import { shouldShowEmptyStateGuide, ONBOARDING_ACTIONS } from '../../lib/onboarding';
+import {
+  shouldShowEmptyStateGuide, shouldAutoOpenHomeCover, isProjectEmpty, ONBOARDING_ACTIONS,
+} from '../../lib/onboarding';
 import { CATALOG_MENU_KEYS } from '../../lib/model_catalog_menu';
 import ToggleCase from '../container/tools/togglecase';
 import CompareTable from '../container/tools/comparetable';
@@ -384,10 +386,12 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
     }
   }, [restProps.dataSource]);
   // DATA-WB-FEAT-001 阶段A：数据建模项目（module 非绘图/业务）默认打开企业级首页；
-  // 绘图/业务平台项目保持原初始工作区，不受影响
+  // 绘图/业务平台项目保持原初始工作区，不受影响。
+  // UX-02：空项目不自动打开封面，编辑区显示三步引导（Main 在项目加载完成后才挂载，此处即已加载数据源）
   useEffect(() => {
-    const module = restProps?.dataSource?.module;
-    if (module !== 'drawing' && module !== 'business' && tabsRef.current.length === 0) {
+    const dataSource = restProps?.dataSource;
+    if (shouldAutoOpenHomeCover({module: dataSource?.module, dataSource})
+      && tabsRef.current.length === 0) {
       _onMenuClick('home-cover', 'home', null, 'fa-home');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2392,8 +2396,9 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
       }
       setMenuType(key);
       // S3：从其他主模块回到模型域且无打开文档时，默认呈现企业首页
-      // （原有 tabs 与草稿保留，不强制关闭/重建）
-      if (key === '1' && tabsRef.current.length === 0) {
+      // （原有 tabs 与草稿保留，不强制关闭/重建）。
+      // UX-02：空项目不打开封面，与挂载时一致，编辑区保留三步引导
+      if (key === '1' && tabsRef.current.length === 0 && !isProjectEmpty(dataSourceRef.current)) {
         _onMenuClick('home-cover', 'home', null, 'fa-home');
       }
       afterChange && afterChange();

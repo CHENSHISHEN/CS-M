@@ -773,7 +773,7 @@ codeKeepHint: 'Confirmed code unchanged: ',
     onboarding: {
         title: 'Start modeling here',
         subtitle: 'Build your first model in three steps: concept → logical/physical → document',
-        readOnlyHint: 'Read-only mode: create and generate actions are hidden.',
+        readOnlyHint: 'Read-only mode: create, generate and export actions are hidden.',
         concept: {
             title: 'New concept entity',
             desc: 'Describe core business objects such as Customer or Order under "Enterprise concept model".',
