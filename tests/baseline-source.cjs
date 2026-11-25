@@ -71,11 +71,13 @@ assert.equal(pkg.build.win.icon, 'assets/branding/app.ico');
 assert.equal(pkg.build.mac.icon, 'assets/branding/app.icns');
 // 单实例锁（DRW-09）：多开会共用 userData/drawing-autosave，锁必须在任何启动副作用之前获取。
 {
-  const mainSrc = read('src/main.js').toString();
-  const lockAt = mainSrc.indexOf('app.requestSingleInstanceLock()');
-  assert(lockAt >= 0, 'src/main.js 必须调用 app.requestSingleInstanceLock()');
+  // 先去掉注释(行注释与块注释),只在代码中定位:注释里提到的标记不算。
+  const mainSrc = read('src/main.js').toString().replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"])\/\/.*$/gm, '$1');
+  const lockMatch = /if\s*\(\s*!app\.requestSingleInstanceLock\(\)\s*\)\s*\{\s*app\.quit\(\);\s*return;/.exec(mainSrc);
+  assert(lockMatch, 'src/main.js 必须以 if (!app.requestSingleInstanceLock()) { app.quit(); return; } 获取单实例锁并在失败时退出');
+  const lockAt = lockMatch.index;
   assert(/app\.on\(\s*['"]second-instance['"]/.test(mainSrc), "src/main.js 必须监听 app.on('second-instance')");
-  for (const marker of ['new DrawingPersistence', 'ipcMain.handle(', 'ipcMain.on(', 'registerAiHostIpc({', "app.on('ready'", 'new BrowserWindow(']) {
+  for (const marker of ["require('@electron/remote/main')", 'new DrawingPersistence', 'ipcMain.handle(', 'ipcMain.on(', 'registerAiHostIpc({', "app.on('ready'", 'new BrowserWindow(']) {
     const at = mainSrc.indexOf(marker);
     assert(at >= 0, `src/main.js 缺少 ${marker}`);
     assert(lockAt < at, `单实例锁必须出现在 ${marker} 之前`);

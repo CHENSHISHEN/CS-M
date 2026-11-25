@@ -1,6 +1,4 @@
 // 绘图持久化回归场景:把评测(DRW-02/10/11/13)的复现脚本沉淀为测试。
-// 尚未修复的缺陷用 knownFailing 标注:失败 → 打印 KNOWN 且进程仍通过;
-// 意外通过 → 报错,提醒修复者把对应标记改为 ok(...)。
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -24,15 +22,6 @@ const withTmp = async fn => {
 const ok = async (name, fn) => {
   try {await withTmp(fn);console.log('ok', name);}
   catch (e) {failures.push(name);console.log('FAIL', name, '\n    ', e && e.stack || e);}
-};
-const knownFailing = async (name, fn) => {
-  let passed = false;let reason = '';
-  try {await withTmp(fn);passed = true;}
-  catch (e) {reason = String(e && e.message || e).split('\n')[0].slice(0, 200);}
-  if (passed) {
-    failures.push(name);
-    console.log('FAIL', name, '\n     已知失败场景意外通过:缺陷已修复,请把 knownFailing(...) 改为 ok(...)。');
-  } else console.log(`KNOWN ${name}: ${reason}`);
 };
 
 // ---------- 测试数据 ----------
@@ -309,6 +298,31 @@ const lockLeftovers = dir => fs.readdirSync(dir).filter(n => n.includes('pdmaner
       assert(!store.sessions.has(fs.realpathSync(files.A)));
       const after = disk();
       assert.strictEqual(after.A, before.A);assert.strictEqual(after.B, before.B);assert.strictEqual(after.C, before.C);
+    } finally {dispose(store);}
+  });
+
+  await ok('DRW-02 open(A) 成功后 open(B) 失败(未被取代),之后 flush(): A 的草稿只写入 A,B 不被触碰', async dir => {
+    const {files, dB, dC, disk} = threeProjects(dir);
+    const store = makeStore(dir);
+    try {
+      const wrapper = loadWrapper(store);
+      await wrapper.open(files.A, project([]));
+      const before = disk();
+      const ch = settle(wrapper.change([drawing('A-edit', 'A 编辑')]));
+      const oB = settle(wrapper.open(files.B, null));  // 引擎拒绝:INVALID_PROJECT;其后没有更新的 open
+      assert(!(await ch).error, `A 的编辑应成功: ${(await ch).error}`);
+      assert.strictEqual(codeOf((await oB).error), 'INVALID_PROJECT');
+      assert(!store.sessions.has(fs.realpathSync(files.B)), 'B 不应建立会话');
+      // 失败的切换之后,新编辑仍属于仍在会话中的 A。
+      assert(!(await settle(wrapper.change([drawing('A-edit', 'A 编辑'), drawing('A-2', 'A 新增')]))).error);
+      await wrapper.flush();
+      assert.deepStrictEqual(await idsOf(store, files.A), ['A-edit', 'A-2']);
+      assert.strictEqual(sessionOf(store, files.A).seq, 2, 'A 的两次编辑各应用一次');
+      assert.deepStrictEqual(JSON.parse(fs.readFileSync(files.A)).drawings.map(d => d.id), ['A-edit', 'A-2'], 'flush 把草稿写入 A');
+      assert(!store.sessions.has(fs.realpathSync(files.B)), 'flush 后 B 仍无会话');
+      const after = disk();
+      assert.strictEqual(after.B, before.B, 'B 的工程文件不得被改写');assert.strictEqual(after.C, before.C);
+      assert.deepStrictEqual(JSON.parse(after.B).drawings, [dB]);assert.deepStrictEqual(JSON.parse(after.C).drawings, [dC]);
     } finally {dispose(store);}
   });
 
@@ -990,6 +1004,120 @@ const lockLeftovers = dir => fs.readdirSync(dir).filter(n => n.includes('pdmaner
     }
   });
 
+  // 工程文件被删且有未落盘编辑时:切换工程被拒绝(PROJECT_FILE_MISSING),草稿留在 A 的日志里,
+  // 恢复副本可导出;“另存为”(savedCopy 打开新路径)是出路,之后再切换到 B 正常。
+  await ok('DRW-11 渲染端: A 被删且有未落盘编辑 → 切到 B 被拒绝、草稿在 A 日志、恢复副本可导出、另存为 C 后可切到 B', async dir => {
+    const {files, dB} = threeProjects(dir);
+    const store = makeStore(dir);
+    try {
+      const wrapper = loadWrapper(store);
+      await wrapper.open(files.A, project([]));
+      await wrapper.change([drawing('d1', '订单')]);
+      const keyA = sessionOf(store, files.A).key;
+      fs.unlinkSync(files.A);
+      const before = fs.readFileSync(files.B, 'utf8');
+      const ch = settle(wrapper.change([drawing('d1', '订单'), drawing('d2', '客户')]));
+      const oB = settle(wrapper.open(files.B, project([dB])));
+      assert(!(await ch).error, `缺失期间的编辑仍进日志: ${(await ch).error}`);
+      assert.strictEqual((await oB).error && (await oB).error.message, 'PROJECT_FILE_MISSING', '切换工程必须被拒绝');
+      assert.strictEqual(wrapper.getState().status, 'error');assert.strictEqual(wrapper.getState().error, 'PROJECT_FILE_MISSING');
+      assert(!store.sessions.has(fs.realpathSync(files.B)), 'B 不应建立会话');
+      const sA = store.sessions.get(keyA);
+      assert.strictEqual(sA.seq, 2);assert.strictEqual(sA.checkpointSeq, 0, '未落盘');
+      // 失败的切换之后编辑仍属于 A:继续进入 A 的日志(seq 增长)。
+      assert(!(await settle(wrapper.change([drawing('d1', '订单'), drawing('d2', '客户'), drawing('d3', '产品')]))).error);
+      assert.strictEqual(sA.seq, 3);
+      assert.deepStrictEqual(decode(fs.readFileSync(sA.journal)).records.filter(r => r.type === 'command').map(r => r.seq), [1, 2, 3]);
+      const rec = await wrapper.recovery();
+      assert.deepStrictEqual(rec.drawings.map(d => d.id), ['d1', 'd2', 'd3'], '恢复副本含最新编辑');
+      assert.strictEqual(rec.name, '回归项目');
+      // 另存为 C:先写出文件,再以 savedCopy 打开(不离开 A,不刷盘 A)。
+      fs.writeFileSync(files.C, JSON.stringify(rec, null, 2));
+      const saved = JSON.parse(fs.readFileSync(files.C, 'utf8'));
+      const asC = await wrapper.open(files.C, saved, true);
+      assert.deepStrictEqual(asC.drawings.map(d => d.id), ['d1', 'd2', 'd3']);
+      assert.strictEqual(wrapper.getState().status, 'saved');
+      assert.strictEqual((await wrapper.flush()).status, 'saved');
+      await wrapper.open(files.B, project([dB]));
+      assert.strictEqual(wrapper.getState().status, 'saved');
+      assert.deepStrictEqual(await idsOf(store, files.B), ['B-own']);
+      assert.strictEqual(fs.readFileSync(files.B, 'utf8'), before, 'B 不被改写');
+      assert.deepStrictEqual(JSON.parse(fs.readFileSync(files.C, 'utf8')).drawings.map(d => d.id), ['d1', 'd2', 'd3']);
+      assert.strictEqual(store.sessions.get(keyA).seq, 3, 'A 的日志仍保留草稿,文件放回后可重放');
+    } finally {dispose(store);}
+  });
+
+  // 可读文案:humanError 对 PROJECT_FILE_MISSING 给出中英文出路说明;PROJECT_BUSY 指另一个程序持有写锁。
+  await ok('DRW-11 humanError: PROJECT_FILE_MISSING 中英文均说明出路;PROJECT_BUSY 指其他程序', async () => {
+    const loadCommon = lang => {
+      const abs = path.join(root, 'src/app/drawing/platform/common.js');
+      const code = babel.transformSync(fs.readFileSync(abs, 'utf8'), {
+        babelrc: false, configFile: false,
+        presets: [['@babel/preset-env', {targets: {node: 'current'}}], '@babel/preset-react'],
+        plugins: ['@babel/plugin-proposal-optional-chaining'],
+      }).code;
+      const m = {exports: {}};
+      const fake = {
+        components: {FormatMessage: {string: ({id}) => (id === 'platformV3.locale' ? lang : id)}},
+        '../../../lib/drawing_platform': {clone: v => v, validateDrawing: () => []},
+      };
+      vm.runInThisContext('(function(require,module,exports){' + code + '\n})', {filename: abs})(s => (s in fake ? fake[s] : require(path.join(root, 'node_modules', s))), m, m.exports);
+      return m.exports.humanError;
+    };
+    const zh = loadCommon('zh'), en = loadCommon('en');
+    for (const input of ['PROJECT_FILE_MISSING', new Error('PROJECT_FILE_MISSING')]) {
+      const z = zh(input), e = en(input);
+      assert(!/PROJECT_FILE_MISSING/.test(z) && !/PROJECT_FILE_MISSING/.test(e), `不得显示原始代码: ${z} / ${e}`);
+      assert(/另存为/.test(z) && /恢复副本/.test(z) && /放回/.test(z), z);
+      assert(/Save As/i.test(e) && /recovery copy/i.test(e) && /back/i.test(e), e);
+    }
+    assert(/另一个程序|其他程序/.test(zh('PROJECT_BUSY')), zh('PROJECT_BUSY'));
+    assert(/another program/i.test(en('PROJECT_BUSY')), en('PROJECT_BUSY'));
+  });
+
+  // 已有会话的重开:文件缺失只在会话健康时报 error,不得盖过 damaged/conflict。
+  await ok('DRW-11 重开已有会话: 文件缺失不覆盖 damaged / conflict 状态', async dir => {
+    const dmg = path.join(dir, 'damaged');fs.mkdirSync(dmg);
+    const fileD = path.join(dmg, 'p.pdma.json');writeProject(fileD, []);
+    const s1 = makeStore(dmg);let journal;
+    try {
+      await s1.open(fileD, project([]), 'o');
+      for (const id of ['d1', 'd2']) await s1.command(fileD, addCommand(id, `图 ${id}`, sessionOf(s1, fileD).drawings, id), 'o');
+      journal = sessionOf(s1, fileD).journal;
+    } finally {dispose(s1);}
+    fs.truncateSync(journal, 0);
+    const s2 = makeStore(dmg);
+    try {
+      assert.strictEqual((await s2.open(fileD, project([]), 'o')).status, 'damaged');
+      fs.unlinkSync(fileD);
+      const again = await s2.open(fileD, project([]), 'o');
+      assert.strictEqual(again.status, 'damaged', `damaged 不得被 error 覆盖: ${again.status}`);
+    } finally {dispose(s2);}
+    const cfl = path.join(dir, 'conflict');fs.mkdirSync(cfl);
+    const fileC = path.join(cfl, 'p.pdma.json');writeProject(fileC, []);
+    const s3 = makeStore(cfl);
+    try {
+      await s3.open(fileC, project([]), 'o');
+      await s3.command(fileC, addCommand('d1', '订单', [], 'a'), 'o');
+      writeProject(fileC, [drawing('x', '外部')]);
+      assert.strictEqual((await s3.open(fileC, project([]), 'o')).status, 'conflict');
+      fs.unlinkSync(fileC);
+      const again = await s3.open(fileC, project([]), 'o');
+      assert.strictEqual(again.status, 'conflict', `conflict 不得被 error 覆盖: ${again.status}`);
+    } finally {dispose(s3);}
+  });
+
+  await ok('DRW-11 打开从未存在的路径: 仍抛 ENOENT,但不先创建会话目录', async dir => {
+    const store = makeStore(dir);
+    try {
+      const r = await settle(store.open(path.join(dir, 'nope.pdma.json'), project([]), 'o'));
+      assert.strictEqual(r.error && r.error.code, 'ENOENT');
+      const storeRoot = path.join(dir, 'store');
+      assert(!fs.existsSync(storeRoot) || fs.readdirSync(storeRoot).length === 0, `不应留下空会话目录: ${fs.existsSync(storeRoot) ? fs.readdirSync(storeRoot) : ''}`);
+      assert.strictEqual(store.sessions.size, 0);
+    } finally {dispose(store);}
+  });
+
   // DRW-13:日志被清空/删除后重开必须能察觉已 ACK 的命令丢失。
   await ok('DRW-13 日志被清空/删除后重开状态为 damaged(而非 saved + 0 图纸)', async dir => {
     const problems = [];
@@ -1025,12 +1153,14 @@ const lockLeftovers = dir => fs.readdirSync(dir).filter(n => n.includes('pdmaner
     return {file, store, sdir: s.dir, journal: s.journal, hwFile: path.join(s.dir, 'highwater.json')};
   };
   const readHw = hwFile => JSON.parse(fs.readFileSync(hwFile, 'utf8')).seq;
+  const readHwSession = hwFile => JSON.parse(fs.readFileSync(hwFile, 'utf8')).sessionId;
+  const anchorSession = sdir => JSON.parse(fs.readFileSync(path.join(sdir, 'anchor.json'), 'utf8')).sessionId;
   const reopen = async (dir, file, fn, baseline = project([])) => {
     const store = makeStore(dir);
     try {const state = await store.open(file, baseline, 'o');return await fn(state, store);} finally {dispose(store);}
   };
 
-  await ok('DRW-13 每条已 ACK 的命令在应答前写入高水位;高水位只在日志 fsync 之后推进', async dir => {
+  await ok('DRW-13 每条已 ACK 的命令在应答前写入高水位;写该命令的日志记录时高水位尚未包含它', async dir => {
     const seen = [];let hwFile = null;
     const beforeSync = async record => {if (hwFile && record.type === 'command') seen.push([record.seq, fs.existsSync(hwFile) ? readHw(hwFile) : 0]);};
     const file = path.join(dir, 'p.pdma.json');writeProject(file, []);
@@ -1154,6 +1284,7 @@ const lockLeftovers = dir => fs.readdirSync(dir).filter(n => n.includes('pdmaner
       assert.strictEqual(repaired.status, 'saved');assert.strictEqual(repaired.seq, 1);
     });
     assert.strictEqual(readHw(hwFile), 1, '高水位重置为重建后的 seq');
+    assert.strictEqual(readHwSession(hwFile), anchorSession(sdir), '高水位绑定重建后的会话');
     assert(!fs.existsSync(path.join(sdir, 'diagnostic.json')), '诊断文件移入备份');
     const backups = fs.readdirSync(sdir).filter(n => n.startsWith('repair-backup-'));
     assert.strictEqual(backups.length, 1);
@@ -1173,7 +1304,71 @@ const lockLeftovers = dir => fs.readdirSync(dir).filter(n => n.includes('pdmaner
     const external = [drawing('x1', '外部')];writeProject(file, external);
     await reopen(dir, file, state => {assert.strictEqual(state.status, 'saved');assert.strictEqual(state.seq, 0);}, project(external));
     assert.strictEqual(readHw(hwFile), 0);
+    assert.strictEqual(readHwSession(hwFile), anchorSession(path.dirname(hwFile)), '重置后的高水位绑定新会话');
     await reopen(dir, file, state => {assert.strictEqual(state.status, 'saved');assert.deepStrictEqual(state.drawings.map(d => d.id), ['x1']);}, project(external));
+  });
+
+  // 高水位绑定会话(M-4):{seq, sessionId},只有与锚点 sessionId 相同时才参与比较。
+  await ok('DRW-13 高水位绑定会话: 每次 ACK 写入 {seq, sessionId},同会话截断仍判 damaged', async dir => {
+    const {file, journal, sdir, hwFile} = await hwSetup(dir);
+    assert.strictEqual(readHw(hwFile), 3);assert.strictEqual(readHwSession(hwFile), anchorSession(sdir));
+    fs.truncateSync(journal, 0);
+    await reopen(dir, file, state => assert.strictEqual(state.status, 'damaged'));
+  });
+
+  await ok('DRW-13 高水位绑定会话: 其他会话或缺少 sessionId 的高水位被忽略(不误判),打开后改写为当前会话', async dir => {
+    for (const [mode, value] of [['other-session', {seq: 99, sessionId: 'journal-other'}], ['no-session', {seq: 99}]]) {
+      const sub = path.join(dir, mode);fs.mkdirSync(sub);
+      const {file, sdir, hwFile} = await hwSetup(sub);
+      fs.writeFileSync(hwFile, JSON.stringify(value));
+      await reopen(sub, file, state => {assert.strictEqual(state.status, 'local', mode);assert.strictEqual(state.seq, 3, mode);});
+      assert.strictEqual(readHw(hwFile), 3, mode);assert.strictEqual(readHwSession(hwFile), anchorSession(sdir), mode);
+    }
+  });
+
+  await ok('DRW-13 只删除锚点(含 anchor.previous)且日志为空: 旧会话的高水位不让新锚点误判 damaged', async dir => {
+    const {file, sdir, hwFile} = await hwSetup(dir);
+    await reopen(dir, file, (state, store) => store.flush(file, 'o'));
+    assert.strictEqual(readHw(hwFile), 3);
+    for (const name of fs.readdirSync(sdir)) if (/^anchor\.(previous\.)?json$|^previous-/.test(name)) fs.unlinkSync(path.join(sdir, name));
+    const onDisk = JSON.parse(fs.readFileSync(file, 'utf8'));
+    await reopen(dir, file, state => {
+      assert.strictEqual(state.status, 'saved', `状态 ${state.status}`);assert.strictEqual(state.seq, 0);
+    }, onDisk);
+  });
+
+  await ok('DRW-13 repair 崩溃时序: 新锚点与新日志已落盘、高水位仍是旧会话的 → 重开健康(不误判)', async dir => {
+    const {file, journal, hwFile} = await hwSetup(dir);
+    const stale = fs.readFileSync(hwFile);
+    fs.truncateSync(journal, 0);
+    await reopen(dir, file, (state, store) => store.repair(file, {...project([]), drawings: [drawing('d1', '恢复')]}, 'o'));
+    fs.writeFileSync(hwFile, stale);  // 模拟“重建完成、高水位重置之前崩溃”
+    await reopen(dir, file, state => {assert.notStrictEqual(state.status, 'damaged');assert.deepStrictEqual(state.drawings.map(d => d.id), ['d1']);});
+  });
+
+  await ok('DRW-13 高水位写入失败仍 ACK:只警告一次;故障消除后下一条命令补写高水位', async dir => {
+    const file = path.join(dir, 'p.pdma.json');writeProject(file, []);
+    const store = makeStore(dir);
+    const warnings = [];const oldWarn = console.warn;
+    try {
+      await store.open(file, project([]), 'o');const s = sessionOf(store, file);const hwFile = path.join(s.dir, 'highwater.json');
+      await store.command(file, addCommand('d1', '图 d1', s.drawings, 'd1'), 'o');
+      assert.strictEqual(readHw(hwFile), 1);
+      fs.rmSync(hwFile, {force: true});fs.mkdirSync(hwFile);fs.writeFileSync(path.join(hwFile, 'block'), 'x');  // 非空目录:rename 覆盖失败
+      console.warn = (...args) => warnings.push(args.join(' '));
+      for (const id of ['d2', 'd3']) {
+        const acked = await store.command(file, addCommand(id, `图 ${id}`, s.drawings, id), 'o');
+        assert.strictEqual(acked.status, 'local', '命令仍 ACK');
+      }
+      console.warn = oldWarn;
+      assert.strictEqual(s.seq, 3);
+      assert.strictEqual(warnings.length, 1, `只警告一次: ${warnings.join(' | ')}`);
+      assert(/high-?water|高水位/i.test(warnings[0]) && /EISDIR|ENOTEMPTY|EEXIST|EPERM|directory/i.test(warnings[0]), warnings[0]);
+      fs.rmSync(hwFile, {recursive: true, force: true});
+      await store.command(file, addCommand('d4', '图 d4', s.drawings, 'd4'), 'o');
+      assert.strictEqual(readHw(hwFile), 4, '故障消除后高水位补写');assert.strictEqual(readHwSession(hwFile), s.sessionId);
+      for (const name of fs.readdirSync(s.dir)) assert(!name.endsWith('.tmp'), `不应留下临时文件 ${name}`);
+    } finally {console.warn = oldWarn;dispose(store);}
   });
 
   await ok('DRW-13 未命名会话: 日志被清空同样判 damaged', async dir => {

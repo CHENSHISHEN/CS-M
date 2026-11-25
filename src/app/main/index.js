@@ -120,6 +120,7 @@ import ResourceOverview from '../workbench/ResourceOverview';
 import ForwardEngineering from '../workbench/ForwardEngineering';
 import DrawingWorkbench from '../drawing/DrawingWorkbench';
 import {drawingPersistence} from '../../lib/drawing_persistence';
+import {humanError} from '../drawing/platform/common';
 import BusinessWorkbench from '../business/BusinessWorkbench';
 import MetricsWorkbench from '../metrics/MetricsWorkbench';
 
@@ -2375,7 +2376,8 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
     catalogRef.current?.jumpPosition(d, key === 'entities' && d.type === 'refViews' ? 'views' : key);
   };
   const backProjectConfirm = async () => {
-    try {await drawingPersistence.flush();} catch (err) {Message.error({title: err.message});return;}
+    // 显示可读文案(如工程文件被删时提示另存为/导出恢复副本),不显示原始错误码
+    try {await drawingPersistence.flush();} catch (err) {Message.error({title: humanError(err)});return;}
     // M2：关闭项目会卸载指标平台（未提交表单丢失），有脏表单先确认
     const proceedClose = () => confirmBackProjects(dataSourceRef.current, restProps.close);
     if (metricsRef.current && metricsRef.current.isDirty && metricsRef.current.isDirty()) {

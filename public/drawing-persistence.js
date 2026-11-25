@@ -21,12 +21,13 @@ async function atomic(file, content, beforeRename) {
 }
 // 工程文件缺失(被删除/移走/卸载)是可恢复状态:统一成带码错误,绝不向上抛原始 ENOENT。
 const missingOk = promise => promise.catch(e => {throw e && e.code === 'ENOENT' ? codeError('PROJECT_FILE_MISSING') : e;});
-// 日志高水位(DRW-13):会话目录下的 highwater.json = {seq},记录“已 ACK 的最大命令 seq”。
+// 日志高水位(DRW-13):会话目录下的 highwater.json = {seq, sessionId},记录该日志会话“已 ACK 的最大命令 seq”。
 // 写入顺序:日志记录 fsync → 高水位 atomic → ACK。崩溃落在中间只会让高水位偏低(漏检、不误报),
-// 高水位绝不会高于日志里真实存在的 seq。缺失/不可读/垃圾内容一律视为 0(旧会话),从不因此报错或判 damaged。
+// 高水位绝不会高于日志里真实存在的 seq。高水位绑定会话:只有 sessionId 与锚点相同时才参与比较,
+// 其他会话(旧版本/锚点被重建)或缺少 sessionId 的高水位视为 0;缺失/不可读/垃圾内容同样视为 0,从不因此报错或判 damaged。
 const HIGH_WATER='highwater.json',DIAGNOSTIC='diagnostic.json';
-const readHighWater=dir=>fs.promises.readFile(path.join(dir,HIGH_WATER),'utf8').then(text=>{const v=JSON.parse(text);return v&&Number.isSafeInteger(v.seq)&&v.seq>0?v.seq:0;}).catch(()=>0);
-const writeHighWater=(dir,seq)=>atomic(path.join(dir,HIGH_WATER),JSON.stringify({seq}));
+const readHighWater=dir=>fs.promises.readFile(path.join(dir,HIGH_WATER),'utf8').then(text=>{const v=JSON.parse(text);return v&&Number.isSafeInteger(v.seq)&&v.seq>0&&typeof v.sessionId==='string'?{seq:v.seq,sessionId:v.sessionId}:{seq:0,sessionId:''};}).catch(()=>({seq:0,sessionId:''}));
+const writeHighWater=(dir,seq,sessionId)=>atomic(path.join(dir,HIGH_WATER),JSON.stringify({seq,sessionId}));
 function encode(record) {const text=JSON.stringify(record);return `${Buffer.byteLength(text)}:${hash(text)}:${text}\n`;}
 function decode(content) {
   const records=[];const lines=content.toString('utf8').split('\n');let damaged=false;
@@ -60,7 +61,9 @@ class DrawingPersistence {
   enqueue(s, operation){const next=s.queue.catch(()=>{}).then(operation);s.queue=next;return next;}
   async append(s, record){await this.beforeSync(record);const h=await fs.promises.open(s.journal,'a');try{const initial=(await h.stat()).size;try{const content=encode(record);await this.writeRecord(h,content);await h.sync();s.logBytes=initial+Buffer.byteLength(content);}catch(e){try{await h.truncate(initial);await h.sync();}catch(rollbackError){s.corrupt=true;}throw e;}}finally{await h.close();}}
   // 只增不减;失败不影响 ACK:命令已在日志中持久化(日志是事实来源),仅这一段失去丢失检测,下一条命令重试。
-  async raiseHighWater(s,seq){if(seq<=s.highWater)return;try{await writeHighWater(s.dir,seq);s.highWater=seq;}catch(e){}}
+  async raiseHighWater(s,seq){if(seq<=s.highWater)return;try{await writeHighWater(s.dir,seq,s.sessionId);s.highWater=seq;}catch(e){this.warnHighWater(s,e);}}
+  // 高水位写入失败只在每个会话首次警告一次,避免逐条命令刷屏。
+  warnHighWater(s,e){if(s.highWaterWarned)return;s.highWaterWarned=true;console.warn(`[drawing-persistence] 高水位(highwater.json)写入失败,日志丢失检测暂不可用(ACK 不受影响): ${e && e.message}`);}
   state(s,includeDrawings=true){return {file:s.file,sessionId:s.sessionId,seq:s.seq,checkpointSeq:s.checkpointSeq,status:s.corrupt?'damaged':s.conflict?'conflict':s.lastError?'error':!s.file||s.seq>s.checkpointSeq?'local':'saved',error:s.lastError || '',...(includeDrawings?{drawings:clone(s.drawings)}:{}),recovered:s.recovered};}
   async open(file, baseline, owner='default') {
     const canonical=this.canonical(file);const key=canonical || `untitled:${owner}`;
@@ -69,15 +72,17 @@ class DrawingPersistence {
       // 工程文件已不在磁盘:保留现有会话与日志,以 error 状态上报,而不是抛原始 ENOENT。
       let current=null;if(canonical){try{current=await fs.promises.readFile(canonical);}catch(e){if(e.code!=='ENOENT')throw e;
         // 只回报、不写入 lastError:文件回来后不会留下陈旧错误(真正的未落盘失败由 flush 记录)。
-        const flag={status:'error',error:'PROJECT_FILE_MISSING'};this.notify({...this.state(existing,false),...flag});return {...this.state(existing),...flag};}}
+        // damaged/conflict 优先:缺失文件的提示不得盖过它们。
+        const flag=existing.corrupt||existing.conflict?{}:{status:'error',error:'PROJECT_FILE_MISSING'};this.notify({...this.state(existing,false),...flag});return {...this.state(existing),...flag};}}
       const changed=canonical && hash(current)!==existing.expectedHash;
       if(changed && existing.seq===existing.checkpointSeq){clearTimeout(existing.timer);clearTimeout(existing.maxTimer);this.sessions.delete(key);}
       else {if(changed)existing.conflict=true;return this.state(existing);}
     }
     if(!baseline || typeof baseline!=='object' || forbidden(baseline))throw codeError('INVALID_PROJECT');
+    // 先读工程文件再建会话目录:打不开的路径(仍抛原始 ENOENT)不会留下空的会话目录。
+    const raw=canonical?await fs.promises.readFile(canonical):Buffer.from(bytes(baseline));
     const dir=path.join(this.root,hash(key));await fs.promises.mkdir(dir,{recursive:true});
     const anchorFile=path.join(dir,'anchor.json'),journal=path.join(dir,'commands.log');
-    const raw=canonical?await fs.promises.readFile(canonical):Buffer.from(bytes(baseline));
     let anchor,previousLog='',anchorRecovered=false,anchorDamaged=false;
     try{anchor=JSON.parse(await fs.promises.readFile(anchorFile,'utf8'));if(anchor.version!==1||!anchor.sessionId||!anchor.baseline||!Number.isInteger(anchor.seq)||forbidden(anchor))throw Error('Invalid recovery anchor');}
     catch(e){if(e.code!=='ENOENT'){anchorDamaged=true;await fs.promises.copyFile(anchorFile,path.join(dir,`anchor.damaged-${Date.now()}.json`)).catch(()=>{});}
@@ -94,22 +99,23 @@ class DrawingPersistence {
     }
     // 回放得到的 seq(anchor.seq + 日志记录)低于高水位 = 已 ACK 的命令从日志里丢了(清空/删除/截尾)。
     // 检查点压缩只会让 anchor.seq 追上 seq,不会让 seq 变小,因此“检查点后日志为空”不会误判。
-    let highWater=await readHighWater(dir);
+    const storedHighWater=await readHighWater(dir);let highWater=storedHighWater.sessionId===anchor.sessionId?storedHighWater.seq:0;
     if(!corrupt&&seq<highWater){corrupt=true;
       await atomic(path.join(dir,DIAGNOSTIC),bytes({code:'JOURNAL_TRUNCATED',sessionId:anchor.sessionId,seq,highWater,detectedAt:Date.now()})).catch(()=>{});}
     const currentHash=hash(raw);const ownCheckpoint=checkpoints.filter(c=>c.targetFileHash===currentHash).pop();
     const pending=seq>(ownCheckpoint?.seq || anchor.seq || 0);
     // Old, fully checkpointed journals do not override an intentionally externally edited file.
     if(!pending && !corrupt && !owned.has(currentHash)) {
-      // 新日志从 seq 0 开始:先把高水位降为 0 再换锚点。顺序反过来时,崩溃会让旧高水位对着新锚点误判 damaged。
-      if(highWater>0){await writeHighWater(dir,0);highWater=0;}
+      // 新日志(新 sessionId)从 seq 0 开始。旧高水位绑定旧会话,对新锚点自动失效,换锚点前后崩溃都不会误判;
+      // 之后尽力把高水位改写为新会话的 0。
       anchor={version:1,sessionId:schema.id('journal'),baseline:clone(baseline),sourceFileHash:currentHash,seq:0};await atomic(anchorFile,bytes(anchor));await atomic(journal,'');drawings=clone(baseline.drawings || []);seq=0;commands.clear();
+      highWater=0;await writeHighWater(dir,0,anchor.sessionId).catch(()=>{});
     } else if((parsed.truncated || anchorRecovered) && !corrupt) await atomic(journal,parsed.validText);
     // 旧会话(无高水位)或“日志已追加、高水位未写入即崩溃”:以回放结果补齐,尽力而为。
-    if(!corrupt&&seq>highWater){try{await writeHighWater(dir,seq);highWater=seq;}catch(e){}}
+    if(!corrupt&&seq>highWater){try{await writeHighWater(dir,seq,anchor.sessionId);highWater=seq;}catch(e){}}
     const s={key,file:canonical,owner,dir,journal,anchorFile,sessionId:anchor.sessionId,baseline:clone(ownCheckpoint?JSON.parse(raw):anchor.baseline),drawings,seq,
       checkpointSeq:ownCheckpoint?.seq || anchor.seq || 0,expectedHash:currentHash,conflict:pending&&!owned.has(currentHash),corrupt,recovered:pending || anchorRecovered,
-      queue:Promise.resolve(),logBytes:Buffer.byteLength(parsed.validText),commands,timer:null,maxTimer:null,lastError:'',highWater};
+      queue:Promise.resolve(),logBytes:Buffer.byteLength(parsed.validText),commands,timer:null,maxTimer:null,lastError:'',highWater,highWaterWarned:false};
     this.sessions.set(key,s);this.notify(this.state(s,false));return this.state(s);
   }
   session(file,owner='default'){const key=file?this.canonical(file):`untitled:${owner}`;const s=this.sessions.get(key);if(!s || s.owner!==owner)throw codeError('SESSION_REQUIRED');return s;}
@@ -131,10 +137,12 @@ class DrawingPersistence {
   async guardedWrite(s, data, seq){
     if(!s.file)return;
     if(s.conflict)throw codeError('PROJECT_CONFLICT');if(s.corrupt)throw codeError('DAMAGED_JOURNAL');
-    // Shared lock protocol (write-lock.js): content {pid,startTime,host,createdAt}, stale = dead PID or
-    // unparsable and older than 60s, serialized rename-based reclaim; any lost race is PROJECT_BUSY.
+    // Shared lock protocol (write-lock.js): content {pid,startTime,host,createdAt}, stale = dead PID (ESRCH) or
+    // unparsable / kill error other than ESRCH/EPERM and older than 60s, serialized rename-based reclaim;
+    // any lost race is PROJECT_BUSY.
     const lock=`${s.file}.pdmaner-write-lock`;let held;
-    // 先确认工程文件还在:目录被删时加锁/atomic 的 mkdir 会抛 ENOENT,甚至把已删除的目录重新建出来。
+    // 先确认工程文件还在:目录被删时,加锁的 open(lock,'wx') 会抛原始 ENOENT(加锁不建目录),
+    // 而 atomic 写入前的 mkdir -p 会把已删除的目录重新建出来。
     await missingOk(fs.promises.stat(s.file));
     try{
       held=await writeLock.acquireWriteLock(fs,lock,this.lockOptions);if(!held)throw codeError('PROJECT_BUSY');
@@ -219,20 +227,25 @@ class DrawingPersistence {
       const applied=applyDelta(clone(baseline.drawings || []),delta);
       const journalText=encode({type:'command',sessionId,seq:1,commandId,delta});
       const anchor={version:1,sessionId,baseline,sourceFileHash:s.file?s.expectedHash:hash(bytes(baseline)),seq:0};
-      // 高水位在新日志落盘之后才重置为重建后的 seq(1):中途崩溃时旧高水位仍在,重开继续判 damaged,不会漏检。
-      try{await atomic(s.anchorFile,bytes(anchor));await atomic(s.journal,journalText);await writeHighWater(s.dir,1);}
-      catch(e){
-        // Partial rebuild (anchor landed, journal did not): restore the original
-        // anchor bytes from the evidence copy so a retry starts from a consistent
-        // damaged state. The restore is best-effort and never masks the failure.
-        try{await atomic(s.anchorFile,await fs.promises.readFile(path.join(backupDir,'anchor.json')));}catch(restoreError){}
-        throw codeError('REBUILD_FAILED');
-      }
+      // 顺序:新日志 → 新锚点 → 高水位。新日志的记录带新 sessionId,落在旧锚点下会被判 damaged;
+      // 换锚点之后旧高水位(绑定旧会话)自动失效,中途崩溃都不会漏检也不会误判。
+      try{
+        await atomic(s.journal,journalText);
+        try{await atomic(s.anchorFile,bytes(anchor));}
+        catch(e){
+          // Partial rebuild (journal landed, anchor did not): restore the original
+          // journal bytes from the evidence copy so a retry starts from a consistent
+          // damaged state. The restore is best-effort and never masks the failure.
+          try{await atomic(s.journal,await fs.promises.readFile(path.join(backupDir,'commands.log')).catch(()=>''));}catch(restoreError){}
+          throw e;
+        }
+      }catch(e){throw codeError('REBUILD_FAILED');}
+      let highWater=1;try{await writeHighWater(s.dir,1,sessionId);}catch(e){highWater=0;this.warnHighWater(s,e);}
       // Only now, with the rebuilt journal durably on disk, is the damaged flag
       // lifted; the original flush chain (lock/hash guard/atomic write/compact)
       // then persists the snapshot to the project file like any normal save.
       s.sessionId=sessionId;s.drawings=applied;s.seq=1;s.checkpointSeq=0;s.commands=new Set([commandId]);
-      s.logBytes=Buffer.byteLength(journalText);s.corrupt=false;s.recovered=true;s.lastError='';s.highWater=1;
+      s.logBytes=Buffer.byteLength(journalText);s.corrupt=false;s.recovered=true;s.lastError='';s.highWater=highWater;
       await fs.promises.unlink(path.join(s.dir,DIAGNOSTIC)).catch(()=>{});  // 诊断已随证据备份
       try{
         if(s.file)await this.guardedWrite(s,clone(baseline),1);

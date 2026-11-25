@@ -19,4 +19,4 @@ const hash=data=>crypto.createHash('sha256').update(data).digest('hex');
   const b=api.createProjectFileGuard({fs,path,hash,message:key=>key,save:async()=>{throw Error('不应获得写权限')}});
   const first=a.commit(file,initial);await entered;await assert.rejects(()=>b.commit(file,initial),/projectBusy/);finish();await first;
   assert.deepStrictEqual(fs.readdirSync(work),['project.json']);console.log('PASS 并发写入拒绝且无遗留锁');
-})().catch(e=>{console.error(e.stack);process.exitCode=1});
+})().catch(e=>{console.error(e.stack);process.exitCode=1}).finally(()=>fs.rmSync(work,{recursive:true,force:true}));

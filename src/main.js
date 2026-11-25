@@ -60,6 +60,10 @@ ipcMain.handle('drawing-persistence', async (event, request) => {
 ipcMain.on('drawing-close-ready', (event, response) => {
   if (win && event.sender === win.webContents) closeRequests.get(response.requestId)?.(response);
 });
+// 关闭对话框的详情:主进程没有 FormatMessage,对需要指明出路的错误码给出简短的中英双语说明,其余原样显示。
+const closeErrorDetail = error => (error === 'PROJECT_FILE_MISSING'
+  ? '工程文件已被删除或移走：绘图编辑仍保存在本机恢复区；可“另存为”、导出恢复副本，或把文件放回原位置后重试。 / The project file was deleted or moved; drawing edits are kept in local recovery. Use Save As, export a recovery copy, or put the file back and retry.'
+  : error || '');
 const requestDrawingClose = async (transition='close') => {
   if (closePending || !win) return;
   closePending = true;
@@ -71,7 +75,7 @@ const requestDrawingClose = async (transition='close') => {
       win.webContents.send('drawing-before-close', requestId);
     });
     if (!result.ok) {
-      const choice = await dialog.showMessageBox(win, {type:'warning',message:result.recoveryAvailable ? '项目未写入，绘图已保存在本机恢复区。 / Drawing retained in local recovery.' : '绘图尚未落盘，放弃会丢失未保存操作。 / Unsaved drawing operations remain.',detail:result.error || '',buttons:['取消 / Cancel',result.recoveryAvailable ? '保留本机恢复副本并关闭 / Keep recovery and close' : '放弃未落盘操作并关闭 / Discard unsaved operations'],defaultId:0,cancelId:0});
+      const choice = await dialog.showMessageBox(win, {type:'warning',message:result.recoveryAvailable ? '项目未写入，绘图已保存在本机恢复区。 / Drawing retained in local recovery.' : '绘图尚未落盘，放弃会丢失未保存操作。 / Unsaved drawing operations remain.',detail:closeErrorDetail(result.error),buttons:['取消 / Cancel',result.recoveryAvailable ? '保留本机恢复副本并关闭 / Keep recovery and close' : '放弃未落盘操作并关闭 / Discard unsaved operations'],defaultId:0,cancelId:0});
       if (choice.response !== 1) {quitRequested = false;return;}
     }
     if (result.legacyDirty) {
@@ -268,6 +272,9 @@ app.on('ready', createWindow);
 app.on('second-instance', () => {
   const target = (win && !win.isDestroyed()) ? win : (BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]);
   if (target) {
+    // 尚未显示的窗口(仍在加载)不抢先聚焦/显示:ready-to-show 会负责显示它。
+    // 最小化的窗口在 macOS 上 isVisible() 为 false,仍需恢复。
+    if (!target.isVisible() && !target.isMinimized()) return;
     if (target.isMinimized()) target.restore();
     target.focus();
   } else if (win === null && app.isReady() && !quitRequested) {

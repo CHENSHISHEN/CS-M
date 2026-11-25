@@ -5,7 +5,8 @@
    协议:
    - 获取:open(lock, 'wx') 独占创建,写入 {pid, startTime, host, createdAt},持有期间保留句柄。
    - 过期:isLockStale —— 持有进程已不存在(ESRCH),或内容无法解析/为空且 mtime 超过 60 秒。
-     新鲜的空锁可能是对方刚 open('wx') 尚未写入的锁,不得回收。
+     EPERM 表示进程存活(无权发信号);kill 报 ESRCH/EPERM 以外的错误(无法据此判断存活)时,
+     与无法解析的锁一样按 mtime 规则判定。新鲜的空锁可能是对方刚 open('wx') 尚未写入的锁,不得回收。
    - 回收:先独占获取 `<lock>.reclaim-mutex`(回收互斥,让回收者串行),在互斥内重新读取锁,
      确认仍是先前判定过期的同一个对象(dev/ino/size/mtime/内容一致)后,
      rename(lock, lock + '.reclaim-' + pid + '-' + random) 搬走再删除。
