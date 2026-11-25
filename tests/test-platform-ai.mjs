@@ -17,6 +17,8 @@ import {
 import {
   validateQualityRuleSet, runModelQuality, readQualityProfile,
 } from '../src/lib/quality/modelRules.js';
+import {redactSensitiveText} from '../src/lib/ai/orchestration/context.js';
+import {credentialStatusFromReceipt} from '../src/app/ai/integration/credentialStatus.js';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
@@ -923,6 +925,212 @@ test('fingerprint distinguishes object slices', () => {
   }, 'entities/ent_customer/fields');
   assert.notStrictEqual(a, c, 'field addition changes the slice fingerprint');
 });
+
+// ===================== 10. context redaction (AI-02) =====================
+console.log('context redaction');
+{
+  const MASK = '[已遮蔽]';
+  const assertMasked = (input, secret, keep = []) => {
+    const out = redactSensitiveText(input);
+    assert.ok(!out.text.includes(secret), `secret leaked: ${JSON.stringify(input)} -> ${JSON.stringify(out.text)}`);
+    assert.ok(out.text.includes(MASK), `no mask marker: ${JSON.stringify(out.text)}`);
+    assert.ok(out.maskCount >= 1, 'maskCount counted');
+    assert.ok(out.notices.some(n => n.includes('密钥/令牌')), 'credential notice present');
+    keep.forEach(k => assert.ok(out.text.includes(k), `expected to keep ${JSON.stringify(k)} in ${JSON.stringify(out.text)}`));
+    return out;
+  };
+  const assertUnchanged = (input) => {
+    const out = redactSensitiveText(input);
+    assert.strictEqual(out.text, input, `over-masked: ${JSON.stringify(input)} -> ${JSON.stringify(out.text)}`);
+    assert.strictEqual(out.maskCount, 0);
+    assert.deepStrictEqual(out.notices, []);
+  };
+
+  test('Authorization: Bearer keeps the scheme word, masks only the token', () => {
+    const out = assertMasked('Authorization: Bearer abc123def456ghi789', 'abc123def456ghi789', ['Authorization', 'Bearer']);
+    assert.strictEqual(out.text, `Authorization: Bearer ${MASK}`);
+    assert.strictEqual(out.maskCount, 1, 'masked exactly once');
+    assertMasked('curl -H "authorization: bearer eyJhbGciOiJIUzI1NiJ9.e30.sig123"', 'eyJhbGciOiJIUzI1NiJ9', ['bearer']);
+    assertMasked('{"Authorization": "Bearer abc123def456ghi789"}', 'abc123def456ghi789', ['Authorization', 'Bearer']);
+    assertMasked('send it as Bearer abc123def456ghi789 please', 'abc123def456ghi789', ['Bearer']);
+    assertMasked('Authorization: Basic dXNlcjpwYXNzd29yZA==', 'dXNlcjpwYXNzd29yZA', ['Basic']);
+  });
+  test('URL userinfo password is masked, user/host kept', () => {
+    const out = assertMasked('mysql://root:S3cret@db:3306/x', 'S3cret', ['mysql://root:', '@db:3306/x']);
+    assert.strictEqual(out.text, `mysql://root:${MASK}@db:3306/x`);
+    assertMasked('jdbc:postgresql://admin:p%40ss!word@10.0.0.1:5432/dw', 'p%40ss!word', ['admin', '10.0.0.1']);
+    assertMasked('redis://default:Zx9@cache:6379', 'Zx9', ['cache:6379']);
+  });
+  test('JSON-form password/token/secret/api_key values are masked, key names kept', () => {
+    const out = assertMasked('{"password":"hunter2hunter"}', 'hunter2hunter', ['"password"']);
+    // 与既有 key=value 规则一致：引号连同值一起被替换（password="x" → password=[已遮蔽]）
+    assert.strictEqual(out.text, `{"password":${MASK}}`);
+    assertMasked('{"user":"u","token": "t0k"}', 't0k', ['"token"', '"user":"u"']);
+    assertMasked("{'client_secret': 'cs-998877'}", 'cs-998877', ['client_secret']);
+    assertMasked('{"api_key":"abcd"}', '"abcd"', ['"api_key"']);
+  });
+  test('Chinese labels 密码/口令/密钥 with an operator mask the value', () => {
+    assertMasked('密码:Abcd1234efgh', 'Abcd1234efgh', ['密码']);
+    assertMasked('数据库密码：Abcd1234', 'Abcd1234', ['数据库密码']);
+    assertMasked('口令 = qwer1234', 'qwer1234', ['口令']);
+    assertMasked('密钥=k9k9k9k9', 'k9k9k9k9', ['密钥']);
+  });
+  test('secret_key / secret-key / client_secret / short values via key=value', () => {
+    assertMasked('secret_key=zzzz9999yyyy', 'zzzz9999yyyy', ['secret_key=']);
+    assertMasked('secret-key: zzzz9999yyyy', 'zzzz9999yyyy', ['secret-key']);
+    assertMasked('client_secret=abc12345', 'abc12345', ['client_secret=']);
+    assertMasked('aws_secret_access_key=wJalrXUtnFEMI', 'wJalrXUtnFEMI');
+    assertMasked('token=ab12', 'ab12', ['token=']);
+    assertMasked('password="x1"', 'x1"', ['password=']);
+  });
+  test('Alibaba Cloud LTAI access key id is masked', () => {
+    const out = assertMasked('ak is LTAI5tAbCdEfGhIjKlMnOp ok', 'LTAI5tAbCdEfGhIjKlMnOp', ['ak is ', ' ok']);
+    assert.strictEqual(out.text, `ak is ${MASK} ok`);
+  });
+  test('ordinary prose is not over-masked', () => {
+    [
+      'the token count is high',
+      'password policy is strict',
+      '密码学基础',
+      '密码学: 对称与非对称',
+      '密码：请联系管理员',
+      'use a Bearer token in prose',
+      'Bearer authentication is described in RFC 6750',
+      'the secretary: John',
+      'token_count = 5',
+      'see https://example.com:8443/docs and http://host/a@b',
+      'email me at someone@example.com',
+      'LTAI is a prefix',
+      'ratio 3:2, time 12:30',
+      // 有赋值符但值不像凭据：短占位词（不含数字）、字段类型、长度说明、非 userinfo 的 @
+      'token: none',
+      'password: null',
+      'pwd: ./bin',
+      'max_tokens: 4096',
+      'password_hash: char(64)',
+      '密码长度: 8',
+      '密钥: 由KMS托管',
+      'git@github.com:org/repo.git',
+      'ssh://git@host:22/x',
+    ].forEach(assertUnchanged);
+  });
+  test('previously covered redaction cases still behave the same', () => {
+    const same = (input, expected, count = 1) => {
+      const out = redactSensitiveText(input);
+      assert.strictEqual(out.text, expected, `${JSON.stringify(input)} -> ${JSON.stringify(out.text)}`);
+      assert.strictEqual(out.maskCount, count, `maskCount for ${JSON.stringify(input)}`);
+    };
+    same('api_key=sk-abcdefghijklmnop', `api_key=${MASK}`);
+    same('token: abcdef123456', `token: ${MASK}`);
+    same('password="hunter2"', `password=${MASK}`);
+    same("pwd='abcd1234'", `pwd=${MASK}`);
+    same('apikey = "abcd"', `apikey = ${MASK}`);
+    same('access-key: 1234567890', `access-key: ${MASK}`);
+    same('credential=abcdef', `credential=${MASK}`);
+    same('authorization=abcdef123', `authorization=${MASK}`);
+    same('key sk-abcdefghijklmnopqr here', `key ${MASK} here`);
+    same('ghp_abcdefghijklmnopqrstuvwxyz', MASK);
+    same('AKIAABCDEFGHIJKLMNOP', MASK);
+    same('xoxb-1234567890-abcdef', MASK);
+    same('-----BEGIN RSA PRIVATE KEY-----\nMIIabc\n-----END RSA PRIVATE KEY-----', MASK);
+    const p = redactSensitiveText('read /Users/alice/x.txt and C:\\Users\\bob\\y.sql');
+    assert.strictEqual(p.text, `read ${MASK} and ${MASK}`);
+    assert.strictEqual(p.maskCount, 2);
+    assert.deepStrictEqual(p.notices, ['输入中检测到本机路径，已遮蔽；上下文不会携带 OS 路径。']);
+    const both = redactSensitiveText('token=abcdef123 at /home/u/f');
+    assert.strictEqual(both.notices.length, 2, 'credential + path notices');
+    assert.deepStrictEqual(redactSensitiveText(42), {text: '', maskCount: 0, notices: []});
+  });
+
+  // ---- 性能回归（ReDoS 守卫）：对抗输入在修复后为数毫秒，限 200ms 足够宽松不抖动 ----
+  const LIMIT_MS = 200;
+  const N = 100000;
+  const rep = (s, n = N) => s.repeat(Math.ceil(n / s.length)).slice(0, n);
+  const timeRedact = (input) => {
+    let best = Infinity;
+    for (let i = 0; i < 2; i += 1) { // 取两次中较快者，排除偶发 GC/调度抖动
+      const t0 = process.hrtime.bigint();
+      redactSensitiveText(input);
+      best = Math.min(best, Number(process.hrtime.bigint() - t0) / 1e6);
+    }
+    return best;
+  };
+  test('adversarial inputs redact in linear time (no polynomial backtracking)', () => {
+    const adversarial = {
+      'a- x15000 (30KB)': 'a-'.repeat(15000),
+      'a- 100KB': rep('a-'),
+      'v1. 100KB': rep('v1.'),
+      'ab. 100KB': rep('ab.'),
+      'a+b. 100KB': rep('a+b.'),
+      ':// 100KB': rep('://'),
+      'x://u: 100KB': rep('x://u:'),
+      'a://b:c 100KB': rep('a://b:c'),
+      'x://u:+p… 100KB': 'x://u:' + 'p'.repeat(N),
+      'password: 100KB': rep('password:'),
+      '"password":" 100KB': rep('"password":"'),
+      '"password":"+x… (unterminated)': '"password":"' + 'x'.repeat(N),
+      'secret_key_id 100KB': rep('secret_key_id '),
+      '密码: 100KB': rep('密码:'),
+      '密码:"+a… (unterminated)': '密码:"' + 'a'.repeat(N),
+      'Bearer 100KB': rep('Bearer '),
+      'Bearer 1 100KB': rep('Bearer 1'),
+      'Bearer +a… 100KB': 'Bearer ' + 'a'.repeat(N),
+      'authorization:"Bearer 100KB': rep('authorization:"Bearer '),
+      'LTAI+a… 100KB': 'LTAI' + 'a'.repeat(N),
+      'PEM BEGIN without END 100KB': rep('-----BEGIN PRIVATE KEY-----\n'),
+      'PEM BEGIN without END 300KB': rep('-----BEGIN PRIVATE KEY-----\n', 300000),
+      'PEM type run 100KB': '-----BEGIN ' + rep('A ') + 'X',
+      '/home/ 100KB': rep('/home/'),
+    };
+    const slow = Object.entries(adversarial)
+      .map(([name, input]) => [name, timeRedact(input)])
+      .filter(([, ms]) => ms > LIMIT_MS);
+    assert.deepStrictEqual(slow.map(([name, ms]) => `${name}: ${ms.toFixed(0)}ms`), [], 'slow redaction');
+  });
+  test('userinfo/PEM positives still masked after the ReDoS fix; scheme boundary is 32 chars', () => {
+    const s32 = 'a'.repeat(32);
+    const s33 = 'a'.repeat(33);
+    // 32 字符 scheme（RFC 3986 scheme 实际都很短）仍识别
+    assert.strictEqual(redactSensitiveText(`${s32}://root:S3cret@db/x`).text, `${s32}://root:${MASK}@db/x`);
+    // 33 个连续字母的 scheme 超出上限且内部无词边界：不识别（已知且接受的边界，见报告）
+    const over = `${s33}://root:S3cret@db/x`;
+    assert.strictEqual(redactSensitiveText(over).text, over);
+    // 带分隔符的长 scheme：从最后 ≤32 字符的词边界起识别，口令仍被遮蔽
+    assert.ok(!redactSensitiveText(`${'x'.repeat(40)}+ssh://root:S3cret@db/x`).text.includes('S3cret'));
+    // 对抗前缀后紧跟真实 userinfo：仍遮蔽
+    assert.ok(!redactSensitiveText(`${'a-'.repeat(5000)} mysql://root:S3cret@db:3306/x`).text.includes('S3cret'));
+    assert.strictEqual(redactSensitiveText('git+ssh://u:pw12@h/x').text, `git+ssh://u:${MASK}@h/x`);
+    // PEM：正常私钥块整体遮蔽；前面有一个不闭合的 BEGIN 时，后面完整的块仍被遮蔽
+    const pem = '-----BEGIN EC PRIVATE KEY-----\nMHcCAQEE\n-----END EC PRIVATE KEY-----';
+    assert.strictEqual(redactSensitiveText(`a ${pem} b`).text, `a ${MASK} b`);
+    assert.strictEqual(redactSensitiveText(`-----BEGIN PRIVATE KEY-----\ntruncated\n${pem}`).text,
+      `-----BEGIN PRIVATE KEY-----\ntruncated\n${MASK}`);
+  });
+}
+
+// ===================== 11. credential status from configure receipt (AI-01 follow-up) =====================
+{
+  // broker 在「改 endpoint/协议但没重输 key」时会清除 key，回执 hasCredential=false：界面必须回到 none
+  test('hasCredential=false overrides previous session status', () => {
+    assert.strictEqual(credentialStatusFromReceipt({id: 'p', hasCredential: false}, false, 'session'), 'none');
+  });
+  test('hasCredential=false wins even if a key was just delivered (Host is authoritative)', () => {
+    assert.strictEqual(credentialStatusFromReceipt({id: 'p', hasCredential: false}, true, 'none'), 'none');
+  });
+  test('delivered key -> session', () => {
+    assert.strictEqual(credentialStatusFromReceipt({id: 'p', hasCredential: true}, true, 'none'), 'session');
+    assert.strictEqual(credentialStatusFromReceipt({id: 'p'}, true, 'none'), 'session');
+  });
+  test('no new key but Host still holds one -> session (e.g. controller remounted)', () => {
+    assert.strictEqual(credentialStatusFromReceipt({id: 'p', hasCredential: true}, false, 'none'), 'session');
+  });
+  test('receipt without hasCredential / no receipt keeps previous status', () => {
+    assert.strictEqual(credentialStatusFromReceipt({id: 'p'}, false, 'session'), 'session');
+    assert.strictEqual(credentialStatusFromReceipt({id: 'p'}, false, 'none'), 'none');
+    assert.strictEqual(credentialStatusFromReceipt(null, false, 'session'), 'session');
+    assert.strictEqual(credentialStatusFromReceipt(undefined, false, 'none'), 'none');
+  });
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -23,6 +23,8 @@ const DEFAULT_MODULES = [
     actionKey: 'home.startModeling',
     defaultAction: '开始建模',
     accentColor: '#1890ff',
+    // 白字按钮底色:accentColor 与白字对比度不足 4.5:1(WCAG AA),按钮改用更深的同色系
+    buttonColor: '#096dd9',
     tintColor: '#e6f7ff',
     borderColor: '#91d5ff',
     icon: 'table',
@@ -41,6 +43,8 @@ const DEFAULT_MODULES = [
     actionKey: 'home.planBusiness',
     defaultAction: '梳理业务',
     accentColor: '#13c2c2',
+    // 白字按钮底色:accentColor 与白字对比度不足 4.5:1(WCAG AA),按钮改用更深的同色系
+    buttonColor: '#007a7a',
     tintColor: '#e6fffb',
     borderColor: '#87e8de',
     icon: 'flow',
@@ -59,6 +63,8 @@ const DEFAULT_MODULES = [
     actionKey: 'home.createDrawing',
     defaultAction: '创建图形',
     accentColor: '#fa8c16',
+    // 白字按钮底色:accentColor 与白字对比度不足 4.5:1(WCAG AA),按钮改用更深的同色系
+    buttonColor: '#b45309',
     tintColor: '#fff7e6',
     borderColor: '#ffd591',
     icon: 'grid',
@@ -96,6 +102,11 @@ class ModuleRegistry {
 
   getModules() {
     return Array.from(this.modules.values());
+  }
+
+  // 可独立创建项目的模块(排除与数据建模共享项目的指标平台)
+  getProjectCreatableModules() {
+    return this.getModules().filter(m => m.sharedProject !== true);
   }
 
   getModule(idOrKey) {

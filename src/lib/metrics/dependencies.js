@@ -95,7 +95,22 @@ export const dependencyCycleError = (cycleRevisionIds) =>
 export const atomicReAggregable = (spec) =>
   spec != null && (spec.aggregation === 'SUM' || spec.aggregation === 'COUNT');
 
-// 派生：继承原子；复合：任一 operand 不可加或表达式含除法（ratio）→ 不可再聚合
+// 是否含“两侧都带指标引用”的乘法（ref * ref 不可再 SUM；ref * 常量 仍可）
+const astContainsRefProduct = (ast) => {
+  if (ast == null) return false;
+  if (ast.type === 'safe_divide') {
+    return astContainsRefProduct(ast.numerator) || astContainsRefProduct(ast.denominator);
+  }
+  if (ast.type === 'binary') {
+    if (ast.op === '*' && astRefKeys(ast.left).length > 0 && astRefKeys(ast.right).length > 0) {
+      return true;
+    }
+    return astContainsRefProduct(ast.left) || astContainsRefProduct(ast.right);
+  }
+  return false;
+};
+
+// 派生：继承原子；复合：任一 operand 不可加、表达式含除法（ratio）或两指标相乘 → 不可再聚合
 export const compoundReAggregable = (spec, operandReAggregableOf) => {
   let ast;
   try {
@@ -109,6 +124,9 @@ export const compoundReAggregable = (spec, operandReAggregableOf) => {
   }
   if (astContainsDivision(ast)) {
     return {reAggregable: false, reason: 'RATIO_NOT_SUMMABLE'};
+  }
+  if (astContainsRefProduct(ast)) {
+    return {reAggregable: false, reason: 'PRODUCT_NOT_SUMMABLE'};
   }
   return {reAggregable: true};
 };

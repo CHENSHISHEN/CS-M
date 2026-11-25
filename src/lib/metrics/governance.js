@@ -7,7 +7,7 @@
 
 import {metricError, missingFieldError} from './errors';
 import {newMetricId} from './hash';
-import {isStoreWritable, readMetricPlatform, writeMetricPlatform} from './store';
+import {readMetricPlatform, storeWriteErrors, writeMetricPlatform} from './store';
 import {compareBaselineUpgrade} from './baseline';
 
 const findDefinition = (data, id) =>
@@ -25,13 +25,8 @@ const latestPublished = (data, definitionId) =>
     .filter(item => item.status === 'published')
     .sort((a, b) => (versionOrder(a.version) < versionOrder(b.version) ? 1 : -1))[0] || null;
 
-const storeGuard = (data) => {
-  if (!isStoreWritable(data)) {
-    return [metricError('SCHEMA_VERSION_UNSUPPORTED', 'profile.metricPlatform.schemaVersion',
-      'metric.error.schemaUnsupported', 'metric platform schema version unsupported')];
-  }
-  return [];
-};
+// 写前守卫统一走 store.storeWriteErrors（STORE_CORRUPT / SCHEMA_VERSION_UNSUPPORTED）
+const storeGuard = data => storeWriteErrors(data);
 
 // ---- 概念引用（复用 concepts 事实源；引用位置=定义归属 definition.conceptId） ----
 export const listConceptReferences = (source, conceptId) => {
@@ -148,8 +143,7 @@ export const deleteMetricConcept = (source, conceptId) => {
 
 // ---- 版本反向依赖：谁引用了这个版本（原子基 / 复合操作数 / 部门基线） ----
 // 与 getMetricDependencies（上游）方向相反，供版本页影响提示与废弃确认。
-export const listRevisionDependents = (source, revisionId) => {
-  const data = readMetricPlatform(source);
+const revisionDependentsIn = (data, revisionId) => {
   const target = findRevision(data, revisionId);
   if (target == null) return [];
   const dependents = [];
@@ -183,6 +177,38 @@ export const listRevisionDependents = (source, revisionId) => {
     });
   });
   return dependents;
+};
+
+export const listRevisionDependents = (source, revisionId) =>
+  revisionDependentsIn(readMetricPlatform(source), revisionId);
+
+// ---- 定义反向依赖（MET-07）：汇总该定义全部版本（含已废弃/草案）的下游依赖 ----
+// 废弃是定义级操作，确认时须看到所有版本的下游，而不只是当前行版本。
+// 同一下游修订引用多个版本时合并为一条：roles 去重并集，targetRevisionIds/targetVersions
+// 记录它依赖的本定义版本；本定义内部修订不计入（定义级依赖环已被拒绝）。
+export const listDefinitionDependents = (source, definitionId) => {
+  const data = readMetricPlatform(source);
+  const merged = [];
+  const byRevisionId = {};
+  definitionRevisions(data, definitionId).forEach((target) => {
+    revisionDependentsIn(data, target.id).forEach((dependent) => {
+      if (dependent.definitionId === definitionId) return;
+      let entry = byRevisionId[dependent.revisionId];
+      if (entry == null) {
+        entry = {...dependent, roles: [], targetRevisionIds: [], targetVersions: []};
+        byRevisionId[dependent.revisionId] = entry;
+        merged.push(entry);
+      }
+      dependent.roles.forEach((role) => {
+        if (entry.roles.indexOf(role) < 0) entry.roles.push(role);
+      });
+      if (entry.targetRevisionIds.indexOf(target.id) < 0) {
+        entry.targetRevisionIds.push(target.id);
+        entry.targetVersions.push(target.version == null ? null : target.version);
+      }
+    });
+  });
+  return merged;
 };
 
 // ---- 公共新版本影响清单：基线定义下未锁定到该公共版本的全部部门口径（含草案） ----
@@ -236,6 +262,18 @@ export const departmentUpgradeStatus = (source, departmentRevisionId) => {
   if (baselineDefinition == null || baselineDefinition.scope.kind !== 'public') {
     return {ok: false, errors: [metricError('SCOPE_POLICY', 'baseline.definitionId',
       'metric.error.scopePolicy', 'department baseline definition must be public')]};
+  }
+  // 分叉口径没有可继承的基线契约，升级必被拒（FORK_NOT_UPGRADABLE）：不再提示无效升级
+  if (revision.fork === true) {
+    return {
+      ok: true,
+      upgradeAvailable: false,
+      reason: 'FORK',
+      baselineDefinitionId: baselineDefinition.id,
+      lockedRevisionId: revision.baseline.baseRevisionId,
+      candidate: null,
+      compare: null,
+    };
   }
   const candidate = latestPublished(data, baselineDefinition.id);
   const upgradeAvailable = candidate != null

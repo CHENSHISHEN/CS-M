@@ -15,7 +15,7 @@
 
 import {metricError, missingFieldError} from './errors';
 import {hashValue, newMetricId} from './hash';
-import {isStoreWritable, readMetricPlatform, writeMetricPlatform} from './store';
+import {readMetricPlatform, storeWriteErrors, writeMetricPlatform} from './store';
 import {AGGREGATIONS} from './validate';
 
 export const BINDING_ROLES = ['COMPUTES_FROM', 'MATERIALIZES_INTO', 'CONSUMED_BY', 'SEMANTIC_MATCH'];
@@ -77,13 +77,8 @@ export const bindingFingerprintStatus = (source, binding) => {
 };
 
 // ---- 内部查找 ----
-const storeGuard = (data) => {
-  if (!isStoreWritable(data)) {
-    return [error('SCHEMA_VERSION_UNSUPPORTED', 'profile.metricPlatform.schemaVersion',
-      'metric.error.schemaUnsupported', 'metric platform schema version unsupported')];
-  }
-  return [];
-};
+// 写前守卫统一走 store.storeWriteErrors（STORE_CORRUPT / SCHEMA_VERSION_UNSUPPORTED）
+const storeGuard = data => storeWriteErrors(data);
 const findDefinition = (data, id) =>
   (data.definitions || []).filter(item => item.id === id)[0] || null;
 const findRevision = (data, id) =>
@@ -289,6 +284,9 @@ const metricInfoOf = (data, binding) => {
   };
 };
 
+// 注意（R-A-F3）：内部浅归一化读取，返回的元素是存储中的活引用（未冻结、未深拷贝），
+// 调用方必须当只读使用；冻结/拷贝保证只由 getMetricRevision / listMetricRevisions /
+// getMetricDefinition 提供。
 export const listMetricBindings = (source, filter) => {
   const data = readMetricPlatform(source);
   const f = filter == null ? {} : filter;
@@ -856,9 +854,10 @@ export const restoreMetricBinding = (source, bindingId, options) => {
   }
   const endpoint = bindingEndpoint(source, binding);
   if (!endpoint.present) {
+    // 损坏的旧绑定可能缺 modelRef：按端点缺失拒绝，不抛错
+    const ref = binding.modelRef == null ? null : binding.modelRef.objectId;
     return {ok: false, errors: [error('BINDING_ENDPOINT_MISSING', 'modelRef', 'metric.error.bindingEndpointMissing',
-      `binding endpoint is still missing: ${binding.modelRef.objectId}`,
-      {ref: binding.modelRef.objectId})]};
+      `binding endpoint is still missing: ${ref}`, {ref})]};
   }
   const opts = options == null ? {} : options;
   const now = opts.at || null;
@@ -868,7 +867,8 @@ export const restoreMetricBinding = (source, bindingId, options) => {
     delete next.unresolved;
     return {
       ...next,
-      events: item.events.concat([{type: 'restored', at: now, by: opts.by == null ? null : opts.by}]),
+      events: (Array.isArray(item.events) ? item.events : []).concat([{type: 'restored', at: now,
+        by: opts.by == null ? null : opts.by}]),
     };
   });
   const updated = bindings.filter(item => item.id === bindingId)[0];
@@ -893,6 +893,8 @@ export const markMetricBindingsUnresolved = (source, query, options) => {
   const reason = opts.reason == null ? 'ENDPOINT_MISSING' : opts.reason;
   let touched = 0;
   const bindings = bindingsOf(data).map((binding) => {
+    // 损坏元素（缺 modelRef 等）原样保留、不参与失效，不让删除路径抛错
+    if (binding == null || binding.modelRef == null) return binding;
     if (isHistorical(binding) || binding.state === 'unresolved') return binding;
     const ref = binding.modelRef;
     const objectHit = ref.objectId === query.objectId
@@ -911,7 +913,7 @@ export const markMetricBindingsUnresolved = (source, query, options) => {
         objectId: query.objectId,
         ...(query.fieldId == null ? {} : {fieldId: query.fieldId}),
       },
-      events: binding.events.concat([{
+      events: (Array.isArray(binding.events) ? binding.events : []).concat([{
         type: 'unresolved',
         at: now,
         by: opts.by == null ? null : opts.by,
@@ -964,3 +966,43 @@ export const syncMetricBindingStates = (source, options) => {
     touched,
   };
 };
+
+// 删除影响落盘（MET-12）：字段/对象删除经用户确认后，由删除入口在同一次项目更新里调用。
+// impact = {fieldIds, entityIds}，可选 collection / objectId 限定端点：
+//   entityIds → 对象级失效；fieldIds → 字段级失效（给 objectId 时限定该对象，
+//   未给时按绑定字段范围定位所属对象）。命中生效/建议绑定 → unresolved（保留端点快照）。
+// 无命中原样返回 source（引用相等）；存储不可写（storeGuard：损坏/版本不支持）同样原样
+// 返回，单个损坏绑定元素（缺 modelRef）跳过、缺 events 按空历史补——删除本身不因指标存储
+// 受阻（"只提示不阻止"）。同号重建不复活，须显式 restore。
+export const applyDeleteImpact = (source, impact, options) => {
+  const f = impact == null ? {} : impact;
+  const withCollection = query => (f.collection == null ? query : {...query, collection: f.collection});
+  let next = source;
+  const mark = (query) => {
+    const result = markMetricBindingsUnresolved(next, withCollection(query), options);
+    if (result.ok) next = result.source;
+  };
+  (f.entityIds || []).forEach((objectId) => {
+    if (objectId != null && objectId !== '') mark({objectId});
+  });
+  (f.fieldIds || []).forEach((fieldId) => {
+    if (fieldId == null || fieldId === '') return;
+    if (f.objectId != null) {
+      mark({objectId: f.objectId, fieldId});
+      return;
+    }
+    const objectIds = [];
+    bindingsOf(readMetricPlatform(next)).forEach((binding) => {
+      if (binding == null || binding.modelRef == null
+        || bindingFieldScope(binding).indexOf(fieldId) < 0) return;
+      if (objectIds.indexOf(binding.modelRef.objectId) < 0) objectIds.push(binding.modelRef.objectId);
+    });
+    objectIds.forEach(objectId => mark({objectId, fieldId}));
+  });
+  return next;
+};
+
+// 导航计数口径：只计生效/建议绑定（released 属历史、unresolved 已失效，均不计入）
+export const countActiveMetricBindings = source => bindingsOf(readMetricPlatform(source))
+  .filter(binding => binding != null && binding.state !== 'released'
+    && binding.state !== 'unresolved').length;

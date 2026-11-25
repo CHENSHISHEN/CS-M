@@ -16,6 +16,8 @@ import {
   UNSPECIFIED_DB, UNKNOWN_DB, appendObjectWithOptionalCategory,
 } from '../../lib/model_catalog';
 import {linkDeletionImpact} from '../../lib/concept_logical_links';
+// UX-02：root 总菜单与企业概念模型节点菜单共用的纯数据定义（稳定 key）
+import {getRootCreateMenu, getConceptModelCreateMenu} from '../../lib/model_catalog_menu';
 // M5B-R1：模型对象删除前指标影响（只读窄组件）
 import {summarizeMetricDeleteImpact, MetricDeleteImpactBody} from '../metrics/deleteImpact';
 
@@ -100,7 +102,8 @@ function showForm(title, fields, initial, submit) {
   });
 }
 
-export default forwardRef(({source, getSource, onUpdate, onOpen, onCloseObject, onDrag, onGenerate,
+export default forwardRef(({source, getSource, onUpdate, onOpen, onCloseObject, onDrag,
+  openForwardEngineering,
   filter = '', readOnly, viewMode = 'directory', onHome, onHomeAdd}, ref) => {
   const [selected, setSelected] = useState({kind: 'root'});
   // S3：概念模型节点与两个概念集合默认展开——概念实体/概念关系图一次可达
@@ -155,7 +158,9 @@ export default forwardRef(({source, getSource, onUpdate, onOpen, onCloseObject, 
         return false;
       }
       const cat = node.categoryId == null ? null : node.categoryId;
-      openPath([cat, `${cat}:physical`, `${cat}:physical:dbm:${id}`]);
+      // 未归类库（如 root 总菜单新建）落在"待归档 / 未归类"分区，一并展开以便看到新库
+      openPath([...(cat == null ? ['pending', 'loose'] : []),
+        cat, `${cat}:physical`, `${cat}:physical:dbm:${id}`]);
       return undefined;
     });
   };
@@ -568,16 +573,31 @@ export default forwardRef(({source, getSource, onUpdate, onOpen, onCloseObject, 
       return undefined;
     });
   };
+  // UX-02：按纯数据菜单项（model_catalog_menu）绑定文案与处理函数。
+  // 概念对象创建一律使用企业概念模型节点上下文（global:true），root 与概念模型节点同源
+  const bindMenuItem = (item, node) => {
+    if (item.action === 'createObject') {
+      const context = item.level === 'conceptual' ? conceptModelNode() : node;
+      return {
+        key: item.key,
+        name: `${t('create')} ${label(item.type, item.level)}`,
+        run: () => createObject(item.type, item.level, context),
+      };
+    }
+    if (item.action === 'newLayer') return {key: item.key, name: t('newLayer'), run: () => mutateForm('layer', {})};
+    return {key: item.key, name: t('newDatabase'), run: () => newDatabaseForm(node)};
+  };
   const actions = (node) => {
+    // UX-02：root 选中时"+"给总菜单（概念实体 / 数仓分层 / 数据库），不再只有新建分层
+    if (node.kind === 'root') return getRootCreateMenu().map(item => bindMenuItem(item, node));
     const items = [];
     const add = (key, run, name) => items.push({name: name || t(key), run});
     // 概念对象已提升企业全局：不再提供分类挂接/移动，避免重新引入分层重复
     const isConceptualNode = node.level === 'conceptual' || node.objectType === 'conceptEntity';
-    if (node.kind === 'root' || node.kind === 'pending') add('newLayer', () => mutateForm('layer', {}));
+    if (node.kind === 'pending') add('newLayer', () => mutateForm('layer', {}));
     // S3：概念模型根节点（去企业全局包装后的一次可达入口）承载概念对象创建
     if (node.kind === 'conceptModel') {
-      [['conceptEntity', 'conceptual'], ['diagram', 'conceptual']].forEach(([type, level]) =>
-        items.push({name: `${t('create')} ${label(type, level)}`, run: () => createObject(type, level, node)}));
+      getConceptModelCreateMenu().forEach(item => items.push(bindMenuItem(item, node)));
     }
     if (node.kind === 'layer') {
       add('newCategory', () => mutateForm('category', node));
@@ -620,19 +640,20 @@ export default forwardRef(({source, getSource, onUpdate, onOpen, onCloseObject, 
       add('newDatabase', () => newDatabaseForm(node));
     }
     // S2 R3：逻辑 → 物理正向生成入口——逻辑实体右键预选该实体；
-    // 逻辑集合/逻辑模型分区批量预选其下全部逻辑实体（向导内可再调整）
-    if (onGenerate && node.objectType === 'logicEntity'
+    // 逻辑集合/逻辑模型分区批量预选其下全部逻辑实体（向导内可再调整）；
+    // UX-13：与逻辑实体编辑器按钮、顶栏菜单共用宿主 openForwardEngineering（只读时 showMenu 整体不弹出）
+    if (openForwardEngineering && node.objectType === 'logicEntity'
       && (node.kind === 'object' || node.kind === 'collection')) {
-      add('generatePhysical', () => onGenerate(node.kind === 'object'
+      add('generatePhysical', () => openForwardEngineering(node.kind === 'object'
         ? [node.objectId]
         : (node.children || []).map((c) => c.objectId).filter((id) => id)));
-    } else if (onGenerate && node.kind === 'level' && node.level === 'logical') {
+    } else if (openForwardEngineering && node.kind === 'level' && node.level === 'logical') {
       add('generatePhysical', () => {
         const ids = (node.children || [])
           .filter((c) => c.objectType === 'logicEntity')
           .reduce((all, c) => all.concat((c.children || []).map((o) => o.objectId)), [])
           .filter((id) => id);
-        onGenerate(ids);
+        openForwardEngineering(ids);
       });
     }
     if (node.kind === 'database') {
@@ -815,6 +836,20 @@ export default forwardRef(({source, getSource, onUpdate, onOpen, onCloseObject, 
   };
   useImperativeHandle(ref, () => ({
     create: anchor => showMenu(selected, anchor),
+    // UX-02：空项目引导直接调用的创建入口（只读时不执行，与 showMenu 一致）。
+    // 按菜单 key 执行 root 总菜单项——与"+"/企业概念模型节点菜单同一处理函数
+    runRootCreate: (key) => {
+      if (readOnly) return;
+      const item = getRootCreateMenu().find(i => i.key === key);
+      if (item) bindMenuItem(item, {kind: 'root'}).run();
+    },
+    // 在未归类逻辑集合上下文新建逻辑实体（等同"待归档/未归类 › 逻辑实体"上的"新建"，分类可选）
+    createLogicEntity: () => {
+      if (readOnly) return;
+      createObject('logicEntity', 'logical', {
+        kind: 'collection', categoryId: null, level: 'logical', objectType: 'logicEntity',
+      });
+    },
     jumpSimplePosition: locate,
     jumpPosition: (d, key) => locate(d.id,
       Object.keys(collections).find(type => collections[type] === key)),

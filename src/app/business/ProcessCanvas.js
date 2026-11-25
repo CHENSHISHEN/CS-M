@@ -4,6 +4,7 @@ import { Button, Icon, Modal } from 'components';
 import {
   registerProcessShapes,
   PROCESS_PORTS,
+  setNodePortsVisible,
   PROCESS_ELEMENT_CONFIGS,
 } from './processShapes';
 import {clone} from '../../lib/drawing_platform';
@@ -107,6 +108,13 @@ export default ({
     graph.on('blank:click', () => {
       latest.current.onSelectElement && latest.current.onSelectElement(null, null);
     });
+
+    // 悬停显示连接桩、移出隐藏(DRW-01)。只读模式不注册:只读画布 interacting=false,
+    // 不允许拖线,显示连接桩只会误导用户。泳道无连接桩,调用为无操作。
+    if (!readOnly) {
+      graph.on('node:mouseenter', ({ node }) => setNodePortsVisible(node, true));
+      graph.on('node:mouseleave', ({ node }) => setNodePortsVisible(node, false));
+    }
 
     // 连线建立
     graph.on('edge:connected', ({ edge }) => {

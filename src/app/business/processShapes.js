@@ -10,6 +10,10 @@
  */
 
 import { Graph } from '@antv/x6';
+import { setNodePortsVisible } from './processPorts';
+
+// 连接桩显隐函数无依赖,放在 processPorts.js 以便在纯 node 下测试;此处再导出保持公开位置
+export { setNodePortsVisible };
 
 export const PROCESS_PORTS = {
   groups: {

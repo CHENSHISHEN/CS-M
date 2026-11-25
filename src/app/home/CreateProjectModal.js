@@ -14,16 +14,18 @@ export default React.memo(({
   onCancel,
 }) => {
   const currentPrefix = getPrefix(prefix);
-  const [selectedMode, setSelectedMode] = useState(initialMode);
+  // 指标平台与数据建模共享项目,不能作为新建类型,回退到数据建模
+  const safeInitialMode = moduleRegistry.getProjectCreatableModules().some(m => m.id === initialMode) ? initialMode : MODULE_IDS.DATA;
+  const [selectedMode, setSelectedMode] = useState(safeInitialMode);
   const [name, setName] = useState('');
   const [dirPath, setDirPath] = useState('');
   const [describe, setDescribe] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState('blank'); // 'blank' or template key
 
-  const modules = moduleRegistry.getModules();
+  const modules = moduleRegistry.getProjectCreatableModules();
   useEffect(() => {
-    if (visible) {setSelectedMode(initialMode);if (initialMode !== MODULE_IDS.DATA) setSelectedTemplate('blank');}
-  }, [visible, initialMode]);
+    if (visible) {setSelectedMode(safeInitialMode);if (safeInitialMode !== MODULE_IDS.DATA) setSelectedTemplate('blank');}
+  }, [visible, safeInitialMode]);
 
   const handleModeChange = (modeId) => {
     setSelectedMode(modeId);
@@ -154,7 +156,7 @@ export default React.memo(({
                   <span className='required'>*</span> <FormatMessage id='home.projectLocation' />
                 </label>
                 <PathSelectInput
-                  placeholder={FormatMessage.string({ id: 'project.path.placeholder' })}
+                  placeholder={FormatMessage.string({ id: 'home.projectLocationPlaceholder' })}
                   title={FormatMessage.string({ id: 'home.selectDir' })}
                   value={dirPath}
                   onChange={(val) => setDirPath(val)}

@@ -825,7 +825,7 @@ test('R1 快照隔离：输入/旧草案/表单引用不改变已落盘草案与
   assert.equal(stored.spec.unit, 'CNY'); // 发布快照不被旧引用改变
   assert.equal(stored.resolvedSpec.unit, 'CNY');
   assert.equal(stored.hash, hashBefore);
-  assert.equal(stored.hash, api.hashValue({spec: stored.spec, resolvedSpec: stored.resolvedSpec}));
+  assert.equal(stored.hash, api.contentHash({spec: stored.spec, resolvedSpec: stored.resolvedSpec}));
   // 修订路径同样隔离：patch.spec 写入后，表单对象再变不影响草案
   const c2 = api.createMetricDraft(project,
     {...fixtures.paidAmountAtomic('metric-iso2'), revisionId: 'mrev-iso-2'});
@@ -903,6 +903,21 @@ test('R1 口径不一致拒绝：基础限定不同 QUALIFIER_CONFLICT；时间�
   const refusedRole = api.publishMetricRevision(mixedRole.source, 'mrev-mixtr-1', {});
   assert.equal(refusedRole.ok, false);
   assert.ok(errAt(refusedRole, 'TIME_ROLE_CONFLICT'));
+});
+
+test('可再聚合：两个指标相乘不可再聚合（MET-06），指标乘常量仍可', () => {
+  const judge = (expression) => api.compoundReAggregable({expression}, () => true);
+  const product = judge('{{a}}*{{b}}');
+  assert.equal(product.reAggregable, false);
+  assert.equal(product.reason, 'PRODUCT_NOT_SUMMABLE');
+  assert.equal(judge('{{a}}*2').reAggregable, true);
+  assert.equal(judge('2*{{a}}').reAggregable, true);
+  const ratio = judge('{{a}}/{{b}}');
+  assert.equal(ratio.reAggregable, false);
+  assert.equal(ratio.reason, 'RATIO_NOT_SUMMABLE');
+  assert.equal(judge('({{a}}*{{b}})/{{c}}').reAggregable, false);
+  assert.equal(judge('({{a}}+{{b}})*{{c}}').reason, 'PRODUCT_NOT_SUMMABLE');
+  assert.equal(judge('{{a}}-{{b}}').reAggregable, true);
 });
 
 // =====================================================================

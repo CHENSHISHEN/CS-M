@@ -12,7 +12,7 @@
 
 import {invalidValueError, metricError, missingFieldError, unknownKeyError} from './errors';
 import {hashValue, newMetricId} from './hash';
-import {isStoreWritable, readMetricPlatform, writeMetricPlatform} from './store';
+import {readMetricPlatform, storeWriteErrors, writeMetricPlatform} from './store';
 import {QUALIFIER_OPS} from './validate';
 import {validateWindow} from './window';
 
@@ -129,6 +129,9 @@ export const emptyMetricDictionary = () => ({
   departments: [], dimensions: [], qualifiers: [], periods: [], units: [],
 });
 
+// 注意（R-A-F3）：内部浅归一化读取，各分类数组为新数组，但其中的元素是存储中的活引用（未冻结、未深拷贝），
+// 调用方必须当只读使用；冻结/拷贝保证只由 getMetricRevision / listMetricRevisions /
+// getMetricDefinition 提供。
 export const readMetricDictionary = (source) => {
   const data = readMetricPlatform(source);
   const dict = data.dictionary == null || typeof data.dictionary !== 'object' ? {} : data.dictionary;
@@ -293,6 +296,112 @@ const intraDictionaryReferences = (data, category, entry) => {
     }));
 };
 
+// ---- 发布前 spec ↔ 字典一致性（MET-04） ----
+// 仅在发布/发布前校验路径调用；草案保存不拦截（允许先写后补），已发布版本不回溯校验；
+// 仅当项目字典非空（任一分类 ≥1 条）时执行——无字典的旧项目保持自由输入（DU6 设计）。
+// UI“手动输入”不记录于 spec，与未登记值不可区分：有字典项目中按未登记拦截。
+// spec 按稳定 code 引用字典：spec.unit=单位 code，dimensionId/outputGrain=维度 code，
+// scope.departmentId=部门 code（与 listDictionaryReferences 的匹配口径一致）。
+// 错误码复用：缺失/停用 → UNKNOWN_REFERENCE（停用用独立 messageKey 给出可读提示）；
+// 值类型不符 → INVALID_VALUE（与字典限定条目的类型校验同一错误码）。
+const dictionaryEntryErrors = (entries, category, code, path) => {
+  const entry = (entries || []).filter(item => item != null && item.code === code)[0];
+  if (entry == null) {
+    return {entry: null, errors: [metricError('UNKNOWN_REFERENCE', path, 'metric.error.unknownReference',
+      `${category} not registered in dictionary: ${code}`, {ref: code})]};
+  }
+  if (entry.status === 'disabled') {
+    return {entry, errors: [metricError('UNKNOWN_REFERENCE', path, 'metric.error.disabledDictionaryEntry',
+      `${category} dictionary entry is disabled: ${code}`, {ref: code})]};
+  }
+  return {entry, errors: []};
+};
+
+const typeOfValue = (value) => (value === null ? 'null' : (Array.isArray(value) ? 'array' : typeof value));
+
+const valueTypeError = (path, dimension, expected, actual) => metricError('INVALID_VALUE', path,
+  'metric.error.valueTypeMismatch',
+  `value type ${actual} does not match dimension ${dimension} value type ${expected}`,
+  {dimension, expected, actual});
+
+// spec 中固化的是有类型值快照：严格按 typeof 比较，不做文本解析（'true' 字符串≠布尔 true）
+const strictTypedValueErrors = (qualifier, valueType, path) => {
+  const value = qualifier.value;
+  const dimension = qualifier.dimensionId;
+  if (qualifier.op === 'in' || qualifier.op === 'not_in') {
+    if (!Array.isArray(value)) return [];  // 结构错误由 validateQualifier 报告
+    const errors = [];
+    value.forEach((item, index) => {
+      if (typeOfValue(item) !== valueType) {
+        errors.push(valueTypeError(`${path}.value[${index}]`, dimension, valueType, typeOfValue(item)));
+      }
+    });
+    return errors;
+  }
+  if (typeOfValue(value) !== valueType) {
+    return [valueTypeError(`${path}.value`, dimension, valueType, typeOfValue(value))];
+  }
+  return [];
+};
+
+const qualifierDictionaryErrors = (qualifiers, dimensions, base) => {
+  const errors = [];
+  if (!Array.isArray(qualifiers)) return errors;
+  qualifiers.forEach((qualifier, index) => {
+    if (qualifier == null || typeof qualifier !== 'object'
+      || qualifier.dimensionId == null || qualifier.dimensionId === '') return;
+    const at = `${base}[${index}]`;
+    const checked = dictionaryEntryErrors(dimensions, 'dimension', qualifier.dimensionId,
+      `${at}.dimensionId`);
+    checked.errors.forEach(error => errors.push(error));
+    if (checked.entry != null && qualifier.value !== undefined
+      && DIMENSION_VALUE_TYPES.indexOf(checked.entry.valueType) >= 0) {
+      strictTypedValueErrors(qualifier, checked.entry.valueType, at).forEach(error => errors.push(error));
+    }
+  });
+  return errors;
+};
+
+export const validateSpecAgainstDictionary = (data, spec, scope) => {
+  const errors = [];
+  const dictionary = data == null || data.dictionary == null || typeof data.dictionary !== 'object'
+    ? {} : data.dictionary;
+  const listOf = category => (Array.isArray(dictionary[category]) ? dictionary[category] : []);
+  const dimensions = listOf('dimensions');
+  // R10：项目字典完全为空（旧项目/未启用字典）时保持自由输入，不做字典校验
+  if (DICTIONARY_CATEGORIES.every(category => listOf(category).length === 0)) return errors;
+  if (scope != null && scope.kind === 'department'
+    && scope.departmentId != null && scope.departmentId !== '') {
+    dictionaryEntryErrors(listOf('departments'), 'department', scope.departmentId, 'scope.departmentId')
+      .errors.forEach(error => errors.push(error));
+  }
+  if (spec == null || typeof spec !== 'object') return errors;
+  if (spec.kind === 'atomic') {
+    if (typeof spec.unit === 'string' && spec.unit.trim() !== '') {
+      dictionaryEntryErrors(listOf('units'), 'unit', spec.unit, 'spec.unit')
+        .errors.forEach(error => errors.push(error));
+    }
+    (Array.isArray(spec.dimensions) ? spec.dimensions : []).forEach((dimension, index) => {
+      if (dimension == null || typeof dimension !== 'object'
+        || dimension.dimensionId == null || dimension.dimensionId === '') return;
+      dictionaryEntryErrors(dimensions, 'dimension', dimension.dimensionId,
+        `spec.dimensions[${index}].dimensionId`).errors.forEach(error => errors.push(error));
+    });
+    qualifierDictionaryErrors(spec.baseQualifiers, dimensions, 'spec.baseQualifiers')
+      .forEach(error => errors.push(error));
+  }
+  if (spec.kind === 'derived') {
+    qualifierDictionaryErrors(spec.qualifiers, dimensions, 'spec.qualifiers')
+      .forEach(error => errors.push(error));
+    (Array.isArray(spec.outputGrain) ? spec.outputGrain : []).forEach((dim, index) => {
+      if (dim == null || dim === '') return;
+      dictionaryEntryErrors(dimensions, 'dimension', dim, `spec.outputGrain[${index}]`)
+        .errors.forEach(error => errors.push(error));
+    });
+  }
+  return errors;
+};
+
 // ---- 写入 ----
 const validateEntry = (category, input, dimensions) => {
   const errors = [];
@@ -357,13 +466,8 @@ const writeCategory = (source, data, category, list) => {
   });
 };
 
-const storeGuardErrors = (data) => {
-  if (!isStoreWritable(data)) {
-    return [metricError('SCHEMA_VERSION_UNSUPPORTED', 'profile.metricPlatform.schemaVersion',
-      'metric.error.schemaUnsupported', 'metric platform schema version unsupported')];
-  }
-  return [];
-};
+// 写前守卫统一走 store.storeWriteErrors（STORE_CORRUPT / SCHEMA_VERSION_UNSUPPORTED）
+const storeGuardErrors = data => storeWriteErrors(data);
 
 const inUseError = (category, entry, refs) => metricError('DICTIONARY_IN_USE',
   `dictionary.${category}.${entry.id}`, 'metric.error.dictionaryInUse',

@@ -1064,6 +1064,184 @@ async function main() {
     ok(echo.length === 1 && echo[0].path === '/custom/chat', 'explicit path allows otherwise-foreign base');
   });
 
+  // ============ T33 AI-01 凭据绑定 endpoint：改 baseURL/protocol/path 未重输 key 即清除旧 key ============
+  // 假服务器：无鉴权头回 401（模拟真实服务对缺 key 的反应），有则 200；记录收到的全部头供泄漏检查
+  function authEchoHandler(req, res) {
+    if (!req.headers.authorization && !req.headers['x-api-key']) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'missing credential' } }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    if (req.url.indexOf('/messages') !== -1) {
+      res.end(JSON.stringify({ content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn' }));
+    } else {
+      res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }] }));
+    }
+  }
+  function headersCarry(srv, secret) {
+    return srv.capturedHeaders.some((h) => JSON.stringify(h).indexOf(secret) !== -1);
+  }
+  function lastHeaders(srv) { return srv.capturedHeaders[srv.capturedHeaders.length - 1]; }
+  let t33seq = 0;
+  async function ask(broker, providerId) {
+    t33seq += 1;
+    let err = null;
+    let result = null;
+    try {
+      result = await broker.request({
+        requestId: 'r33-' + t33seq, projectSessionId: 'p33', epoch: 1, providerId: providerId, kind: 'chat',
+        messages: [{ role: 'user', text: 'x' }], stream: false
+      }, function (env) { capture(env); });
+    } catch (e) { err = e; capture(e); }
+    return { err: err, result: result };
+  }
+  function credFlag(broker, id) {
+    const p = broker.listProviders().filter((x) => x.id === id)[0];
+    return p ? p.hasCredential : 'missing';
+  }
+  const FK_NEW = 'sk-host-fixture-rotated-0003';
+  const T33_SECRETS = [FK_OPENAI, FK_ANTH, FK_NEW];
+
+  await test('T33a model-only change keeps stored key (request still authenticated)', async () => {
+    const srv = await startServer(authEchoHandler);
+    const broker = aiHost.createAiHostBroker();
+    broker.bindSession('p33');
+    broker.configureProviders([openaiConfig(srv.port, { id: 'b33a' })]);
+    const cfg = openaiConfig(srv.port, { id: 'b33a', model: 'fixture-model-2', label: 'renamed', limits: { timeoutMs: 3000, idleTimeoutMs: 2000, maxOutputChars: 50000, maxConcurrent: 1, requestsPerMinute: 30 } });
+    delete cfg.apiKey;
+    const echo = broker.configureProviders([cfg]);
+    ok(broker.vault.has('provider:b33a'), 'key kept after model/label/limits change');
+    ok(echo[0].hasCredential === true, 'echo reports hasCredential=true');
+    ok(echo[0].apiKey === undefined, 'echo still has no apiKey');
+    const r = await ask(broker, 'b33a');
+    ok(!r.err && r.result.text === 'ok', 'request succeeds, err=' + (r.err && r.err.code));
+    ok(lastHeaders(srv).authorization === 'Bearer ' + FK_OPENAI, 'kept key still sent');
+    ok(readBody(srv).model === 'fixture-model-2', 'new model used');
+  });
+
+  await test('T33b baseURL change without key clears it; new endpoint never sees old key', async () => {
+    const oldSrv = await startServer(authEchoHandler);
+    const newSrv = await startServer(authEchoHandler);
+    const broker = aiHost.createAiHostBroker();
+    broker.bindSession('p33');
+    broker.configureProviders([openaiConfig(oldSrv.port, { id: 'b33b' })]);
+    ok(credFlag(broker, 'b33b') === true, 'initially hasCredential');
+    const cfg = openaiConfig(newSrv.port, { id: 'b33b' });
+    delete cfg.apiKey;
+    const echo = broker.configureProviders([cfg]);
+    ok(!broker.vault.has('provider:b33b'), 'old key deleted after baseURL change');
+    ok(echo[0].hasCredential === false, 'echo reports hasCredential=false');
+    ok(credFlag(broker, 'b33b') === false, 'listProviders reports hasCredential=false');
+    ok(broker.getStatus().credentialVault.entries === 0, 'status vault entries = 0');
+    const r = await ask(broker, 'b33b');
+    // broker 对无 key 的 provider 不拦截（本地免鉴权服务合法），请求不带鉴权头 → 服务端 401 → AUTH_FAILED
+    ok(r.err && r.err.code === 'AUTH_FAILED', 'request fails with AUTH_FAILED, got=' + (r.err && r.err.code));
+    ok(newSrv.hits === 1, 'new endpoint reached once');
+    ok(lastHeaders(newSrv).authorization === undefined && lastHeaders(newSrv)['x-api-key'] === undefined, 'no credential header to new endpoint');
+    ok(!headersCarry(newSrv, FK_OPENAI), 'old key never seen by new endpoint');
+    ok(oldSrv.hits === 0, 'old endpoint not contacted');
+  });
+
+  await test('T33c baseURL change with new key: new key sent, old key never seen', async () => {
+    const oldSrv = await startServer(authEchoHandler);
+    const newSrv = await startServer(authEchoHandler);
+    const broker = aiHost.createAiHostBroker();
+    broker.bindSession('p33');
+    broker.configureProviders([openaiConfig(oldSrv.port, { id: 'b33c' })]);
+    const echo = broker.configureProviders([openaiConfig(newSrv.port, { id: 'b33c', apiKey: FK_NEW })]);
+    ok(echo[0].hasCredential === true, 'echo hasCredential with new key');
+    ok(broker.vault.get('provider:b33c') === FK_NEW, 'vault holds the new key');
+    const r = await ask(broker, 'b33c');
+    ok(!r.err && r.result.text === 'ok', 'request ok, err=' + (r.err && r.err.code));
+    ok(lastHeaders(newSrv).authorization === 'Bearer ' + FK_NEW, 'new key sent');
+    ok(!headersCarry(newSrv, FK_OPENAI), 'old key never seen by new endpoint');
+  });
+
+  await test('T33d normalization-equal baseURL keeps key; real host change clears', async () => {
+    const srv = await startServer(authEchoHandler);
+    const broker = aiHost.createAiHostBroker();
+    broker.bindSession('p33');
+    const variants = [
+      // [初始 baseURL, 变更后 baseURL, 期望保留 key?]
+      ['http://127.0.0.1:' + srv.port, 'http://127.0.0.1:' + srv.port + '/', true],          // URL 解析补根斜杠
+      ['http://127.0.0.1:' + srv.port + '/', 'HTTP://127.0.0.1:' + srv.port, true],          // scheme 大小写
+      ['http://localhost:' + srv.port + '/v1', 'http://LOCALHOST:' + srv.port + '/v1/', true], // host 大小写 + 末尾斜杠（resolveRequestURL 同样剥除）
+      ['http://127.0.0.1:' + srv.port + '/v1', 'http://127.0.0.1:' + srv.port + '/v1//', true],
+      ['http://127.0.0.1:' + srv.port, 'http://localhost:' + srv.port, false],               // 不同 host 字面量：保守视为改 endpoint
+      ['http://127.0.0.1:' + srv.port + '/v1', 'http://127.0.0.1:' + srv.port + '/gw/v1', false] // 路径前缀变化
+    ];
+    for (let i = 0; i < variants.length; i += 1) {
+      const id = 'b33d-' + i;
+      broker.configureProviders([openaiConfig(srv.port, { id: id, baseURL: variants[i][0] })]);
+      const cfg = openaiConfig(srv.port, { id: id, baseURL: variants[i][1] });
+      delete cfg.apiKey;
+      const echo = broker.configureProviders([cfg]);
+      ok(broker.vault.has('provider:' + id) === variants[i][2], 'variant #' + i + ' keep=' + variants[i][2]);
+      ok(echo[0].hasCredential === variants[i][2], 'variant #' + i + ' echo flag');
+    }
+    // 保留 key 的归一化变体仍能带 key 出网
+    const r = await ask(broker, 'b33d-0');
+    ok(!r.err && lastHeaders(srv).authorization === 'Bearer ' + FK_OPENAI, 'normalized-equal endpoint still authenticated');
+  });
+
+  await test('T33e apiKey:null still deletes; empty-string key on endpoint change also clears', async () => {
+    const srv = await startServer(authEchoHandler);
+    const srv2 = await startServer(authEchoHandler);
+    const broker = aiHost.createAiHostBroker();
+    broker.configureProviders([openaiConfig(srv.port, { id: 'b33e' })]);
+    const echo = broker.configureProviders([openaiConfig(srv.port, { id: 'b33e', apiKey: null })]);
+    ok(!broker.vault.has('provider:b33e'), 'apiKey:null deletes (same endpoint)');
+    ok(echo[0].hasCredential === false, 'echo flag false after null');
+    broker.configureProviders([openaiConfig(srv.port, { id: 'b33e2' })]);
+    broker.configureProviders([openaiConfig(srv2.port, { id: 'b33e2', apiKey: '' })]);
+    ok(!broker.vault.has('provider:b33e2'), 'empty-string key + baseURL change clears');
+    broker.configureProviders([openaiConfig(srv.port, { id: 'b33e3' })]);
+    broker.configureProviders([openaiConfig(srv.port, { id: 'b33e3', apiKey: '' })]);
+    ok(broker.vault.has('provider:b33e3'), 'empty-string key with unchanged endpoint keeps (pre-existing behaviour)');
+    // removeProvider 后同 id 重新配置不带 key：不复活旧 key
+    broker.removeProvider('b33e3');
+    const cfg = openaiConfig(srv.port, { id: 'b33e3' });
+    delete cfg.apiKey;
+    const echo2 = broker.configureProviders([cfg]);
+    ok(!broker.vault.has('provider:b33e3') && echo2[0].hasCredential === false, 'removeProvider leaves no stale key');
+  });
+
+  await test('T33f protocol or explicit path change clears key', async () => {
+    const srv = await startServer(authEchoHandler);
+    const broker = aiHost.createAiHostBroker();
+    broker.bindSession('p33');
+    // protocol：openai-chat → anthropic-messages（同 baseURL、同 id），旧 Bearer key 不得变成 x-api-key 发出
+    broker.configureProviders([openaiConfig(srv.port, { id: 'b33f' })]);
+    const anth = anthropicConfig(srv.port, { id: 'b33f' });
+    delete anth.apiKey;
+    const echo = broker.configureProviders([anth]);
+    ok(!broker.vault.has('provider:b33f') && echo[0].hasCredential === false, 'protocol change clears');
+    const before = srv.hits;
+    const r = await ask(broker, 'b33f');
+    ok(r.err && r.err.code === 'AUTH_FAILED', 'anthropic request unauthenticated, got=' + (r.err && r.err.code));
+    ok(srv.hits === before + 1 && lastHeaders(srv)['x-api-key'] === undefined, 'no x-api-key sent');
+    // path：新增显式 path
+    broker.configureProviders([openaiConfig(srv.port, { id: 'b33g' })]);
+    const withPath = openaiConfig(srv.port, { id: 'b33g', path: '/api/chat' });
+    delete withPath.apiKey;
+    broker.configureProviders([withPath]);
+    ok(!broker.vault.has('provider:b33g'), 'adding explicit path clears');
+    // path：修改显式 path
+    broker.configureProviders([openaiConfig(srv.port, { id: 'b33h', path: '/api/chat' })]);
+    const changedPath = openaiConfig(srv.port, { id: 'b33h', path: '/api/other' });
+    delete changedPath.apiKey;
+    broker.configureProviders([changedPath]);
+    ok(!broker.vault.has('provider:b33h'), 'changing explicit path clears');
+    // path 不变 + 只改 model：保留
+    broker.configureProviders([openaiConfig(srv.port, { id: 'b33i', path: '/api/chat' })]);
+    const samePath = openaiConfig(srv.port, { id: 'b33i', path: '/api/chat', model: 'm2' });
+    delete samePath.apiKey;
+    broker.configureProviders([samePath]);
+    ok(broker.vault.has('provider:b33i'), 'unchanged explicit path keeps key');
+    ok(T33_SECRETS.every((s) => !headersCarry(srv, s)), 'no secret ever reached the server in T33f');
+  });
+
   // ============ 收尾：全局密钥泄漏扫描 ============
   await test('T24 no credential leak in any output', async () => {
     for (let i = 0; i < emittedCaptures.length; i += 1) {

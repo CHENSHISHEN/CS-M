@@ -23,6 +23,7 @@ const DIAG_KEYS = {
   METRIC_IMPORT_UNKNOWN_KEY_CONFLICT: 'metrics.binding.diag.unknownKeyConflict',
   METRIC_IMPORT_NAMESPACE_ADOPTED: 'metrics.binding.diag.namespaceAdopted',
   METRIC_IMPORT_UNKNOWN_SCHEMA: 'metrics.binding.diag.unknownSchema',
+  METRIC_IMPORT_HASH_MISMATCH: 'metrics.binding.diag.hashMismatch',
 };
 
 const COLLECTION_LAYER_KEYS = {

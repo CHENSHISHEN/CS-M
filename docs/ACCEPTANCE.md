@@ -1,8 +1,45 @@
-# CS-M 0.1.0 首发候选验收记录
+# CS-M 0.5.0 验收记录
+
+> 当前版本以 `package.json` 的 `version` 为准：**0.5.0**。本记录的验收对象是 `main` 源码（v0.5.0 加上 [CHANGELOG](../CHANGELOG.md)“未发布（Unreleased）”节所列、尚未发布的修改）。下方“历史记录（0.1.0）”保留首发时的原始验收记录，不代表当前状态。
+
+日期：2026-11-24。状态：**本环境内自动化测试与生产构建通过；未做任何 GUI/Electron 验证；本次未打包安装包。**
+
+环境：Linux x86_64（内核 6.12），Node 24.22.1，npm 11.19.1，未安装 Java。
+
+## 验收依据
+
+1. **`npm test`**（即 `node tests/run-all.cjs`）：按 `TESTS` 清单逐个运行 40 个测试文件，每个文件在独立子进程中运行并汇总 PASS/FAIL/SKIP，任一 FAIL 则退出码非零。这些都是 Node 脚本形式的**单元测试、契约测试与源码静态断言**，不启动 Electron、不操作界面。其中 `tests/test-metric-platform.cjs` 会在内部再运行 `tests/metrics/` 下的 core/dictionary/binding/lineage 测试；`tests/workbook-branding.cjs` 依赖 Java，未安装 Java 时显式 SKIP（本环境即为 SKIP）。本环境运行结果：除该 SKIP 外其余全部 PASS，无 FAIL。
+2. **`npm run build`**：webpack 生产构建在本环境通过（输出 `build success`）。
+3. **CI**：`.github/workflows/test.yml` 在 pull request 与推送 `main` 时于 ubuntu-latest / Node 24 上执行 `npm ci` 与 `npm test`（未装 Java，`workbook-branding` 同样 SKIP），并以“仅报告、不阻塞”方式运行 `npm audit --omit=dev`。`build-macos.yml`、`build-windows.yml` 在推送 `main` 时构建安装包。本文不记录这些工作流的运行结果，以 GitHub Actions 页面为准。
+4. `tests/gui-smoke.cjs` 依赖 Playwright 与 Electron，不在 `npm test` 内，本次未运行。
+
+## 未验证的范围
+
+- **GUI/Electron**：本环境没有做任何界面验证。以下各项只有逻辑或源码层面的测试，界面行为均待按 [UAT.md](./UAT.md) 的“待人工验收项（GUI）”逐项人工验收：
+  - 安全与基础体验（含业务流程连接桩、字典校验提示）：备注 HTML 清洗（`onerror` 脚本不执行、正常 Markdown 渲染、`file:`/Windows 路径图片不显示）；外链处理与导航守卫（含 Cmd/Ctrl+R、DevTools、「操作历史」窗口）；业务流程连接桩（悬停显示、拖出连线、只读隐藏）；DefinitionPage 显示字典严格校验错误；顶栏显示 CS-M、新建项目只有 3 个类型；窗口最小尺寸与 ErrorBoundary「重新加载」；修改 AI 端点后显示无凭据且旧 key 不外发；首页按钮配色与版本页「修订」确认文案。
+  - 指标平台：丢弃草案；废弃确认与修订后恢复有效；删除被引用字段的确认、失效与取消；就绪状态与快照标注；完整性检查（含 `HASH_MISMATCH`、结果清除、分叉口径无升级面板）；版本页来源列、中英文缺键、存储损坏与 `STORE_CORRUPT`。
+  - 画图持久化：单实例（含 Windows 空白窗口、macOS 重建窗口、开发态）；打包版写锁加载；工程文件缺失时的各处文案、另存为、恢复副本、关闭与重试写入；会话栅栏；恢复日志高水位与 v0.5.0 userData 升级；锁回收（含 `.reclaim-*` 残留、FAT/exFAT U 盘）。
+  - 前向工程与上手引导：向导阻断错误展示与中英文；三个入口及只读禁用；完成后定位；DDL 按目标库高亮；空项目三步引导及根节点「+」。
+- **安装包**：本次未打包；未在 Windows、macOS 实机安装运行。
+- **Java 相关能力**：Word/Excel 导入导出、DDL 文件解析、数据库连接/逆向在本环境未验证；真实数据库连接需专用连接环境。
+
+## 已知限制
+
+- **安全加固未完成**：ARCH-02（渲染进程 `nodeIntegration` 仍开启，未启用 `contextIsolation` 与 preload）与 ARCH-05（规则脚本仍以 `new Function` 执行）均未修复，留待 Phase 3；尚未配置 CSP（内容安全策略）。见 [ROADMAP.md](./ROADMAP.md)。
+- 备注中 `file:` 或 Windows 路径的图片不再显示。
+- 指标平台：原子指标的计算绑定未设时间字段映射时显示“未就绪”，目前只能解除后重建绑定；整表删除尚未接入绑定失效标记。
+- 画图持久化：`anchor.json` 损坏后第二次打开不再保持损坏状态；锁回收时可能短暂出现 `.reclaim-mutex`/`.reclaim-*` 文件，极少数情况下因崩溃残留。
+- `npm audit` 仅报告，不阻塞 CI；本文不记录审计结果。
+
+## 历史记录（0.1.0）
+
+以下为 0.1.0 首发时的原始验收记录，按原文保留（仅调整标题层级），其中的日期、环境、产物与结论均只适用于 0.1.0。
+
+### CS-M 0.1.0 首发候选验收记录
 
 日期：2026-10-30。状态：**实现与技术验收完成，安装包发布至 GitHub Releases。**
 
-## 本地候选
+#### 本地候选
 
 | 系统 | 本地安装包 | 构建与验证 |
 | --- | --- | --- |
@@ -14,7 +51,7 @@
 
 产物大小、SHA-256 和对应源码指纹在本地 `dist/ARTIFACTS.json`；安装包校验列表为 `dist/SHA256SUMS.txt`。这些本地构建产物被 Git 忽略，不会随首次源码提交上传，正式下载入口待 UAT 后发布。
 
-## 基线与品牌审查
+#### 基线与品牌审查
 
 - 新工作台为唯一布局，经典头部和布局切换已从源码剥离。
 - 产品界面、元数据、Logo、安装包、外置 Excel 模板表头与动态 Excel 产品表头已采用 CS-M；代码模板生成的 C# 命名空间为合法标识符 `CSM.Application`。
@@ -31,7 +68,7 @@
 
 逐文件清单在本地 `dist/acceptance/source-manifest.json`。这是本地候选包对应的产品源码树指纹，不能将既有 README 初始提交当作本次产品源码版本；文档与忽略规则不在该产品指纹范围内。
 
-## 已完成验证
+#### 已完成验证
 
 环境：macOS 15.7.5 / arm64，Node 24.11.1，npm 11.6.2，OpenJDK 25.0.1；Electron 13.1.7，electron-builder 23.3.3。
 
@@ -44,7 +81,7 @@
 
 本地 GUI 证据：`dist/acceptance-mac-arm64/`、`dist/acceptance-mac-x64/`。截图是通用样例和临时合成项目，未使用真实业务工程。
 
-## 待 UAT 与验证边界
+#### 待 UAT 与验证边界
 
 - Windows 实机安装、启动、卸载与文件操作；Intel Mac 物理设备验证。
 - 使用存量工程副本进行业务验收；真实数据库连接/逆向需测试连接环境。

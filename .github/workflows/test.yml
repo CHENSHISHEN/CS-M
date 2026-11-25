@@ -1,0 +1,36 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            app/package-lock.json
+
+      # package-lock.json 的 resolved 均指向 registry.npmmirror.com:仅加 --registry 不会改写这些地址,
+      # 需 --replace-registry-host=always 才会在 GitHub runner 上改从官方 registry 下载;
+      # 测试不需要 Electron 二进制,跳过 electron postinstall 的下载(也避免走 .npmrc 里的镜像)
+      - name: Install dependencies
+        run: npm ci --registry=https://registry.npmjs.org --replace-registry-host=always
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
+      # 未安装 Java:workbook-branding 会被 SKIP(原因见输出)
+      - name: Test
+        run: npm test
+
+      # 仅报告,不阻塞
+      - name: Audit (report only)
+        run: npm audit --omit=dev --registry=https://registry.npmjs.org || true

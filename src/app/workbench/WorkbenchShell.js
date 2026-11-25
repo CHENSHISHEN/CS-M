@@ -257,7 +257,7 @@ export const WorkbenchTopbar = React.memo(({currentPrefix, mode, isChildWindow, 
                                             getSearchDataSource, jumpPosition, jumpDetail,
                                             onToggleTheme, iconClick, openModal,
                                             onCreateObject, canvasExportable, compact, hideModelCreate, onReturnPlatform,
-                                            onOpenAiAssistant,
+                                            onOpenAiAssistant, openForwardEngineering,
                                             dataPlatform: dataPlatformProp}) => {
   const readOnly = mode === READING;
   const themeMode = dataSource?.profile?.themeMode;
@@ -384,10 +384,16 @@ export const WorkbenchTopbar = React.memo(({currentPrefix, mode, isChildWindow, 
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ]), [canvasExportable]);
+  // UX-13：顶栏无独立“建模”菜单，“生成物理模型”并入“工具”组首项（compact 时随工具组并入更多；
+  // 只读时工具组禁用/不折叠，与其他写操作一致）
+  const canForward = !!openForwardEngineering;
   const toolMenus = useMemo(() => ([
+    ...(canForward ? [{
+      key: 'forwardEngineering', name: FormatMessage.string({id: 'modelCatalog.generatePhysical'}),
+    }] : []),
     {key: 'toggleCase', name: FormatMessage.string({id: 'toolbar.toggleCase'})},
     {key: 'compareTable', name: FormatMessage.string({id: 'toolbar.compareTable'})},
-  ]), []);
+  ]), [canForward]);
   const moreMenus = useMemo(() => {
     // 只读（READING）语义与原头部一致：工具区全部隐藏，
     // 更多仅保留安全入口，不暴露另存/设置/大小写/数据库维护等编辑路径；
@@ -416,8 +422,9 @@ export const WorkbenchTopbar = React.memo(({currentPrefix, mode, isChildWindow, 
       },
     ] : [];
     return base.concat(folded);
+    // toolMenus 随 canForward 变化（无前向工程入口的宿主不显示“生成物理模型”），compact 并入组须同步
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compact, themeMode, readOnly, onOpenAiAssistant]);
+  }, [compact, themeMode, readOnly, onOpenAiAssistant, toolMenus, dbMenus, dataPlatform]);
   // 顶栏统一命令执行路径：桌面独立组与 compact 并入组走同一分支表，避免 key 被漏转发
   const runTopCommand = (m, e) => {
     if (m.key === 'configMenu') {
@@ -427,6 +434,9 @@ export const WorkbenchTopbar = React.memo(({currentPrefix, mode, isChildWindow, 
       if (!dataPlatform) openModal && openModal('dbConnect');
     } else if (m.key === 'aiAssistant') {
       onOpenAiAssistant && onOpenAiAssistant();
+    } else if (m.key === 'forwardEngineering') {
+      // 与资源树右键/逻辑实体编辑器按钮共用宿主同一打开函数（顶栏不预选）
+      openForwardEngineering && openForwardEngineering();
     } else {
       menuClick(m, e);
     }
@@ -444,9 +454,9 @@ export const WorkbenchTopbar = React.memo(({currentPrefix, mode, isChildWindow, 
       >
         <Icon type='fa-angle-left'/>
       </button>}
-      <span className={`${currentPrefix}-wb-topbar-logo`} aria-hidden="true">P</span>
+      <span className={`${currentPrefix}-wb-topbar-logo`} aria-hidden="true">C</span>
       <span className={`${currentPrefix}-wb-topbar-namegroup`}>
-        <span className={`${currentPrefix}-wb-topbar-name`}>PDManer</span>
+        <span className={`${currentPrefix}-wb-topbar-name`}>{FormatMessage.string({id: 'workbench.brandName'})}</span>
         <span className={`${currentPrefix}-wb-topbar-label`}>WORKBENCH</span>
       </span>
       <span className={`${currentPrefix}-wb-topbar-divider`}/>
@@ -492,7 +502,7 @@ export const WorkbenchTopbar = React.memo(({currentPrefix, mode, isChildWindow, 
         title={FormatMessage.string({id: 'toolbar.tool'})}
         icon='settings'
         menus={toolMenus}
-        menuClick={menuClick}
+        menuClick={runTopCommand}
         disabled={readOnly}
       />}
     </div>

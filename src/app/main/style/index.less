@@ -114,6 +114,101 @@
     min-width: @menu-width;
   }
 }
+// UX-02：空项目三步引导（编辑区无页签且项目无模型对象时替代快捷键提示）
+.@{prefix}-main-guide {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  height: 100%;
+  padding: 24px;
+  overflow: auto;
+  color: var(--wb-text, @font-color);
+  &-head {
+    text-align: center;
+    h2 {
+      margin: 0 0 6px;
+      font-size: 18px;
+      font-weight: 600;
+    }
+    p {
+      margin: 0;
+      color: var(--wb-muted, #667080);
+    }
+  }
+  &-readonly {
+    margin-top: 6px !important;
+    color: var(--wb-warning, #976612) !important;
+  }
+  &-steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 240px));
+    justify-content: center;
+    gap: 16px;
+    width: 100%;
+    max-width: 800px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  &-step {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 16px;
+    border: 1px solid var(--wb-line, #dce4ef);
+    border-radius: 8px;
+    background: var(--wb-side, #f3f6fb);
+    &-no {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--wb-section-bg, #eaf1fb);
+      color: var(--wb-section-text, #365a89);
+      font-weight: 600;
+    }
+    &-title {
+      font-size: 14px;
+    }
+    &-desc {
+      color: var(--wb-muted, #667080);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    &-hint {
+      color: var(--wb-warning, #976612);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    &-action {
+      margin-top: auto;
+      padding: 5px 12px;
+      border: 1px solid var(--wb-blue, #3566af);
+      border-radius: 4px;
+      background: var(--wb-blue, #3566af);
+      color: var(--wb-primary-text, #ffffff);
+      cursor: pointer;
+      &:hover {
+        opacity: .9;
+      }
+    }
+  }
+  &-home {
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--wb-blue, @primary-color);
+    text-decoration: underline;
+    cursor: pointer;
+  }
+}
 .@{prefix}-main-message {
   white-space: nowrap;
   user-select: none;

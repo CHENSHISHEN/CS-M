@@ -485,6 +485,42 @@ const DefinitionPage = ({source, commandRunner, readOnly, focus, onDirtyChange})
     });
   };
 
+  // 丢弃草案（MET-14）：从未发布的定义连同定义删除（释放 code），已发布过的只删草案；
+  // 用加载时的草案 id + rev 做并发前置校验（防误删后建的同号草案），冲突时由既有冲突提示引导重载
+  const discardDraft = () => {
+    const detail = metricApi.getMetricDefinition(latestSource(), editor.definitionId);
+    const everPublished = !!detail
+      && (detail.revisions || []).some(r => r.status !== 'draft');
+    // 丢弃会级联移除指向该草案（从未发布时为该定义）的关联：确认前如实告知条数
+    const removedBindings = metricApi.countDiscardDraftBindings(latestSource(), editor.definitionId);
+    const discardMessage = FormatMessage.string(everPublished
+      ? {id: 'metrics.discard.messagePublished'}
+      : {id: 'metrics.discard.messageNew',
+        data: {code: detail ? detail.definition.code : ''}});
+    Modal.confirm({
+      title: FormatMessage.string({id: 'metrics.discard.title'}),
+      message: removedBindings > 0 ? <div data-testid='metrics-discard-confirm'>
+        <p>{discardMessage}</p>
+        <p data-testid='metrics-discard-bindings'>{FormatMessage.string({id: 'metrics.discard.bindingsRemoved',
+          data: {count: removedBindings}})}</p>
+      </div> : discardMessage,
+      onOk: () => {
+        runCommand(latest => metricApi.discardMetricDraft(latest, editor.definitionId,
+          {expectedRevision: editor.baseRev, expectedRevisionId: editor.revisionId}), (result) => {
+          const after = metricApi.getMetricDefinition(result.source, editor.definitionId);
+          const remain = after == null ? null
+            : (after.latestPublished
+              || (after.revisions || []).filter(r => r.status === 'deprecated')[0]);
+          setEditor(remain
+            ? {phase: 'view', definitionId: editor.definitionId, revisionId: remain.id}
+            : null);
+          setValidation(null);
+          Message.success({title: FormatMessage.string({id: 'metrics.notice.draftDiscarded'})});
+        });
+      },
+    });
+  };
+
   const deprecateDefinition = () => {
     Modal.confirm({
       title: FormatMessage.string({id: 'metrics.deprecate.title'}),
@@ -1300,6 +1336,15 @@ const DefinitionPage = ({source, commandRunner, readOnly, focus, onDirtyChange})
                 >
                   <FormatMessage id='metrics.editor.publish'/>
                 </button>
+                <button
+                  type='button'
+                  className='chiner-metrics-btn chiner-metrics-btn-danger'
+                  data-testid='metrics-discard-draft'
+                  disabled={readOnly}
+                  onClick={discardDraft}
+                >
+                  <FormatMessage id='metrics.editor.discardDraft'/>
+                </button>
               </>}
             </span>
           </div>
@@ -1348,6 +1393,10 @@ const DefinitionPage = ({source, commandRunner, readOnly, focus, onDirtyChange})
   const definition = detail.definition;
   const spec = revision.spec || {};
   const resolved = revision.resolvedSpec || {};
+  // MET-10：计算就绪以当前项目动态判定为准；resolvedSpec.computeReady 只是发布时快照
+  const snapshotReady = resolved.computeReady === true;
+  const readiness = metricApi.getMetricReadiness(source, revision.id)
+    || {ready: snapshotReady, reasons: []};
   const dependencies = metricApi.getMetricDependencies(source, revision.id);
   const versionRows = (detail.revisions || []).slice().sort((a, b) => {
     const order = (v) => {
@@ -1389,27 +1438,26 @@ const DefinitionPage = ({source, commandRunner, readOnly, focus, onDirtyChange})
         >
           <FormatMessage id='metrics.editor.backList'/>
         </button>
-        {revision.status === 'published' && !readOnly && <>
-          <button
-            type='button'
-            className='chiner-metrics-btn'
-            data-testid='metrics-revise'
-            disabled={!!detail.draft}
-            title={detail.draft
-              ? FormatMessage.string({id: 'metrics.view.activeDraftExists'}) : undefined}
-            onClick={reviseDraft}
-          >
-            <FormatMessage id='metrics.view.revise'/>
-          </button>
-          <button
-            type='button'
-            className='chiner-metrics-btn chiner-metrics-btn-danger'
-            data-testid='metrics-deprecate'
-            onClick={deprecateDefinition}
-          >
-            <FormatMessage id='metrics.view.deprecate'/>
-          </button>
-        </>}
+        {/* 决策 D2：已废弃版本也可修订，修订发布后定义级废弃自动解除 */}
+        {(revision.status === 'published' || revision.status === 'deprecated') && !readOnly && <button
+          type='button'
+          className='chiner-metrics-btn'
+          data-testid='metrics-revise'
+          disabled={!!detail.draft}
+          title={detail.draft
+            ? FormatMessage.string({id: 'metrics.view.activeDraftExists'}) : undefined}
+          onClick={reviseDraft}
+        >
+          <FormatMessage id='metrics.view.revise'/>
+        </button>}
+        {revision.status === 'published' && !readOnly && <button
+          type='button'
+          className='chiner-metrics-btn chiner-metrics-btn-danger'
+          data-testid='metrics-deprecate'
+          onClick={deprecateDefinition}
+        >
+          <FormatMessage id='metrics.view.deprecate'/>
+        </button>}
       </div>
     </header>
 
@@ -1524,8 +1572,20 @@ const DefinitionPage = ({source, commandRunner, readOnly, focus, onDirtyChange})
             {resolved.reAggregableReason ? renderFact('metrics.resolved.reason',
               resolved.reAggregableReason) : null}
             {renderFact('metrics.resolved.computeReady',
-              <FormatMessage id={resolved.computeReady
+              <FormatMessage id={readiness.ready
                 ? 'metrics.common.yes' : 'metrics.common.no'}/>)}
+            {readiness.ready !== snapshotReady ? <p className='chiner-metrics-muted'
+              data-testid='metrics-ready-snapshot'>
+              <FormatMessage id={snapshotReady
+                ? 'metrics.resolved.snapshotReady' : 'metrics.resolved.snapshotNotReady'}/>
+            </p> : null}
+            {readiness.reasons.length ? <ul className='chiner-metrics-deplist'
+              data-testid='metrics-ready-reasons'>
+              {readiness.reasons.map(item => <li key={`${item.code}:${item.path}`}>
+                <FormatMessage id={`metrics.resolved.readinessReason.${item.code}`}/>
+                {' '}<code>{item.path}</code>
+              </li>)}
+            </ul> : null}
             {resolved.designOnly ? <div className='chiner-metrics-notice'
               data-testid='metrics-design-only'>
               <FormatMessage id='metrics.view.designOnly'/>

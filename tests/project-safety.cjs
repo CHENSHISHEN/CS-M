@@ -1,7 +1,9 @@
 // 实际文件写入验证：外部修改与并发写入不能静默覆盖工程。
 const fs=require('fs'), path=require('path'), os=require('os'), crypto=require('crypto'), vm=require('vm'), assert=require('assert');
 const babel=require('@babel/core');
-const api={};vm.runInNewContext(babel.transformFileSync(path.join(__dirname,'../src/lib/project_file_guard.js')).code,{exports:api,process});
+// guard 依赖的锁协议在 public/write-lock.js(与主进程引擎共用),按 guard 所在目录解析相对路径。
+const guardFile=path.join(__dirname,'../src/lib/project_file_guard.js');
+const api={};vm.runInNewContext(babel.transformFileSync(guardFile).code,{exports:api,process,require:p=>require(p.startsWith('.')?path.resolve(path.dirname(guardFile),p):p)});
 const work=fs.mkdtempSync(path.join(os.tmpdir(),'cs-m-safety-')), file=path.join(work,'project.json');
 const hash=data=>crypto.createHash('sha256').update(data).digest('hex');
 (async()=>{
@@ -17,4 +19,4 @@ const hash=data=>crypto.createHash('sha256').update(data).digest('hex');
   const b=api.createProjectFileGuard({fs,path,hash,message:key=>key,save:async()=>{throw Error('不应获得写权限')}});
   const first=a.commit(file,initial);await entered;await assert.rejects(()=>b.commit(file,initial),/projectBusy/);finish();await first;
   assert.deepStrictEqual(fs.readdirSync(work),['project.json']);console.log('PASS 并发写入拒绝且无遗留锁');
-})().catch(e=>{console.error(e.stack);process.exitCode=1});
+})().catch(e=>{console.error(e.stack);process.exitCode=1}).finally(()=>fs.rmSync(work,{recursive:true,force:true}));

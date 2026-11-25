@@ -3,6 +3,7 @@ import {Button, CodeEditor, FormatMessage, openModal} from 'components';
 import Preview from './Preview';
 // eslint-disable-next-line import/named
 import {platform} from '../../../lib/middle';
+import {safeOpenExternal} from '../../../lib/safeExternal';
 
 export default ({prefix, onChange, value, templateShow,
                              templateType, dataTypeSupport, dataSource, ...restProps}) => {
@@ -50,8 +51,7 @@ export default ({prefix, onChange, value, templateShow,
     } else {
       const href = 'https://gitee.com/robergroup/chiner-hub/tree/master/CodeTemplate';
       if (platform === 'json') {
-        // eslint-disable-next-line global-require,import/no-extraneous-dependencies
-        require('electron').shell.openExternal(href);
+        safeOpenExternal(href);
       } else {
         const a = document.createElement('a');
         a.href = href;

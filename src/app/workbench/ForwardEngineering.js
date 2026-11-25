@@ -1,4 +1,4 @@
-import React, {useMemo, useState} from 'react';
+import React, {useMemo, useRef, useState} from 'react';
 import * as _ from 'lodash/object';
 
 import {
@@ -9,23 +9,33 @@ import {
   getCatalogCategories, categoryObjects, physicalDbSupports, readPhysicalDatabases,
 } from '../../lib/model_catalog';
 import {
-  buildForwardCommit, planForwardGeneration, resolveFieldMapping, stripLogicPrefix,
+  buildForwardCommit, ddlLanguageFor, planForwardGeneration, resolveFieldMapping, stripLogicPrefix,
   validateDDLTemplate,
 } from '../../lib/model_forward_engineering';
 // 整改F6：预览与提交统一使用可抛错的严格渲染，不再用吞异常的旧 wrapper
 import {renderCreateTableDDLStrict} from '../../lib/json2code_util';
+import {
+  forwardErrorData, labelForwardError, labelForwardErrors, renderBlockingErrors,
+} from './forwardErrors';
 
 /* eslint-disable jsx-a11y/label-has-for, jsx-a11y/label-has-associated-control */
 // 向导内 label 为行布局容器（内嵌自定义 Input/Select/Checkbox 组件，
 // 无法满足原生控件关联断言），与 ModelCatalog 表单同口径整体豁免
-const t = (key, data) => FormatMessage.string({id: `forward.${key}`, data});
-const errText = code => t(`err.${code}`);
+// defaultMessage 兜底：带 data 时缺键不致 _getMessage 对 undefined 做 replace 抛错
+const t = (key, data) => FormatMessage.string({
+  id: `forward.${key}`,
+  data,
+  defaultMessage: `forward.${key}`,
+});
+// DM-01：错误文案统一带占位参数（数据域/基础类型/源类型/数据库类型等）
+const errText = err => t(`err.${err.code}`, forwardErrorData(err));
 const norm = v => String(v == null ? '' : v).trim().toLowerCase();
 
 // S2 R3：逻辑 → 物理正向生成向导（三步：源选择 / 目标与映射 / 预览与生成）
 // 读取最新有效草稿（getDraftSource 复用搜索快照入口，含未保存 tab 草稿）；
 // 预览不写源；提交以已保存源为合并基底、最新有效草稿为规划输入，原子合并，冲突回预览。
-export default React.memo(({getDraftSource, getSource, onCommit, onClose, preselect}) => {
+// UX-13：onFinish({createdEntityIds}) 在提交并关闭后回调，宿主据此定位/打开新表
+export default React.memo(({getDraftSource, getSource, onCommit, onClose, onFinish, preselect}) => {
   // 审阅10：目标相关 state 初值与首帧视觉默认同步（无库=新建模式+首个有效类型；
   // 有库=既有模式+首库），后续路径（下一步/返回）经 effective 兜底保持一致
   const initDraft = getDraftSource();
@@ -135,6 +145,9 @@ export default React.memo(({getDraftSource, getSource, onCommit, onClose, presel
   const errors = planResult.errors || [];
   const outScopeError = errors.filter(e => e.code === 'outOfScopeRelations')[0];
   const blockingErrors = errors.filter(e => e.code !== 'outOfScopeRelations');
+  // DM-01：全部阻断错误（表名/目标/源实体/字段/关系/索引）按 level 分组带定位展示
+  const blockingGroups = renderBlockingErrors(labelForwardErrors(blockingErrors, draft), t);
+  const errorsRef = useRef(null);
   const warnings = planResult.warnings || [];
 
   const existingCount = logicId => (draft.entities || [])
@@ -189,6 +202,10 @@ export default React.memo(({getDraftSource, getSource, onCommit, onClose, presel
     if (next === 3) {
       if (blockingErrors.length || outScopeError) {
         Message.error({title: t('blockHint')});
+        // 泛化提示保留，同时把第二步的错误明细区滚入视野
+        if (errorsRef.current && errorsRef.current.scrollIntoView) {
+          errorsRef.current.scrollIntoView({block: 'nearest'});
+        }
         return;
       }
       setConflict('');
@@ -242,8 +259,13 @@ export default React.memo(({getDraftSource, getSource, onCommit, onClose, presel
       return;
     }
     onCommit(commit.nextSource);
-    Message.success({title: FormatMessage.string({id: 'optSuccess'})});
     onClose();
+    if (onFinish) {
+      // 成功提示由宿主在定位新表后给出（含“查看 DDL”指引）
+      onFinish({createdEntityIds: commit.plan.entities.map(e => e.id)});
+    } else {
+      Message.success({title: FormatMessage.string({id: 'optSuccess'})});
+    }
   };
 
   const renderStep1 = () => {
@@ -335,13 +357,19 @@ export default React.memo(({getDraftSource, getSource, onCommit, onClose, presel
             </div>;
           })}
         </div>
-        {blockingErrors.filter(e => e.level === 'name').map((e, i) => (
-          <div key={`name-${i}`} className='chiner-forward-error-item'>
-            <span>{e.defKey || e.entityId}</span>
-            <span>{e.code === 'emptyDefKey' ? t('err.emptyDefKey')
-              : t('err.duplicateDefKey', {owner: e.owner || ''})}</span>
-          </div>
-        ))}
+        {blockingGroups.length > 0 && <div className='chiner-forward-errors' ref={errorsRef}>
+          {blockingGroups.map(g => (
+            <div key={g.level} className='chiner-forward-error-group'>
+              <div className='chiner-forward-error-title'>{g.title}</div>
+              {g.lines.map(line => (
+                <div key={line.key} className='chiner-forward-error-item'>
+                  <span>{line.where}</span>
+                  <span>{line.text}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>}
       </div>
       <div className='chiner-forward-side'>
         <div className='chiner-forward-card'>
@@ -409,7 +437,7 @@ export default React.memo(({getDraftSource, getSource, onCommit, onClose, presel
             <span>{t('ddlTemplate')}</span>
             {templateCheck.status === 'ok'
               ? <span>{t('templateCurrent')}</span>
-              : <span className='is-error'>{t(`err.${templateCheck.code}`)}</span>}
+              : <span className='is-error'>{errText(templateCheck)}</span>}
           </div>
           <label className='chiner-forward-form-item'>
             <span>{t('prefix')}</span>
@@ -460,7 +488,7 @@ export default React.memo(({getDraftSource, getSource, onCommit, onClose, presel
                   <span title={f.defKey}>{f.defKey}{f.defName ? ` [${f.defName}]` : ''}</span>
                   <span>{logicType}{res.how === 'reverse' ? `（${t('reverseLookup')}）` : ''}</span>
                   <span className={res.status === 'error' ? 'is-error-text' : ''}>
-                    {res.status === 'error' ? errText(res.code)
+                    {res.status === 'error' ? errText(labelForwardError(res, draft))
                       : <span>{res.realType}{isManual ? `（${t('manualFlag')}）` : ''}</span>}
                   </span>
                   <span>{res.len == null ? '' : res.len}{res.scale ? `,${res.scale}` : ''}</span>
@@ -580,7 +608,9 @@ export default React.memo(({getDraftSource, getSource, onCommit, onClose, presel
         </div>}
         {ddlError
           ? <div className='chiner-forward-empty is-error'>{ddlError}</div>
-          : <CodeHighlight mode='mysql' data={() => ddl || ''}/>}
+          : <CodeHighlight
+            mode={ddlLanguageFor(plan.targetSupportId, draft)}
+            data={() => ddl || ''}/>}
       </div>
     </div>;
   };

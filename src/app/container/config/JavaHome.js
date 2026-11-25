@@ -3,6 +3,7 @@ import { Input, Icon, Button, Modal, FormatMessage } from 'components';
 
 import { openFileOrDirPath, getJavaHome, execFileCmd, getPathStep } from '../../../lib/middle';
 import {getPrefix} from '../../../lib/prefixUtil';
+import {safeOpenExternal} from '../../../lib/safeExternal';
 
 export default React.memo(({ prefix, dataSource, dataChange, config }) => {
   const javaHome = config?.javaHome || dataSource?.profile?.javaHome || getJavaHome();
@@ -60,7 +61,7 @@ export default React.memo(({ prefix, dataSource, dataChange, config }) => {
             <Button onClick={test}>
               <FormatMessage id='button.test'/>
             </Button>
-            <span onClick={() => require('electron').shell.openExternal('https://jingyan.baidu.com/article/6dad5075d1dc40a123e36ea3.html')}>
+            <span onClick={() => safeOpenExternal('https://jingyan.baidu.com/article/6dad5075d1dc40a123e36ea3.html')}>
                <Icon type='icon-xinxi'/>
             </span>
           </span>}

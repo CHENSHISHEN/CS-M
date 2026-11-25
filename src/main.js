@@ -3,6 +3,17 @@ const {app, BrowserWindow, Menu, nativeImage, ipcMain, dialog} = require('electr
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
+
+// 单实例锁：多开会共用 userData/drawing-autosave（自动保存目录与写锁），必须在任何启动副作用
+// （IPC 注册、DrawingPersistence、窗口创建）之前获取。拿不到锁说明已有实例在运行：
+// 已有实例会收到 second-instance 并聚焦主窗口，本实例直接退出。
+// main.js 由 Node CommonJS 包装加载，模块顶层 return 合法（与 bin/start.js 同一做法），
+// 可确保下面注册的 ready/IPC 等逻辑在第二个实例中一行都不执行。
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+  return;
+}
+
 require('@electron/remote/main').initialize();
 
 // AI Host Broker（纯 CommonJS，开发态 src/host/ai、成品经 webpack 复制到 build/host/ai，路径一致）
@@ -12,6 +23,11 @@ const aiIpc = registerAiHostIpc({ipcMain, broker: aiBroker});
 // 只在真正退出时清理（will-quit 不可被绘图关闭守卫取消）；
 // before-quit 可能被 preventDefault 取消退出，若提前 dispose 会导致取消退出后 AI 通道失效
 app.on('will-quit', () => {aiIpc.dispose();});
+
+// 导航守卫：窗口开启了 nodeIntegration，禁止被导航到/弹出远程或本地任意页面（外链交系统浏览器打开），
+// 仅放行同一文档（刷新/hash）与应用自身页面的新窗口（成品经 webpack 复制到 build/lib，路径一致）
+const {installNavigationGuard} = require('./lib/navigationGuard');
+app.on('web-contents-created', (event, contents) => {installNavigationGuard(contents);});
 
 // 保持一个对于 window 对象的全局引用，如果你不这样做，
 // 当 JavaScript 对象被垃圾回收， window 会被自动地关闭
@@ -44,6 +60,10 @@ ipcMain.handle('drawing-persistence', async (event, request) => {
 ipcMain.on('drawing-close-ready', (event, response) => {
   if (win && event.sender === win.webContents) closeRequests.get(response.requestId)?.(response);
 });
+// 关闭对话框的详情:主进程没有 FormatMessage,对需要指明出路的错误码给出简短的中英双语说明,其余原样显示。
+const closeErrorDetail = error => (error === 'PROJECT_FILE_MISSING'
+  ? '工程文件已被删除或移走：绘图编辑仍保存在本机恢复区；可“另存为”、导出恢复副本，或把文件放回原位置后重试。 / The project file was deleted or moved; drawing edits are kept in local recovery. Use Save As, export a recovery copy, or put the file back and retry.'
+  : error || '');
 const requestDrawingClose = async (transition='close') => {
   if (closePending || !win) return;
   closePending = true;
@@ -55,7 +75,7 @@ const requestDrawingClose = async (transition='close') => {
       win.webContents.send('drawing-before-close', requestId);
     });
     if (!result.ok) {
-      const choice = await dialog.showMessageBox(win, {type:'warning',message:result.recoveryAvailable ? '项目未写入，绘图已保存在本机恢复区。 / Drawing retained in local recovery.' : '绘图尚未落盘，放弃会丢失未保存操作。 / Unsaved drawing operations remain.',detail:result.error || '',buttons:['取消 / Cancel',result.recoveryAvailable ? '保留本机恢复副本并关闭 / Keep recovery and close' : '放弃未落盘操作并关闭 / Discard unsaved operations'],defaultId:0,cancelId:0});
+      const choice = await dialog.showMessageBox(win, {type:'warning',message:result.recoveryAvailable ? '项目未写入，绘图已保存在本机恢复区。 / Drawing retained in local recovery.' : '绘图尚未落盘，放弃会丢失未保存操作。 / Unsaved drawing operations remain.',detail:closeErrorDetail(result.error),buttons:['取消 / Cancel',result.recoveryAvailable ? '保留本机恢复副本并关闭 / Keep recovery and close' : '放弃未落盘操作并关闭 / Discard unsaved operations'],defaultId:0,cancelId:0});
       if (choice.response !== 1) {quitRequested = false;return;}
     }
     if (result.legacyDirty) {
@@ -80,8 +100,8 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1220,
     height: 600,
-    minWidth: 300,
-    minHeight: 100,
+    minWidth: 1024,
+    minHeight: 600,
     frame: false,
     resizable: false,
     show: false,
@@ -246,6 +266,22 @@ function createWindow() {
 // 创建浏览器窗口时，调用这个函数。
 // 部分 API 在 ready 事件触发后才能使用。
 app.on('ready', createWindow);
+
+// 第二个实例启动时（已被上方单实例锁拦下）：恢复并聚焦已有窗口，优先主窗口。
+// 本应用没有从命令行参数打开工程文件的机制，commandLine 不做处理。
+app.on('second-instance', () => {
+  const target = (win && !win.isDestroyed()) ? win : (BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]);
+  if (target) {
+    // 尚未显示的窗口(仍在加载)不抢先聚焦/显示:ready-to-show 会负责显示它。
+    // 最小化的窗口在 macOS 上 isVisible() 为 false,仍需恢复。
+    if (!target.isVisible() && !target.isMinimized()) return;
+    if (target.isMinimized()) target.restore();
+    target.focus();
+  } else if (win === null && app.isReady() && !quitRequested) {
+    // 与 activate 一致：主窗口已关闭（macOS 不随窗口全关退出）时重新创建
+    createWindow();
+  }
+});
 
 // 当全部窗口关闭时退出。
 app.on('window-all-closed', () => {

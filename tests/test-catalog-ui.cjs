@@ -19,6 +19,10 @@ const compile = relativePath => babel.transformFileSync(path.join(root, relative
 
 const catalog = {};
 vm.runInNewContext(compile('src/lib/model_catalog.js'), {exports: catalog});
+const conceptLinks = {};
+vm.runInNewContext(compile('src/lib/concept_logical_links.js'), {exports: conceptLinks});
+const catalogMenu = {};
+vm.runInNewContext(compile('src/lib/model_catalog_menu.js'), {exports: catalogMenu});
 
 let source;
 let state;
@@ -29,6 +33,8 @@ let errors;
 let confirmation;
 let closed;
 let serial = 0;
+// 组件 hook 顺序: selected=0, expanded=1, paletteOpen=2, menu=3(v0.5.0 新增 paletteOpen 后 menu 下移)
+const MENU_HOOK = 3;
 
 const FormatMessage = () => null;
 FormatMessage.string = ({id}) => id;
@@ -76,6 +82,10 @@ const context = {
     if (name === 'components') return components;
     if (name.endsWith('datasource_util')) return factories;
     if (name.endsWith('model_catalog')) return catalog;
+    if (name.endsWith('concept_logical_links')) return conceptLinks;
+    if (name.endsWith('model_catalog_menu')) return catalogMenu;
+    // 指标删除影响组件与目录行为无关,用最小桩(只读窄组件,不渲染)
+    if (name.endsWith('metrics/deleteImpact')) return {summarizeMetricDeleteImpact: () => null, MetricDeleteImpactBody: () => null};
     throw new Error(`Unexpected component dependency: ${name}`);
   },
   Math: Object.assign(Object.create(Math), {uuid: () => `generated-${++serial}`}),
@@ -109,10 +119,10 @@ const reset = () => {
   closed = false;
   form = null;
 };
-const menu = (selected, readOnly = false) => {
+const render = (selected, readOnly = false) => {
   hookIndex = 0;
   state[0] = selected;
-  state[2] = null;
+  state[MENU_HOOK] = null;
   const ref = {};
   Component({
     source,
@@ -122,8 +132,11 @@ const menu = (selected, readOnly = false) => {
     onDrag: () => {},
     readOnly,
   }, ref);
-  ref.create();
-  return state[2]?.items || [];
+  return ref;
+};
+const menu = (selected, readOnly = false) => {
+  render(selected, readOnly).create();
+  return state[MENU_HOOK]?.items || [];
 };
 const elements = (node) => {
   if (!node) return [];
@@ -162,8 +175,11 @@ test('对象类型视图的无分类模型级别节点提供实体和图新建',
   assert.equal(source.conceptEntities[0].type, 'C');
   assert.equal(source.logicEntities.length, 0);
 });
-test('分类菜单保留三类实体、三类图、多表透视和字典共八个创建入口', () => {
-  assert.equal(creates(categoryNode).length, 8);
+test('分类菜单提供逻辑/物理实体、逻辑/物理图、多表透视和字典共六个创建入口(概念对象已提升至概念模型节点)', () => {
+  const names = creates(categoryNode).map(item => item.name);
+  assert.equal(names.length, 6);
+  // 概念实体/概念关系图不应再出现在分类菜单(S3:概念对象在概念模型根节点创建)
+  assert(!names.some(name => /conceptEntity|conceptual/.test(name)), names.join('|'));
 });
 test('其他资源节点提供多表透视和字典创建入口', () => {
   assert.equal(creates({kind: 'other', categoryId: 'cat'}).length, 2);
@@ -270,9 +286,54 @@ test('新建分类后所属分层自动展开', () => {
   assert(state[1].has('ods'));
 });
 test('只读状态禁止打开创建菜单', () => {
+  // 先确认 MENU_HOOK 槽位正确:可写时根节点能打开非空菜单(hook 顺序漂移时这里失败,
+  // 避免下面的只读断言因读错槽位而空洞通过)
+  assert.ok(menu({kind: 'root'}).length > 0, `MENU_HOOK=${MENU_HOOK} 不是菜单 state 槽位`);
   assert.equal(menu({kind: 'root'}, true).length, 0);
-  assert.equal(state[2], null);
+  assert.equal(state[MENU_HOOK], null);
   assert.equal(form, null);
+});
+test('UX-02:root 选中时"+"给出 概念实体/数仓分层/数据库 三项总菜单', () => {
+  const items = menu({kind: 'root'});
+  assert.deepEqual([...items.map(item => item.key)],
+    ['create:conceptEntity:conceptual', 'newLayer', 'newDatabase']);
+  assert.deepEqual([...items.map(item => item.name)], [
+    'modelCatalog.create modelCatalog.conceptEntity', 'modelCatalog.newLayer', 'modelCatalog.newDatabase',
+  ]);
+});
+test('UX-02:root 的新建概念实体与企业概念模型节点同源(企业全局,无分类字段,展开概念集合)', () => {
+  const fromConcept = menu({kind: 'conceptModel', id: 'concept-model', global: true})[0];
+  const fromRoot = menu({kind: 'root'})[0];
+  assert.equal(fromRoot.key, fromConcept.key);
+  assert.equal(fromRoot.name, fromConcept.name);
+  fromRoot.run();
+  assert.equal(elements(form).some(item => item.props?.['aria-label'] === 'modelCatalog.categoryId'), false);
+  input('code', 'CUSTOMER');
+  submit();
+  assert.equal(errors.length, 0);
+  assert.equal(source.conceptEntities[0].defKey, 'CUSTOMER');
+  assert.equal(source.conceptEntities[0].type, 'C');
+  assert.equal(catalog.categoryObjects(source, 'cat').conceptEntity.length, 0);
+  assert(state[1].has('concept-model') && state[1].has('global:conceptual:conceptEntity'));
+});
+test('UX-02:root 新建数据库沿用既有表单(无有效 DDL 类型时给出既有提示)', () => {
+  menu({kind: 'root'}).find(item => item.key === 'newDatabase').run();
+  assert.deepEqual(errors.map(e => e.title), ['modelCatalog.noDdlSupport']);
+});
+test('UX-02:引导入口 runRootCreate / createLogicEntity 走既有创建流程,只读不执行', () => {
+  render({kind: 'root'}, true).runRootCreate('create:conceptEntity:conceptual');
+  render({kind: 'root'}, true).createLogicEntity();
+  assert.equal(form, null);
+  render({kind: 'root'}).runRootCreate('create:conceptEntity:conceptual');
+  input('code', 'ORDER');
+  submit();
+  assert.equal(source.conceptEntities[0].defKey, 'ORDER');
+  render({kind: 'root'}).createLogicEntity();
+  input('code', 'L_ORDER');
+  submit();
+  assert.equal(errors.length, 0);
+  assert.equal(source.logicEntities[0].defKey, 'L_ORDER');
+  assert.equal(source.logicEntities[0].type, 'L');
 });
 
 console.log(`\n${passed} catalog UI hook tests passed.`);

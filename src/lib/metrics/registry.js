@@ -4,9 +4,10 @@
 // 注：构建链不识别 ??，使用 == null 三元。
 
 import {metricError, missingFieldError} from './errors';
-import {hashValue, newMetricId} from './hash';
+import {contentHash, hashValue, newMetricId} from './hash';
+import {frozenClone} from './freeze';
 import {
-  draftEtag, ensureNamespace, isStoreWritable, readMetricPlatform, writeMetricPlatform,
+  draftEtag, ensureNamespace, readMetricPlatform, storeWriteErrors, writeMetricPlatform,
 } from './store';
 import {
   atomicReAggregable, compoundReAggregable, dependencyCycleError, findDependencyCycle, metricDependencies,
@@ -14,6 +15,8 @@ import {
 import {astRefKeys, deriveAstUnit, parseExpression} from './ast';
 import {METRIC_KINDS, validateScope, validateSpecStructure} from './validate';
 import {isWindowCompatible} from './window';
+// MET-04：发布前字典一致性（dictionary.js 不依赖 registry，无循环引用）
+import {validateSpecAgainstDictionary} from './dictionary';
 // M3B：继承口径完整性检查使用部门白名单 patch 应用器（patch.js 无仓储依赖，无循环引用）
 import {applyDepartmentPatch} from './patch';
 
@@ -38,6 +41,9 @@ const definitionRevisions = (data, definitionId) =>
   (data.revisions || []).filter(item => item.definitionId === definitionId);
 const activeDraft = (data, definitionId) =>
   definitionRevisions(data, definitionId).filter(item => item.status === DRAFT)[0] || null;
+// 曾经发布过：存在任一非草案版本（已发布或已废弃）。整体废弃后没有 PUBLISHED，但仍算发布过
+const everPublishedDefinition = (data, definitionId) =>
+  definitionRevisions(data, definitionId).some(item => item.status !== DRAFT);
 const versionOrder = (version) => {
   const parts = String(version == null ? '0.0' : version).split('.');
   return Number(parts[0]) * 100000 + Number(parts[1] || 0);
@@ -47,13 +53,40 @@ const latestPublished = (data, definitionId) =>
     .filter(item => item.status === PUBLISHED)
     .sort((a, b) => (versionOrder(a.version) < versionOrder(b.version) ? 1 : -1))[0] || null;
 
-const storeGuard = (data) => {
-  if (!isStoreWritable(data)) {
-    return [error('SCHEMA_VERSION_UNSUPPORTED', 'profile.metricPlatform.schemaVersion',
-      'metric.error.schemaUnsupported', 'metric platform schema version unsupported')];
-  }
-  return [];
+// 下一个版本号：取该定义下所有修订（含已废弃）中 1.<n> 的最大 n + 1；
+// 非 1.<n> 形式/空版本忽略；无任何已编号修订时从 1.0 起（不按已发布数量计，避免废弃后回收旧号）
+const nextVersion = (data, definitionId) => {
+  let max = -1;
+  definitionRevisions(data, definitionId).forEach((item) => {
+    const match = /^1\.(\d+)$/.exec(String(item.version == null ? '' : item.version));
+    if (match != null && Number(match[1]) > max) max = Number(match[1]);
+  });
+  return `1.${max + 1}`;
 };
+
+// 定义已整体废弃：没有任何已发布修订，且存在已废弃修订（单个旧版本被废弃不算）。
+// 废弃是派生状态（不存标记）：基于已废弃版本的修订发布后出现已发布修订，定义级废弃自动解除（决策 D2）
+const definitionDeprecatedIn = (data, definitionId) => {
+  const revisions = definitionRevisions(data, definitionId);
+  return revisions.some(item => item.status === DEPRECATED)
+    && !revisions.some(item => item.status === PUBLISHED);
+};
+
+export const isDefinitionDeprecated = (source, definitionId) =>
+  definitionDeprecatedIn(readMetricPlatform(source), definitionId);
+
+// 校验/发布共用：已废弃定义的遗留草案返回 DEFINITION_DEPRECATED，否则空数组。
+// 定义已废弃后基于已废弃版本新建的修订草案（revivesDeprecated）不是遗留草案，放行（决策 D2）
+const deprecatedDefinitionErrors = (data, revision) => {
+  if (revision.revivesDeprecated === true) return [];
+  if (!definitionDeprecatedIn(data, revision.definitionId)) return [];
+  return [error('DEFINITION_DEPRECATED', 'definitionId',
+    'metric.error.definitionDeprecated',
+    `definition ${revision.definitionId} is deprecated, cannot publish`, {id: revision.definitionId})];
+};
+
+// 写前守卫统一走 store.storeWriteErrors（STORE_CORRUPT / SCHEMA_VERSION_UNSUPPORTED）
+const storeGuard = data => storeWriteErrors(data);
 
 // 并发前置校验：rev 与 etag 任一不匹配即冲突，不发生后写覆盖
 const preconditionErrors = (revision, options) => {
@@ -119,7 +152,8 @@ export const listMetricDefinitions = (source, filter) => {
       }
       return true;
     })
-    .map(definition => ({
+    // 返回深拷贝（MET-22）：调用方修改返回值不得改写存储内定义/修订
+    .map(definition => cloneJson({
       definition,
       publishedCount: definitionRevisions(data, definition.id)
         .filter(item => item.status === PUBLISHED).length,
@@ -132,15 +166,28 @@ export const getMetricDefinition = (source, definitionId) => {
   const data = readMetricPlatform(source);
   const definition = findDefinition(data, definitionId);
   if (definition == null) return null;
-  return {
+  return cloneJson({
     definition,
     revisions: definitionRevisions(data, definitionId),
     latestPublished: latestPublished(data, definitionId),
     draft: activeDraft(data, definitionId),
-  };
+  });
 };
 
-export const getMetricRevision = (source, revisionId) => findRevision(readMetricPlatform(source), revisionId);
+// 深冻结拷贝返回（MET-22 / MET-03 余项）：返回对象不可改（严格模式赋值抛 TypeError），
+// 也与存储隔离；已发布快照与 hash 不会被读取方悄悄改写。需要可编辑副本时调用方自行深拷贝
+export const getMetricRevision = (source, revisionId) =>
+  frozenClone(findRevision(readMetricPlatform(source), revisionId));
+
+// 修订列表（存储顺序），可选 filter {definitionId, status}；返回深冻结拷贝（数组本身也冻结）
+export const listMetricRevisions = (source, filter) => {
+  const f = filter == null ? {} : filter;
+  return frozenClone((readMetricPlatform(source).revisions || []).filter((item) => {
+    if (f.definitionId != null && item.definitionId !== f.definitionId) return false;
+    if (f.status != null && item.status !== f.status) return false;
+    return true;
+  }));
+};
 
 export const getMetricDependencies = (source, revisionId) =>
   metricDependencies(readMetricPlatform(source), revisionId);
@@ -253,7 +300,11 @@ const validateCompoundSemantics = (data, definition, spec, errors) => {
   try {
     ast = parseExpression(spec.expression, 'spec.expression');
   } catch (parseError) {
-    errors.push(parseError);
+    // 非结构化异常（无 code）统一包装为 INVALID_VALUE，errors[] 只含结构化错误
+    errors.push(parseError != null && typeof parseError.code === 'string'
+      ? parseError
+      : error('INVALID_VALUE', 'spec.expression', 'metric.error.invalidExpression',
+        `expression could not be parsed: ${parseError != null && parseError.message ? parseError.message : String(parseError)}`));
     return null;
   }
   const declaredKeys = (spec.refs || []).map(ref => ref.key);
@@ -347,6 +398,8 @@ const validateRevisionForPublish = (source, data, revision) => {
   }
   const spec = revision.spec;
   validateSpecStructure(spec, 'spec').forEach(item => errors.push(item));
+  // MET-04：spec 与语义字典一致性（单位/维度/部门存在且未停用、限定值类型符合维度声明）
+  validateSpecAgainstDictionary(data, spec, definition.scope).forEach(item => errors.push(item));
   if (revision.baseline != null && revision.baseline.baseRevisionId != null) {
     const base = checkReferenceStatus(data, revision.baseline.baseRevisionId,
       'baseline.baseRevisionId', errors);
@@ -539,10 +592,16 @@ export const createRevisionDraft = (source, definitionId, options) => {
   }
   const base = opts.baseRevisionId == null
     ? latestPublished(data, definitionId) : findRevision(data, opts.baseRevisionId);
-  if (base == null || base.status !== PUBLISHED) {
+  // 决策 D2：显式 baseRevisionId 可指向本定义的已废弃版本（废弃后的恢复路径，无 reactivate API）；
+  // 默认基准仍为最新已发布版本
+  const baseUsable = base != null && (base.status === PUBLISHED
+    || (opts.baseRevisionId != null && base.status === DEPRECATED && base.definitionId === definitionId));
+  if (!baseUsable) {
     return {ok: false, errors: [error('UNPUBLISHED_REFERENCE', 'baseRevisionId',
-      'metric.error.unpublishedReference', 'base revision must be a published revision')]};
+      'metric.error.unpublishedReference', 'base revision must be a published (or deprecated) revision of this definition')]};
   }
+  // 定义已整体废弃时新建的修订：发布即解除定义级废弃，不受遗留草案的 DEFINITION_DEPRECATED 拦截
+  const revives = base.definitionId === definitionId && definitionDeprecatedIn(data, definitionId);
   const revision = {
     id: opts.revisionId || newMetricId('mrev'),
     definitionId,
@@ -558,6 +617,10 @@ export const createRevisionDraft = (source, definitionId, options) => {
     // baseline/patch 与已发布版本隔离副本（R1）：旧发布对象不被新草案引用悄悄改变
     ...(base.baseline == null ? {} : {baseline: cloneJson(base.baseline)}),
     ...(base.patch == null ? {} : {patch: cloneJson(base.patch)}),
+    // 显式分叉的定义继续修订时保留分叉标记与原因（MET-02），否则核心语义编辑会被拒绝
+    ...(base.fork === true ? {fork: true} : {}),
+    ...(base.forkNote == null || base.forkNote === '' ? {} : {forkNote: base.forkNote}),
+    ...(revives ? {revivesDeprecated: true} : {}),
   };
   revision.etag = draftEtag(revision);
   const next = {...data, revisions: data.revisions.concat([revision])};
@@ -582,10 +645,8 @@ export const updateMetricDraft = (source, revisionId, patch, options) => {
   if (conflict.length) return {ok: false, errors: conflict};
   const next = patch == null ? {} : patch;
   if (next.spec !== undefined && next.spec.kind !== revision.spec.kind) {
-    // 三类型切换只允许发生在尚无任何发布版本的新草案上（SPEC 9.2）
-    const hasPublished = definitionRevisions(data, revision.definitionId)
-      .some(item => item.status === PUBLISHED);
-    if (hasPublished) {
+    // 三类型切换只允许发生在从未发布过的新草案上（SPEC 9.2）；整体废弃后的复活草案也算发布过
+    if (everPublishedDefinition(data, revision.definitionId)) {
       return {ok: false, errors: [error('INVALID_VALUE', 'spec.kind', 'metric.error.invalidValue',
         'published-type change requires a new definition (kind switch not allowed)')]};
     }
@@ -655,6 +716,9 @@ export const validateMetricDraft = (source, revisionId, options) => {
     return {ok: false, errors: [error('UNKNOWN_REFERENCE', 'revisionId', 'metric.error.unknownReference',
       `revision does not exist: ${revisionId}`)]};
   }
+  // 与发布一致：已废弃定义的遗留草案校验即失败，不能「校验通过、发布被拒」
+  const deprecated = deprecatedDefinitionErrors(data, revision);
+  if (deprecated.length) return {ok: false, errors: deprecated};
   const conflict = preconditionErrors(revision, options);
   if (conflict.length) return {ok: false, errors: conflict};
   const result = validateRevisionForPublish(source, data, revision);
@@ -676,15 +740,15 @@ export const publishMetricRevision = (source, revisionId, options) => {
     return {ok: false, errors: [error('IMMUTABLE_PUBLISHED', 'revisionId', 'metric.error.immutable',
       `revision ${revisionId} is already ${revision.status}`)]};
   }
+  // 已废弃的定义不可再发布遗留草案（防绕过废弃）
+  const deprecated = deprecatedDefinitionErrors(data, revision);
+  if (deprecated.length) return {ok: false, errors: deprecated};
   const conflict = preconditionErrors(revision, options);
   if (conflict.length) return {ok: false, errors: conflict};
   const result = validateRevisionForPublish(source, data, revision);
   if (result.errors.length) return {ok: false, errors: result.errors};
   const semantic = result.semantic;
-  const definition = findDefinition(data, revision.definitionId);
-  const publishedCount = definitionRevisions(data, revision.definitionId)
-    .filter(item => item.status === PUBLISHED).length;
-  const version = `1.${publishedCount}`;
+  const version = nextVersion(data, revision.definitionId);
   const specSnapshot = cloneJson(revision.spec); // 发布快照与旧草案/表单/patch 引用隔离（R1）
   const resolvedSpec = {
     kind: revision.spec.kind,
@@ -710,7 +774,7 @@ export const publishMetricRevision = (source, revisionId, options) => {
     status: PUBLISHED,
     spec: specSnapshot,
     resolvedSpec,
-    hash: hashValue({spec: specSnapshot, resolvedSpec}),
+    hash: contentHash({spec: specSnapshot, resolvedSpec}),
     publishedAt: (options == null ? null : options.publishedAt) || null,
   };
   const revisions = data.revisions.map(item => (item.id === revisionId ? published : item));
@@ -742,4 +806,69 @@ export const deprecateMetricDefinition = (source, definitionId) => {
       'definition has no published revision to deprecate')]};
   }
   return {ok: true, source: writeMetricPlatform(source, {...data, revisions})};
+};
+
+// ---- 丢弃草案（MET-14）：仅删除活动草案；从未发布过的定义连同定义一并删除（释放 code）。
+// 已发布/已废弃版本不动；并发以草案 id（expectedRevisionId）+ rev/etag 前置校验（同 updateMetricDraft）。
+// 指向被删草案/定义的关联记录一并移除，不留悬挂引用（auditMetricStore 的 DANGLING_REFERENCE）。
+// 丢弃会删除的版本：发布过只删草案；从未发布则删除该定义全部版本
+const discardRemovedRevision = (data, definitionId, draft) => {
+  const removedRevisionIds = everPublishedDefinition(data, definitionId)
+    ? [draft.id]
+    : definitionRevisions(data, definitionId).map(item => item.id);
+  return id => removedRevisionIds.indexOf(id) >= 0;
+};
+// 丢弃会级联移除的关联：指向被删版本；从未发布时还包括指向该定义的任何关联
+const discardRemovesBinding = (data, definitionId, removed, binding) =>
+  removed(binding.metricRevisionId)
+  || (!everPublishedDefinition(data, definitionId) && binding.metricDefinitionId === definitionId);
+
+// 丢弃确认框用：丢弃当前活动草案将级联移除的关联条数（与 discardMetricDraft 同一判定；无草案/定义 → 0）
+export const countDiscardDraftBindings = (source, definitionId) => {
+  const data = readMetricPlatform(source);
+  const draft = activeDraft(data, definitionId);
+  if (findDefinition(data, definitionId) == null || draft == null || !Array.isArray(data.bindings)) return 0;
+  const removed = discardRemovedRevision(data, definitionId, draft);
+  return data.bindings.filter(binding => binding != null
+    && discardRemovesBinding(data, definitionId, removed, binding)).length;
+};
+
+export const discardMetricDraft = (source, definitionId, options) => {
+  const data = readMetricPlatform(source);
+  const guard = storeGuard(data);
+  if (guard.length) return {ok: false, errors: guard};
+  if (findDefinition(data, definitionId) == null) {
+    return {ok: false, errors: [error('UNKNOWN_REFERENCE', 'definitionId', 'metric.error.unknownReference',
+      `definition does not exist: ${definitionId}`)]};
+  }
+  const draft = activeDraft(data, definitionId);
+  if (draft == null) {
+    return {ok: false, errors: [error('INVALID_VALUE', 'definitionId', 'metric.error.invalidValue',
+      'definition has no active draft to discard')]};
+  }
+  // 防 ABA：草案按定义查找，新草案 rev 总从 1 起；调用方持有的草案 id 与当前活动草案不同
+  // （原草案已被丢弃/发布，后又新建同号草案）即并发冲突，不误删后建的草案
+  const opts = options == null ? {} : options;
+  if (opts.expectedRevisionId != null && opts.expectedRevisionId !== draft.id) {
+    return {ok: false, errors: [error('REVISION_CONFLICT', 'revisionId', 'metric.error.revisionConflict',
+      `active draft is ${draft.id}, expected ${opts.expectedRevisionId}`,
+      {actual: draft.id, expected: opts.expectedRevisionId})]};
+  }
+  const conflict = preconditionErrors(draft, options);
+  if (conflict.length) return {ok: false, errors: conflict};
+  const everPublished = everPublishedDefinition(data, definitionId);
+  const removed = discardRemovedRevision(data, definitionId, draft);
+  const next = {
+    ...data,
+    revisions: data.revisions.filter(item => !removed(item.id)),
+    ...(everPublished ? {} : {definitions: data.definitions.filter(item => item.id !== definitionId)}),
+  };
+  if (Array.isArray(data.bindings)) {
+    next.bindings = data.bindings.filter(binding => !discardRemovesBinding(data, definitionId, removed, binding));
+  }
+  return {
+    ok: true,
+    source: writeMetricPlatform(source, next),
+    definitionRemoved: !everPublished,
+  };
 };

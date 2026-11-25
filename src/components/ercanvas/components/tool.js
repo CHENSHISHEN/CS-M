@@ -9,6 +9,7 @@ import LinkEditor from '../LinkEditor';
 import { prefix } from '../../../../profile';
 import Svg from './svg';
 import {calcNodeData, getPresetColors} from '../../../lib/datasource_util';
+import {sanitizeHtml} from '../../../lib/safeHtml';
 
 const ToolItem = ToolsView.ToolItem;
 
@@ -100,7 +101,7 @@ class ShowSizeTool extends ToolItem {
     sizeDom.style.left = `${x}px`;
     sizeDom.style.top = `${y + 10 + size.height * zoom}px`;
     sizeDom.style.width = `${size.width * zoom}px`;
-    sizeDom.innerHTML = `<span>${Math.floor(size.width * zoom)} * ${Math.floor(size.height * zoom)}</span>`;
+    sizeDom.innerHTML = sanitizeHtml(`<span>${Math.floor(size.width * zoom)} * ${Math.floor(size.height * zoom)}</span>`);
     this.container.appendChild(sizeDom);
     this.init();
     return this;

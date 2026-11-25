@@ -63,9 +63,9 @@ const MetricsWorkbench = React.forwardRef(({source, getDataSource, updateDataSou
     department: (store.definitions || [])
       .filter(d => d.scope && d.scope.kind === 'department').length,
     versions: (store.revisions || []).length,
-    bindings: (store.bindings || [])
-      .filter(b => b.state !== 'released').length,
-  }), [store]);
+    // 只计生效/建议绑定：released 属历史，unresolved 已失效（MET-12）
+    bindings: metricApi.countActiveMetricBindings(source),
+  }), [store, source]);
 
   // 活动页脏上报（M3B 泛化）：定义/字典/部门建立表单都经同一 onDirtyChange 写入
   // dirtyRef；同一时刻只有当前挂载页在报告，切页即卸载、不再重复上报

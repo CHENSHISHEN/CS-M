@@ -1,18 +1,32 @@
-import React, {useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {FormatMessage, Message, Modal} from 'components';
 import {metricApi, runMetricCommand} from './commands';
 import {renderErrorList, renderKindBadge, renderScopeBadge, renderStatusBadge} from './parts';
+import {shortHashLabel} from '../../lib/metrics/hash';
 
 // 指标平台 M3B：版本与变更页（替换 PendingPage）。
 // - 全部定义的真实版本记录（草案/已发布/已废弃），来源标注（新定义/修订/部门基线/升级/分叉）；
 // - 已发布历史 hash 只读展示（发布时固化，不可变）；
-// - 从版本修订 = createRevisionDraft（新草案，不改动旧版本）；废弃为定义级，确认时给出
-//   下游引用影响提示（listRevisionDependents，含部门基线/复合操作数/派生原子基）；
+// - 从版本修订 = createRevisionDraft（新草案，不改动旧版本）；已废弃版本也可修订（决策 D2：
+//   修订发布后定义级废弃自动解除）；废弃为定义级，确认时列出该定义全部版本的下游引用
+//   （listDefinitionDependents，含部门基线/复合操作数/派生原子基）；
 // - 本页不渲染假数据、不做服务端审批；本地确认发布不等于审核通过。
 
 const STATUS_FILTERS = ['all', 'draft', 'published', 'deprecated'];
 
-const shortHash = hash => (hash == null ? '—' : String(hash).slice(0, 12));
+// 审计 issue 码（auditMetricStore）；未知码回落到 other 文案
+const AUDIT_CODES = ['HASH_MISMATCH', 'LEGACY_HASH', 'DUPLICATE_VERSION', 'DANGLING_REFERENCE',
+  'STORE_CORRUPT'];
+
+// STORE_CORRUPT 按 reason 区分：元素级（invalid-element）仍可写、下次保存时损坏元素被移除；
+// 集合/根级（not-array/not-object，或无 reason）按空读取且存储只读
+const auditCodeLabelKey = (issue) => {
+  if (AUDIT_CODES.indexOf(issue.code) < 0) return 'metrics.versions.audit.code.other';
+  if (issue.code === 'STORE_CORRUPT' && issue.reason === 'invalid-element') {
+    return 'metrics.versions.audit.code.STORE_CORRUPT_ELEMENT';
+  }
+  return `metrics.versions.audit.code.${issue.code}`;
+};
 
 // M5B 引用角色业务化：英文枚举 → 中文角色（原始码留 title 次级信息）
 const ROLE_LABEL_KEYS = {
@@ -26,6 +40,11 @@ const VersionsPage = ({source, commandRunner, readOnly, onOpenDefinition}) => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [commandErrors, setCommandErrors] = useState([]);
   const [refsFor, setRefsFor] = useState(null); // {revisionId, code, version}
+  const [auditReport, setAuditReport] = useState(null); // {ok, issues} | null（未检查）
+  // 检查结果是点击时快照：数据变化后作废，避免继续显示过期的"未发现问题"
+  useEffect(() => {
+    setAuditReport(null);
+  }, [source]);
 
   const definitionById = useMemo(() => {
     const map = {};
@@ -66,7 +85,8 @@ const VersionsPage = ({source, commandRunner, readOnly, onOpenDefinition}) => {
   const reviseFrom = (row) => {
     Modal.confirm({
       title: FormatMessage.string({id: 'metrics.versions.revise'}),
-      message: FormatMessage.string({id: 'metrics.publish.message'}),
+      message: FormatMessage.string({id: row.revision.status === 'deprecated'
+        ? 'metrics.versions.reviseDeprecatedConfirm' : 'metrics.versions.reviseConfirm'}),
       onOk: () => {
         runVersion(latest => metricApi.createRevisionDraft(latest,
           row.definition.id, {baseRevisionId: row.revision.id}), (result) => {
@@ -77,16 +97,43 @@ const VersionsPage = ({source, commandRunner, readOnly, onOpenDefinition}) => {
     });
   };
 
+  // 废弃是定义级：确认框汇总该定义全部版本的下游引用并逐条列出（而非只看当前行版本）
   const deprecate = (row) => {
-    const dependents = metricApi.listRevisionDependents(source, row.revision.id);
+    const dependents = metricApi.listDefinitionDependents(source, row.definition.id);
+    const draftLabel = FormatMessage.string({id: 'metrics.status.draft'});
     Modal.confirm({
       title: FormatMessage.string({id: 'metrics.versions.deprecateTitle'}),
-      message: FormatMessage.string({id: 'metrics.versions.deprecateMessage',
-        data: {count: dependents.length}}),
+      message: <div data-testid='metrics-version-deprecate-confirm'>
+        <p>{FormatMessage.string({id: 'metrics.versions.deprecateMessage',
+          data: {count: dependents.length}})}</p>
+        {dependents.length > 0 && <ul className='chiner-metrics-deplist'>
+          {dependents.map(dep => <li key={dep.revisionId}>
+            {FormatMessage.string({
+              id: 'metrics.versions.deprecateDependent',
+              data: {
+                name: dep.definitionName,
+                code: dep.definitionCode,
+                version: dep.version ? `v${dep.version}` : draftLabel,
+                targets: dep.targetVersions.map(v => (v ? `v${v}` : draftLabel)).join(', '),
+              },
+            })}
+          </li>)}
+        </ul>}
+      </div>,
       onOk: () => {
         runVersion(latest => metricApi.deprecateMetricDefinition(latest, row.definition.id));
       },
     });
+  };
+
+  // 完整性检查：只读，损坏存储不抛错（auditMetricStore 以 STORE_CORRUPT 诊断返回）
+  const runAudit = () => {
+    try {
+      setAuditReport(metricApi.auditMetricStore(source));
+    } catch (error) {
+      setAuditReport({ok: false,
+        issues: [{code: 'STORE_CORRUPT', path: String(error && error.message ? error.message : error)}]});
+    }
   };
 
   const refsList = refsFor == null ? []
@@ -95,18 +142,18 @@ const VersionsPage = ({source, commandRunner, readOnly, onOpenDefinition}) => {
   const sourceLabel = (revision) => {
     if (revision.upgradedFromRevisionId != null) {
       const from = metricApi.getMetricRevision(source, revision.upgradedFromRevisionId);
-      return FormatMessage.string({id: 'metrics.versions.sourceUpgrade'},
-        {version: from && from.version ? `v${from.version}` : '—'});
+      return FormatMessage.string({id: 'metrics.versions.sourceUpgrade',
+        data: {version: from && from.version ? `v${from.version}` : '—'}});
     }
     if (revision.baseline != null) {
       const base = metricApi.getMetricRevision(source, revision.baseline.baseRevisionId);
-      return FormatMessage.string({id: 'metrics.versions.sourceBaseline'},
-        {version: base && base.version ? `v${base.version}` : '—'});
+      return FormatMessage.string({id: 'metrics.versions.sourceBaseline',
+        data: {version: base && base.version ? `v${base.version}` : '—'}});
     }
     if (revision.baseRevisionId != null) {
       const base = metricApi.getMetricRevision(source, revision.baseRevisionId);
-      return FormatMessage.string({id: 'metrics.versions.sourceRevise'},
-        {version: base && base.version ? `v${base.version}` : '—'});
+      return FormatMessage.string({id: 'metrics.versions.sourceRevise',
+        data: {version: base && base.version ? `v${base.version}` : '—'}});
     }
     if (revision.fork === true || revision.forkNote != null) {
       return FormatMessage.string({id: 'metrics.versions.sourceFork'});
@@ -123,7 +170,46 @@ const VersionsPage = ({source, commandRunner, readOnly, onOpenDefinition}) => {
         </h2>
         <p className='chiner-metrics-page-sub'><FormatMessage id='metrics.versions.subtitle'/></p>
       </div>
+      <button
+        type='button'
+        className='chiner-metrics-btn'
+        data-testid='metrics-versions-audit'
+        onClick={runAudit}
+      >
+        <FormatMessage id='metrics.versions.audit.button'/>
+      </button>
     </header>
+
+    {auditReport != null && <div className='chiner-metrics-side-card' data-testid='metrics-versions-audit-result'>
+      <h3><FormatMessage id='metrics.versions.audit.title'/></h3>
+      {auditReport.issues.length === 0 ? <p className='chiner-metrics-muted'
+        data-testid='metrics-versions-audit-clean'>
+        <FormatMessage id='metrics.versions.audit.clean'/>
+      </p> : <>
+        <p><FormatMessage id='metrics.versions.audit.count' data={{count: auditReport.issues.length}}/></p>
+        <ul className='chiner-metrics-deplist'>
+          {auditReport.issues.map((issue, index) => <li
+            key={`${issue.code}-${issue.path}-${index}`}
+            data-testid='metrics-versions-audit-issue'
+            data-code={issue.code}>
+            <span className='chiner-metrics-tag chiner-metrics-tag-warn'>{issue.code}</span>
+            <span>
+              <FormatMessage id={auditCodeLabelKey(issue)}/>
+            </span>
+            <code className='chiner-metrics-mono'>{issue.path}</code>
+          </li>)}
+        </ul>
+      </>}
+      <p className='chiner-metrics-table-note'><FormatMessage id='metrics.versions.audit.note'/></p>
+      <button
+        type='button'
+        className='chiner-metrics-btn chiner-metrics-btn-ghost'
+        data-testid='metrics-versions-audit-close'
+        onClick={() => setAuditReport(null)}
+      >
+        <FormatMessage id='metrics.versions.audit.close'/>
+      </button>
+    </div>}
     <div className='chiner-metrics-catalog-filters'>
       <input
         className='chiner-metrics-search'
@@ -190,32 +276,30 @@ const VersionsPage = ({source, commandRunner, readOnly, onOpenDefinition}) => {
             <td><code className='chiner-metrics-mono'
               title={FormatMessage.string({id: 'metrics.versions.hashImmutable'})}
               data-testid='metrics-versions-hash'>
-              {shortHash(row.revision.hash)}
+              {shortHashLabel(row.revision.hash)}
             </code></td>
             <td>{row.revision.publishedAt || '—'}</td>
             <td><span className='chiner-metrics-muted'>{sourceLabel(row.revision)}</span></td>
             <td>
               <div className='chiner-metrics-cell-actions'>
-                {row.revision.status === 'published' && <>
-                  <button
-                    type='button'
-                    className='chiner-metrics-btn'
-                    data-testid='metrics-version-revise'
-                    disabled={readOnly}
-                    onClick={() => reviseFrom(row)}
-                  >
-                    <FormatMessage id='metrics.versions.revise'/>
-                  </button>
-                  <button
-                    type='button'
-                    className='chiner-metrics-btn chiner-metrics-btn-danger'
-                    data-testid='metrics-version-deprecate'
-                    disabled={readOnly}
-                    onClick={() => deprecate(row)}
-                  >
-                    <FormatMessage id='metrics.versions.deprecate'/>
-                  </button>
-                </>}
+                {(row.revision.status === 'published' || row.revision.status === 'deprecated') && <button
+                  type='button'
+                  className='chiner-metrics-btn'
+                  data-testid='metrics-version-revise'
+                  disabled={readOnly}
+                  onClick={() => reviseFrom(row)}
+                >
+                  <FormatMessage id='metrics.versions.revise'/>
+                </button>}
+                {row.revision.status === 'published' && <button
+                  type='button'
+                  className='chiner-metrics-btn chiner-metrics-btn-danger'
+                  data-testid='metrics-version-deprecate'
+                  disabled={readOnly}
+                  onClick={() => deprecate(row)}
+                >
+                  <FormatMessage id='metrics.versions.deprecate'/>
+                </button>}
                 {row.revision.status === 'draft' && <button
                   type='button'
                   className='chiner-metrics-btn'

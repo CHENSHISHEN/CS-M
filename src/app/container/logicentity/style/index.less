@@ -96,3 +96,15 @@
     flex-grow: 1;
   }
 }
+
+// UX-13：逻辑实体编辑器页签标题栏右侧的“生成物理模型”按钮
+// （仅作用于本编辑器顶层页签栏，内嵌的 EntityCode 左侧页签不受影响）
+.@{prefix}-logic-entity-content > .@{prefix}-simple-tab > .@{prefix}-simple-tab-titles-top {
+  display: flex;
+  align-items: flex-end;
+}
+.@{prefix}-logic-entity-actions {
+  margin-left: auto;
+  align-self: center;
+  padding: 2px 0;
+}

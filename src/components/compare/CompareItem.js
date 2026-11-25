@@ -2,6 +2,7 @@ import React from 'react';
 import {Checkbox, FormatMessage, Icon, Tooltip} from 'components';
 import Child from './CompareItemField';
 import {getPrefix} from '../../lib/prefixUtil';
+import {sanitizeHtml} from '../../lib/safeHtml';
 
 export default React.memo(({data: { isLeaf, sourceEntity,
     i, parent, dataKey, metaEntityData, metaFieldsData }, onRemove, searchValue,
@@ -31,7 +32,7 @@ export default React.memo(({data: { isLeaf, sourceEntity,
             const str = `<span class=${currentPrefix}-compare-list-container-content-list-item-search>$&</span>`;
             const finalData = `<span>${(value || '').replace(reg, str)}</span>`;
             // eslint-disable-next-line react/no-danger,react/no-danger-with-children
-            return <span dangerouslySetInnerHTML={{ __html: finalData }}
+            return <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(finalData) }}
             >{}</span>;
         };
         const getStatus = () => {

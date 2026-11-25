@@ -31,6 +31,11 @@ import StandardField from '../container/standardfield';
 import {StandardFieldLibraryContext} from '../../lib/context';
 import HeaderTool from './HeaderTool';
 import MessageHelp from './MessageHelp';
+import EmptyStateGuide from './EmptyStateGuide';
+import {
+  shouldShowEmptyStateGuide, shouldAutoOpenHomeCover, isProjectEmpty, ONBOARDING_ACTIONS,
+} from '../../lib/onboarding';
+import { CATALOG_MENU_KEYS } from '../../lib/model_catalog_menu';
 import ToggleCase from '../container/tools/togglecase';
 import CompareTable from '../container/tools/comparetable';
 import History from '../container/tools/operationshistory';
@@ -114,12 +119,14 @@ import {
 } from '../workbench/navigation';
 import {filterTreeMenus} from '../workbench/treeFilter';
 import {inferDiagramLevel, physicalMetadataPatches, applyPhysicalMetadataPatch} from '../../lib/model_catalog';
+import {firstCreatedEntity} from '../../lib/model_forward_engineering';
 import EnterpriseHome from '../workbench/EnterpriseHome';
 import DatabaseWorkspace from '../workbench/DatabaseWorkspace';
 import ResourceOverview from '../workbench/ResourceOverview';
 import ForwardEngineering from '../workbench/ForwardEngineering';
 import DrawingWorkbench from '../drawing/DrawingWorkbench';
 import {drawingPersistence} from '../../lib/drawing_persistence';
+import {humanError} from '../drawing/platform/common';
 import BusinessWorkbench from '../business/BusinessWorkbench';
 import MetricsWorkbench from '../metrics/MetricsWorkbench';
 
@@ -379,10 +386,12 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
     }
   }, [restProps.dataSource]);
   // DATA-WB-FEAT-001 阶段A：数据建模项目（module 非绘图/业务）默认打开企业级首页；
-  // 绘图/业务平台项目保持原初始工作区，不受影响
+  // 绘图/业务平台项目保持原初始工作区，不受影响。
+  // UX-02：空项目不自动打开封面，编辑区显示三步引导（Main 在项目加载完成后才挂载，此处即已加载数据源）
   useEffect(() => {
-    const module = restProps?.dataSource?.module;
-    if (module !== 'drawing' && module !== 'business' && tabsRef.current.length === 0) {
+    const dataSource = restProps?.dataSource;
+    if (shouldAutoOpenHomeCover({module: dataSource?.module, dataSource})
+      && tabsRef.current.length === 0) {
       _onMenuClick('home-cover', 'home', null, 'fa-home');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1786,21 +1795,59 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
   const _wbCreateObject = (type) => {
     _contextMenuClick(null, getMenu('add', '', type, [], groupTypeRef.current, ''));
   };
+  // UX-13：向导完成后定位新表——回到模型域，打开第一张新表页签并在资源树选中，
+  // 提示去“数据库代码”页签查看 DDL（复用唯一打开入口 _onMenuClick 与目录 locate）
+  const _forwardFinished = ({createdEntityIds}) => {
+    const first = firstCreatedEntity(dataSourceRef.current, createdEntityIds);
+    if (!first) {
+      Message.success({title: FormatMessage.string({id: 'optSuccess'})});
+      return;
+    }
+    const locate = () => {
+      setWbTreeFilter('');
+      _onMenuClick(first.id, 'entity', null, 'entity.svg');
+      // 资源树需按并入新表后的源重建，下一轮事件循环再定位（locate 闭包随渲染刷新）
+      setTimeout(() => catalogRef.current?.jumpSimplePosition(first.id, 'entity'), 0);
+      Message.success({
+        title: FormatMessage.string({
+          id: 'forward.finishHint',
+          data: {
+            count: (createdEntityIds || []).length,
+            name: first.defKey,
+            tab: FormatMessage.string({id: 'tableEdit.dbDDL'}),
+          },
+          defaultMessage: FormatMessage.string({id: 'optSuccess'}),
+        }),
+        time: 4000,
+      });
+    };
+    if (menuType !== '1') {
+      // 生成已提交，成功反馈不依赖模块切换：规则检查模块有未保存配置时用户可能选择留下，
+      // 此时 locate 不会执行；切换成功后 locate 再提示新表位置与 DDL 页签
+      Message.success({title: FormatMessage.string({id: 'optSuccess'})});
+      // eslint-disable-next-line no-use-before-define
+      _menuTypeChange('1', locate);
+    } else {
+      locate();
+    }
+  };
   // S2 R3：逻辑 → 物理正向生成向导（读最新有效草稿；只读不进入；
   // 提交为纯增量原子合并，不触碰既有实体/其他 tab 草稿）
-  const _wbOpenForwardWizard = (preselect) => {
+  // UX-13：资源树右键/“⋯”、逻辑实体编辑器顶部按钮、顶栏“工具”菜单三处入口共用本函数
+  const openForwardEngineering = (preselect) => {
     if (mode === READING) return;
     let modal;
     const close = () => { modal && modal.close(); };
     modal = openModal(<ForwardEngineering
       getDraftSource={getSearchDataSource}
       getSource={getDataSource}
-      preselect={preselect}
+      preselect={Array.isArray(preselect) ? preselect : []}
       onClose={close}
       onCommit={(next) => {
         dataSourceRef.current = next;
         restProps.update(next);
       }}
+      onFinish={_forwardFinished}
     />, {
       fullScreen: true,
       title: FormatMessage.string({id: 'forward.title'}),
@@ -2172,6 +2219,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
           openCheckRuleConfig={openCheckRuleConfig}
           readOnly={mode === READING}
           openMetric={openMetricTarget}
+          openForwardEngineering={openForwardEngineering}
         />);
     } else if (type === 'view') {
       return <View
@@ -2355,8 +2403,9 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
       }
       setMenuType(key);
       // S3：从其他主模块回到模型域且无打开文档时，默认呈现企业首页
-      // （原有 tabs 与草稿保留，不强制关闭/重建）
-      if (key === '1' && tabsRef.current.length === 0) {
+      // （原有 tabs 与草稿保留，不强制关闭/重建）。
+      // UX-02：空项目不打开封面，与挂载时一致，编辑区保留三步引导
+      if (key === '1' && tabsRef.current.length === 0 && !isProjectEmpty(dataSourceRef.current)) {
         _onMenuClick('home-cover', 'home', null, 'fa-home');
       }
       afterChange && afterChange();
@@ -2375,7 +2424,8 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
     catalogRef.current?.jumpPosition(d, key === 'entities' && d.type === 'refViews' ? 'views' : key);
   };
   const backProjectConfirm = async () => {
-    try {await drawingPersistence.flush();} catch (err) {Message.error({title: err.message});return;}
+    // 显示可读文案(如工程文件被删时提示另存为/导出恢复副本),不显示原始错误码
+    try {await drawingPersistence.flush();} catch (err) {Message.error({title: humanError(err)});return;}
     // M2：关闭项目会卸载指标平台（未提交表单丢失），有脏表单先确认
     const proceedClose = () => confirmBackProjects(dataSourceRef.current, restProps.close);
     if (metricsRef.current && metricsRef.current.isDirty && metricsRef.current.isDirty()) {
@@ -2427,6 +2477,18 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
   };
   const openHome = () => {
     _onMenuClick('home-cover', 'home', null, 'fa-home');
+  };
+  // UX-02：空项目三步引导按钮 → 既有入口（资源树 root 总菜单的概念实体项 / 未归类逻辑实体新建 /
+  // 前向工程向导 / 顶栏“导出 → Word”同一处理 iconClick('word')）
+  const _onboardingAction = (action) => {
+    switch (action) {
+      case ONBOARDING_ACTIONS.createConceptEntity:
+        catalogRef.current?.runRootCreate(CATALOG_MENU_KEYS.createConceptEntity); break;
+      case ONBOARDING_ACTIONS.createLogicEntity: catalogRef.current?.createLogicEntity(); break;
+      case ONBOARDING_ACTIONS.forwardEngineering: openForwardEngineering([]); break;
+      case ONBOARDING_ACTIONS.exportDocument: iconClick(null, 'word'); break;
+      default: break;
+    }
   };
   // S3：目录“企业首页组件”点击/拖放入口 —— 打开企业首页并按公共合同发起添加请求
   // （addRequest:{kind,nonce}，EnterpriseHome 消费后按 nonce 去重；只读态由首页禁写）
@@ -2554,7 +2616,15 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
             closeTab={_tabClose}
             onChange={_tabChange}
             excess={standardFieldMemo}
-            empty={<MessageHelp openHome={openHome} prefix={currentPrefix}/>}
+            empty={menuType === '1' && shouldShowEmptyStateGuide({
+              dataSource: restProps.dataSource, tabCount: tabs.length,
+            }) ? <EmptyStateGuide
+              prefix={currentPrefix}
+              dataSource={restProps.dataSource}
+              readOnly={mode === READING}
+              onAction={_onboardingAction}
+              openHome={openHome}
+            /> : <MessageHelp openHome={openHome} prefix={currentPrefix}/>}
             >
             {tabs.map((t) => {
                 const title = getTabTitle(t);
@@ -2718,6 +2788,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
         iconClick={iconClick}
         openModal={_openModal}
         onCreateObject={_wbCreateObject}
+        openForwardEngineering={openForwardEngineering}
         hideModelCreate
         onOpenAiAssistant={() => {
           aiKeepAliveRef.current = true; // More→AI 打开即进入保活
@@ -2825,7 +2896,7 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
                   }}
                   onOpen={_onMenuClick} onCloseObject={(id, type) => _tabClose(id + separator + type, true)}
                   onDrag={createEmptyTable} filter={wbTreeFilter} viewMode={catalogView}
-                  onGenerate={_wbOpenForwardWizard}
+                  openForwardEngineering={openForwardEngineering}
                   readOnly={mode === READING} onHome={openHome} onHomeAdd={_wbHomeAdd}/>
             </div>
           </TabItem>

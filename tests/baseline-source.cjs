@@ -49,8 +49,40 @@ for (const file of files) {
   assert(!/namespace PDManer\./.test(text), `代码模板仍生成旧产品命名空间：${path.relative(root, file)}`);
   assert(!/https?:\/\/www\.yuque\.com\/pdmaner|https?:\/\/pdmaas\.pdmaner\.com/.test(text), `外链泄露：${path.relative(root, file)}`);
 }
+// 隐私/安全：桌面窗口启用 nodeIntegration，入口 HTML 不得引入统计或任何远程脚本。
+function assertNoRemoteScript(htmlFile, hint) {
+  const html = read(htmlFile).toString();
+  assert(!/hm\.baidu\.com/i.test(html), `入口 HTML 含百度统计脚本：${htmlFile}${hint}`);
+  assert(!/<script\b[^>]*\bsrc\s*=\s*["']?\s*(https?:)?\/\//i.test(html), `入口 HTML 含远程 <script src>：${htmlFile}${hint}`);
+  assert(!/createElement\(\s*['"]script['"]\s*\)/i.test(html), `入口 HTML 动态创建 script 标签：${htmlFile}${hint}`);
+}
+// 源文件是硬性回归门。
+assertNoRemoteScript('public/index.html', '');
+// 构建产物（已 gitignore）只是二道防线：仅当其不早于源文件时才断言，过期或缺失则不让结果依赖本地环境。
+const builtHtml = 'app/build/index.html';
+if (fs.existsSync(path.join(root, builtHtml))) {
+  const mtime = name => fs.statSync(path.join(root, name)).mtimeMs;
+  if (mtime(builtHtml) >= mtime('public/index.html')) assertNoRemoteScript(builtHtml, '（构建产物不应含远程脚本，请检查 public/index.html 并重新 npm run build）');
+  else console.log('NOTE: app/build/index.html 早于 public/index.html，已跳过产物检查（请先 npm run build）');
+}
 assert(pkg.dependencies['node-sql-parser'], 'node-sql-parser 核心依赖必须安装');
 assert.deepStrictEqual(pkg.build.win.target[0].arch, ['x64']);
 assert.equal(pkg.build.win.icon, 'assets/branding/app.ico');
 assert.equal(pkg.build.mac.icon, 'assets/branding/app.icns');
+// 单实例锁（DRW-09）：多开会共用 userData/drawing-autosave，锁必须在任何启动副作用之前获取。
+{
+  // 先去掉注释(行注释与块注释),只在代码中定位:注释里提到的标记不算。
+  const mainSrc = read('src/main.js').toString().replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'"])\/\/.*$/gm, '$1');
+  const lockMatch = /if\s*\(\s*!app\.requestSingleInstanceLock\(\)\s*\)\s*\{\s*app\.quit\(\);\s*return;/.exec(mainSrc);
+  assert(lockMatch, 'src/main.js 必须以 if (!app.requestSingleInstanceLock()) { app.quit(); return; } 获取单实例锁并在失败时退出');
+  const lockAt = lockMatch.index;
+  assert(/app\.on\(\s*['"]second-instance['"]/.test(mainSrc), "src/main.js 必须监听 app.on('second-instance')");
+  for (const marker of ["require('@electron/remote/main')", 'new DrawingPersistence', 'ipcMain.handle(', 'ipcMain.on(', 'registerAiHostIpc({', "app.on('ready'", 'new BrowserWindow(']) {
+    const at = mainSrc.indexOf(marker);
+    assert(at >= 0, `src/main.js 缺少 ${marker}`);
+    assert(lockAt < at, `单实例锁必须出现在 ${marker} 之前`);
+  }
+  const check = require('child_process').spawnSync(process.execPath, ['--check', path.join(root, 'src/main.js')], {encoding: 'utf8'});
+  assert.equal(check.status, 0, `node --check src/main.js 失败：${check.stderr}`);
+}
 console.log('PASS v0.5.0 基线品牌、锁文件、许可证、图二来源、新架构及平台图标配置');

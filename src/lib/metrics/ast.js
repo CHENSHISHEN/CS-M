@@ -8,6 +8,13 @@
 
 import {invalidValueError, metricError} from './errors';
 
+// 复杂度上限（MET-08）：先量长度再分词，递归下降带嵌套计数，防止超长/超深表达式拖垮解析与递归求值
+export const MAX_EXPRESSION_LENGTH = 2000;
+export const MAX_EXPRESSION_DEPTH = 64;
+
+const tooComplexError = (path, message, limit) =>
+  metricError('INVALID_VALUE', path, 'metric.error.expressionTooComplex', message, {limit});
+
 const isRefKey = (text) => /^[A-Za-z0-9_]+$/.test(text);
 
 // ---- 词法 ----
@@ -15,6 +22,9 @@ const tokenize = (expression, path) => {
   const tokens = [];
   let index = 0;
   const text = String(expression == null ? '' : expression);
+  if (text.length > MAX_EXPRESSION_LENGTH) {
+    throw tooComplexError(path, `expression longer than ${MAX_EXPRESSION_LENGTH} characters`, MAX_EXPRESSION_LENGTH);
+  }
   while (index < text.length) {
     const char = text[index];
     if (char === ' ' || char === '\t' || char === '\n' || char === '\r') {
@@ -36,7 +46,12 @@ const tokenize = (expression, path) => {
         throw metricError('INVALID_VALUE', path, 'metric.error.invalidExpression',
           `malformed number in expression: ${numberText}`);
       }
-      tokens.push({type: 'number', value: Number(numberText)});
+      const numberValue = Number(numberText);
+      if (!Number.isFinite(numberValue)) {
+        throw metricError('INVALID_VALUE', path, 'metric.error.invalidExpression',
+          'number literal out of range in expression');
+      }
+      tokens.push({type: 'number', value: numberValue});
       continue;
     }
     if (char === '{' && text[index + 1] === '{') {
@@ -76,6 +91,13 @@ const tokenize = (expression, path) => {
 // ---- 语法（递归下降） ----
 const parseTokens = (tokens, path) => {
   let position = 0;
+  let depth = 0;
+  const enter = () => {
+    depth += 1;
+    if (depth > MAX_EXPRESSION_DEPTH) {
+      throw tooComplexError(path, `expression nested deeper than ${MAX_EXPRESSION_DEPTH} levels`, MAX_EXPRESSION_DEPTH);
+    }
+  };
   const peek = () => tokens[position];
   const eat = (value) => {
     const token = tokens[position];
@@ -119,17 +141,21 @@ const parseTokens = (tokens, path) => {
     }
     if (token.value === '(') {
       position += 1;
+      enter();
       const inner = parseExpr();
       eat(')');
+      depth -= 1;
       return inner;
     }
     if (token.type === 'func' && token.value === 'SAFE_DIVIDE') {
       position += 1;
       eat('(');
+      enter();
       const numerator = parseExpr();
       eat(',');
       const denominator = parseExpr();
       eat(')');
+      depth -= 1;
       return {type: 'safe_divide', numerator, denominator};
     }
     throw metricError('INVALID_VALUE', path, 'metric.error.invalidExpression',

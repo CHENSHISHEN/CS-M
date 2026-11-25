@@ -660,7 +660,8 @@ export const getLineageImpact = (source, query) => {
       directMetrics.push(metricSummary(data, definitionById, item.binding.metricRevisionId,
         {roles: [`BINDING:${item.binding.role}`]}));
     });
-    // 声明来源命中（原子 spec.source 端点；同端点绑定已在上面去重）
+    // 声明来源命中（原子 spec.source 端点 + factGrain.uniqueKeyFieldIds 事实唯一键；
+    // 同端点绑定已在上面去重）
     const coveredRevisionIds = {};
     impactBindings.forEach((item) => {
       if (item.binding.role === 'COMPUTES_FROM' && item.binding.metricRevisionId != null) {
@@ -672,7 +673,11 @@ export const getLineageImpact = (source, query) => {
       if (spec == null || spec.kind !== 'atomic') return;
       const ref = spec.source;
       if (ref == null || ref.modelId !== query.objectId) return;
-      if (query.fieldId != null && ref.fieldId !== query.fieldId) return;
+      // 事实唯一键字段属于来源模型：删除/查询该字段同样是声明直接影响（MET-11）
+      const uniqueKeys = spec.factGrain != null && Array.isArray(spec.factGrain.uniqueKeyFieldIds)
+        ? spec.factGrain.uniqueKeyFieldIds : [];
+      if (query.fieldId != null && ref.fieldId !== query.fieldId
+        && uniqueKeys.indexOf(query.fieldId) < 0) return;
       if (query.fieldId == null && ref.fieldId != null) {
         // 模型级查询不命中字段级声明（不同端点粒度）
       }

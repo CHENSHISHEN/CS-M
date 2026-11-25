@@ -7,7 +7,7 @@
 // 引导从新公共版本显式分叉。注：构建链不识别 ??，使用 == null 三元。
 
 import {metricError} from './errors';
-import {draftEtag, isStoreWritable, readMetricPlatform, writeMetricPlatform} from './store';
+import {draftEtag, readMetricPlatform, storeWriteErrors, writeMetricPlatform} from './store';
 import {createMetricDraft} from './registry';
 import {
   applyDepartmentPatch, isSemanticChange, validateDepartmentPatch,
@@ -20,13 +20,8 @@ export {applyDepartmentPatch, isSemanticChange, validateDepartmentPatch};
 const findRevision = (data, id) => (data.revisions || []).filter(item => item.id === id)[0] || null;
 const findDefinition = (data, id) => (data.definitions || []).filter(item => item.id === id)[0] || null;
 
-const storeGuard = (data) => {
-  if (!isStoreWritable(data)) {
-    return [metricError('SCHEMA_VERSION_UNSUPPORTED', 'profile.metricPlatform.schemaVersion',
-      'metric.error.schemaUnsupported', 'metric platform schema version unsupported')];
-  }
-  return [];
-};
+// 写前守卫统一走 store.storeWriteErrors（STORE_CORRUPT / SCHEMA_VERSION_UNSUPPORTED）
+const storeGuard = data => storeWriteErrors(data);
 
 // 深拷贝小对象：升级草案的 patch 与旧部门发布版隔离（R1）
 const cloneJson = (value) => (value == null ? value : JSON.parse(JSON.stringify(value)));
@@ -168,6 +163,12 @@ export const upgradeDepartmentDraft = (source, input) => {
     return {ok: false, errors: [metricError('UNKNOWN_REFERENCE', 'departmentRevisionId',
       'metric.error.unknownReference',
       'upgrade requires a published department revision with a locked baseline')]};
+  }
+  // 分叉口径没有可继承的基线契约：重放 patch 会静默覆盖分叉自己的修改（MET-01），拒绝升级
+  if (departmentRevision.fork === true) {
+    return {ok: false, errors: [metricError('FORK_NOT_UPGRADABLE', 'departmentRevisionId',
+      'metric.error.forkNotUpgradable',
+      'forked department revision cannot be upgraded; edit it via a new revision draft instead')]};
   }
   const definition = findDefinition(data, departmentRevision.definitionId);
   if (definition == null) {
