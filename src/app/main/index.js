@@ -1811,13 +1811,20 @@ const Index = React.memo(({getUserData, mode, isChildWindow,
       Message.success({
         title: FormatMessage.string({
           id: 'forward.finishHint',
-          data: {count: (createdEntityIds || []).length, name: first.defKey},
+          data: {
+            count: (createdEntityIds || []).length,
+            name: first.defKey,
+            tab: FormatMessage.string({id: 'tableEdit.dbDDL'}),
+          },
           defaultMessage: FormatMessage.string({id: 'optSuccess'}),
         }),
         time: 4000,
       });
     };
     if (menuType !== '1') {
+      // 生成已提交，成功反馈不依赖模块切换：规则检查模块有未保存配置时用户可能选择留下，
+      // 此时 locate 不会执行；切换成功后 locate 再提示新表位置与 DDL 页签
+      Message.success({title: FormatMessage.string({id: 'optSuccess'})});
       // eslint-disable-next-line no-use-before-define
       _menuTypeChange('1', locate);
     } else {

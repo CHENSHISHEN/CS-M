@@ -31,10 +31,14 @@ export function shouldAutoOpenHomeCover({module, dataSource}) {
 
 // 三步：① 新建概念实体 ② 生成逻辑/物理模型 ③ 导出文档。
 // 第②步：已有逻辑实体 → 直接打开前向工程向导；否则先新建逻辑实体并提示原因。
+// 第③步：空项目只会导出空文档，不给按钮，提示“建模后可用”。
 // 只读：三步均不给动作按钮（与顶栏只读时禁用“导出”一致——导出 Word 的模板确认会走保存路径）。
 export function getEmptyStateGuideSteps({dataSource, readOnly}) {
   const hasLogic = !!(dataSource && dataSource.logicEntities && dataSource.logicEntities.length);
   const write = (action, actionKey, extra) => (readOnly ? {action: null} : {action, actionKey, ...extra});
+  const exportStep = isProjectEmpty(dataSource)
+    ? (readOnly ? {action: null} : {action: null, hintKey: 'onboarding.export.hintEmpty'})
+    : write(ONBOARDING_ACTIONS.exportDocument, 'onboarding.export.action');
   return [
     {
       key: 'concept',
@@ -55,7 +59,7 @@ export function getEmptyStateGuideSteps({dataSource, readOnly}) {
       key: 'export',
       titleKey: 'onboarding.export.title',
       descKey: 'onboarding.export.desc',
-      ...write(ONBOARDING_ACTIONS.exportDocument, 'onboarding.export.action'),
+      ...exportStep,
     },
   ];
 }

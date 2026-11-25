@@ -86,8 +86,10 @@ ok('引导仅在"无打开页签 且 空项目"时显示', () => {
   assert.equal(shouldShowEmptyStateGuide({dataSource: {conceptEntities: [{id: 'c'}]}, tabCount: 0}), false);
 });
 
-ok('只读不影响是否显示(只读空项目同样显示引导,但隐藏写操作)', () => {
-  assert.equal(shouldShowEmptyStateGuide({dataSource: {}, tabCount: 0, readOnly: true}), true);
+ok('显示判定不含只读条件(只读空项目同样显示引导,写操作由步骤定义隐藏)', () => {
+  assert.equal(shouldShowEmptyStateGuide({dataSource: {}, tabCount: 0}), true);
+  // 只读时步骤不给任何动作按钮
+  assert.ok(getEmptyStateGuideSteps({dataSource: {}, readOnly: true}).every(s => s.action === null));
 });
 
 ok('数据源未加载时不显示引导(只按已加载数据源判断)', () => {
@@ -119,10 +121,25 @@ ok('三步依次为 概念实体 / 逻辑物理模型 / 导出文档,可写空�
   const steps = getEmptyStateGuideSteps({dataSource: {}, readOnly: false});
   assert.deepEqual(steps.map(s => s.key), ['concept', 'model', 'export']);
   assert.deepEqual(steps.map(s => s.action), [
-    ONBOARDING_ACTIONS.createConceptEntity, ONBOARDING_ACTIONS.createLogicEntity,
-    ONBOARDING_ACTIONS.exportDocument,
+    ONBOARDING_ACTIONS.createConceptEntity, ONBOARDING_ACTIONS.createLogicEntity, null,
   ]);
   assert.equal(steps[1].hintKey, 'onboarding.model.hintNoLogic');
+});
+
+ok('空项目第③步不给导出按钮(只会导出空文档),改为提示"建模后可用"', () => {
+  const step = getEmptyStateGuideSteps({dataSource: {}, readOnly: false})[2];
+  assert.equal(step.key, 'export');
+  assert.equal(step.action, null);
+  assert.equal(step.actionKey, undefined);
+  assert.equal(step.hintKey, 'onboarding.export.hintEmpty');
+  assert.equal(zh.onboarding.export.hintEmpty, '建模后可用');
+});
+
+ok('非空项目第③步给导出 Word 按钮', () => {
+  const step = getEmptyStateGuideSteps({dataSource: {logicEntities: [{id: 'l'}]}, readOnly: false})[2];
+  assert.equal(step.action, ONBOARDING_ACTIONS.exportDocument);
+  assert.equal(step.actionKey, 'onboarding.export.action');
+  assert.equal(step.hintKey, undefined);
 });
 
 ok('已有逻辑实体时第②步直接打开前向工程', () => {

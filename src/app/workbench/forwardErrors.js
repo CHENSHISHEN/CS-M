@@ -18,9 +18,13 @@ export const labelForwardError = (err, source) => {
     const s = id != null ? findById(supports, id) : null;
     return s ? (s.defKey || s.defName || '') : '';
   };
+  const databases = (source && source.profile && source.profile.modelCatalog
+    && source.profile.modelCatalog.physicalDatabases) || [];
+  const database = e.databaseId != null ? findById(databases, e.databaseId) : null;
   return {
     ...e,
     labels: {
+      database: database ? str(database.defKey || database.defName) : '',
       entity: logic ? str(logic.defKey) : '',
       field: field ? str(field.defKey).trim() : '',
       db: supportLabel(e.db),
@@ -54,10 +58,13 @@ export const forwardErrorData = (err) => {
   };
 };
 
-// 定位：目标级显示数据库类型；其余显示 逻辑实体[.字段]
+// 定位：目标级显示数据库类型，无类型时回落所选数据库（代码，找不到则 databaseId）；
+// 其余显示 逻辑实体[.字段]
 const whereOf = (e) => {
   const labels = e.labels || {};
-  if (e.level === 'target') return labels.dbTypeId || str(e.dbTypeId);
+  if (e.level === 'target') {
+    return labels.dbTypeId || str(e.dbTypeId) || labels.database || str(e.databaseId);
+  }
   const entity = labels.entity || str(e.entityDefKey) || str(e.entityId);
   const field = labels.field || (e.level === 'field' ? str(e.defKey).trim() : '');
   return [entity, field].filter(Boolean).join('.');

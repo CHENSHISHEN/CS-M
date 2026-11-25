@@ -135,10 +135,79 @@ ok('renderBlockingErrors：重名表/缺目标库/空字段名/字段重名全�
   const fieldCodes = byLevel.field.lines.map(l => `${l.code}@${l.where}`);
   assert.ok(fieldCodes.includes('duplicateField@LE_ORDER.name'), fieldCodes.join(' | '));
   assert.ok(fieldCodes.includes('emptyFieldKey@LE_ORDER'), fieldCodes.join(' | '));
+  // R-C-F1：目标库失效时不再逐字段误报"缺少目标类型映射"
+  assert.ok(!res.errors.some(e => e.code === 'missingTargetType'), fieldCodes.join(' | '));
+  // M-4：targetDatabaseMissing 的定位列显示所选数据库 ID
+  assert.equal(byLevel.target.lines[0].where, 'db_gone');
   // 每条都有文案，且没有未替换占位符或 undefined
   groups.forEach(g => g.lines.forEach((l) => {
     assert.ok(l.text && !/\{\w+\}|undefined/.test(l.text), `${l.code}: ${l.text}`);
   }));
+});
+
+// R-C-F1：targetSupportId 为空的每条路径都必须先有目标级错误，字段级 missingTargetType 随之省略
+const withDatabases = (source, databases) => ({
+  ...source,
+  profile: {...source.profile, modelCatalog: {physicalDatabases: databases}},
+});
+const fieldMissingTargetType = res => res.errors
+  .filter(e => e.level === 'field' && e.code === 'missingTargetType');
+
+ok('R-C-F1：目标库不存在 → 仅目标级 targetDatabaseMissing，无字段级 missingTargetType', () => {
+  const res = planForwardGeneration(fixture(), {
+    entityIds: ['l_cust'], target: {mode: 'existing', databaseId: 'db_gone'},
+  });
+  assert.equal(res.status, 'error');
+  assert.equal(res.plan, null);
+  assert.ok(res.errors.some(e => e.level === 'target' && e.code === 'targetDatabaseMissing'));
+  assert.deepEqual(fieldMissingTargetType(res), []);
+});
+
+ok('R-C-F1：未选目标 → 仅目标级 targetRequired，无字段级 missingTargetType', () => {
+  const res = planForwardGeneration(fixture(), {entityIds: ['l_cust']});
+  assert.equal(res.status, 'error');
+  assert.ok(res.errors.some(e => e.level === 'target' && e.code === 'targetRequired'));
+  assert.deepEqual(fieldMissingTargetType(res), []);
+});
+
+ok('R-C-F1：已有数据库缺 dbTypeId(手改工程) → 目标级 invalidSupport 阻断，不会生成 type 为 undefined 的表', () => {
+  [undefined, '', 'S_GONE'].forEach((dbTypeId) => {
+    const source = withDatabases(fixture(), [{id: 'db_bad', defKey: 'DB_BAD', dbTypeId}]);
+    const res = planForwardGeneration(source, {
+      entityIds: ['l_cust'], target: {mode: 'existing', databaseId: 'db_bad'},
+    });
+    assert.equal(res.status, 'error', `dbTypeId=${dbTypeId}`);
+    assert.equal(res.plan, null);
+    const target = res.errors.filter(e => e.level === 'target');
+    assert.deepEqual(target.map(e => e.code), ['invalidSupport'], JSON.stringify(res.errors));
+    assert.equal(target[0].databaseId, 'db_bad');
+    assert.deepEqual(fieldMissingTargetType(res), []);
+    // 定位列：有(未知)类型 ID 显示它，缺类型时回落到数据库代码；文案无占位残留
+    const [group] = renderBlockingErrors(labelForwardErrors(target, source), zhT);
+    assert.equal(group.lines[0].where, dbTypeId || 'DB_BAD');
+    assert.equal(group.lines[0].text, zh.forward.err.invalidSupport);
+  });
+});
+
+ok('R-C-F1：已有数据库类型存在但 DDL 模板被删 → 仍报更具体的 templateMissing(不降级为 invalidSupport)', () => {
+  const source = withDatabases(fixture(), [{id: 'db_tpl', defKey: 'DB_TPL', dbTypeId: 'S_MYSQL'}]);
+  source.profile.codeTemplates = [];
+  const res = planForwardGeneration(source, {
+    entityIds: ['l_cust'], target: {mode: 'existing', databaseId: 'db_tpl'},
+  });
+  assert.equal(res.status, 'error');
+  assert.deepEqual(res.errors.filter(e => e.level === 'target').map(e => e.code), ['templateMissing']);
+});
+
+ok('R-C-F1：已有数据库类型有效但映射缺失 → 字段级 missingTargetType 照常阻断', () => {
+  const source = withDatabases(fixture(), [{id: 'db_ok', defKey: 'DB_OK', dbTypeId: 'S_MYSQL'}]);
+  source.dataTypeMapping.mappings[0].S_MYSQL = '';
+  const res = planForwardGeneration(source, {
+    entityIds: ['l_cust'], target: {mode: 'existing', databaseId: 'db_ok'},
+  });
+  assert.equal(res.status, 'error');
+  assert.ok(!res.errors.some(e => e.level === 'target'), JSON.stringify(res.errors));
+  assert.equal(fieldMissingTargetType(res).length, 1);
 });
 
 ok('renderBlockingErrors：新建库空代码/非法类型与映射/引用/索引错误文案带占位参数', () => {
@@ -280,6 +349,27 @@ ok('forward.finishHint 文案 zh/en 均存在且占位符一致', () => {
     assert.ok(!CJK.test(en.forward[k]));
     assert.deepEqual(placeholders(zh.forward[k]), placeholders(en.forward[k]));
   });
+  // M-5：页签名不写死，由调用处用 tableEdit.dbDDL 填入 {tab}
+  assert.deepEqual(placeholders(zh.forward.finishHint).sort(), ['count', 'name', 'tab']);
+  assert.ok(!/dbDDL|数据库代码/.test(zh.forward.finishHint + en.forward.finishHint));
+  const main = read('src/app/main/index.js');
+  assert.ok(/tab: FormatMessage\.string\(\{id: 'tableEdit\.dbDDL'\}\)/.test(main), 'finishHint 未传 tab');
+});
+
+ok('M-6：compact 并入“更多”的工具组随 toolMenus(canForward) 刷新', () => {
+  const shell = read('src/app/workbench/WorkbenchShell.js');
+  const memo = shell.slice(shell.indexOf('const moreMenus = useMemo'));
+  const deps = memo.slice(0, memo.indexOf('const runTopCommand')).match(/\}, \[([^\]]*)\]\);\s*$/m);
+  assert.ok(deps, 'moreMenus 依赖数组未找到');
+  assert.ok(/\btoolMenus\b/.test(deps[1]) && /\bdataPlatform\b/.test(deps[1]), deps[1]);
+});
+
+ok('M-2：跨模块完成时先给成功反馈再切模块（留在规则检查也有反馈），同模块路径只提示一次', () => {
+  const main = read('src/app/main/index.js');
+  const body = main.slice(main.indexOf('const _forwardFinished'), main.indexOf('const openForwardEngineering'));
+  assert.ok(/if \(menuType !== '1'\) \{[\s\S]*?Message\.success\(\{title: FormatMessage\.string\(\{id: 'optSuccess'\}\)\}\);[\s\S]*?_menuTypeChange\('1', locate\);[\s\S]*?\} else \{\s*locate\(\);\s*\}/.test(body),
+    '跨模块分支应在 _menuTypeChange 前提示成功，同模块分支仅调用 locate');
+  assert.equal((body.match(/forward\.finishHint/g) || []).length, 1);
 });
 
 console.log(`${count} passed`);

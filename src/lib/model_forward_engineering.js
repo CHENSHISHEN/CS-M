@@ -195,6 +195,12 @@ export const planForwardGeneration = (source, options) => {
     if (!db) {
       errors.push({level: 'target', code: 'targetDatabaseMissing',
         databaseId: o.target.databaseId});
+    } else if (validateDDLTemplate(source, db.dbTypeId).code === 'invalidSupport') {
+      // R-C-F1：手改工程等导致已有库缺 dbTypeId（或类型 ID 不在 dataTypeSupports）时必须给出目标级阻断，
+      // 否则下方省略字段级 missingTargetType 后计划会放行并生成 type 为 undefined 的表。
+      // 类型存在但 DDL 模板缺失/为空仍走下方 validateDDLTemplate，报更具体的 templateMissing/templateEmpty
+      errors.push({level: 'target', code: 'invalidSupport',
+        dbTypeId: db.dbTypeId, databaseId: db.id});
     } else {
       databaseId = db.id;
       targetSupportId = db.dbTypeId;
@@ -252,6 +258,11 @@ export const planForwardGeneration = (source, options) => {
       const result = resolveFieldMapping(f, source, targetSupportId,
         o.overrides ? o.overrides[key] : undefined);
       resolutions[logic.id].push({fieldId: f.id, defKey: f.defKey, result});
+      // R-C-F1：目标库无效时字段级"缺少目标类型映射"是误导性噪声，省略。
+      // 不变式：targetSupportId 为 null 的每条路径（targetRequired / targetDatabaseMissing /
+      // invalidSupport / emptyDatabaseName / invalidDbType / databaseCreateFailed）都已推入目标级错误，
+      // 因此省略后计划仍被阻断（tests/test-forward-errors.mjs R-C-F1 用例守护）
+      if (result.status === 'error' && result.code === 'missingTargetType' && !targetSupportId) return;
       if (result.status === 'error') {
         errors.push({level: 'field', entityId: logic.id, fieldId: f.id,
           defKey: f.defKey, entityDefKey: logic.defKey, ...result});

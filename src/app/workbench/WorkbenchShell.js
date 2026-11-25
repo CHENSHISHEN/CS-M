@@ -422,8 +422,9 @@ export const WorkbenchTopbar = React.memo(({currentPrefix, mode, isChildWindow, 
       },
     ] : [];
     return base.concat(folded);
+    // toolMenus 随 canForward 变化（无前向工程入口的宿主不显示“生成物理模型”），compact 并入组须同步
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compact, themeMode, readOnly, onOpenAiAssistant]);
+  }, [compact, themeMode, readOnly, onOpenAiAssistant, toolMenus, dbMenus, dataPlatform]);
   // 顶栏统一命令执行路径：桌面独立组与 compact 并入组走同一分支表，避免 key 被漏转发
   const runTopCommand = (m, e) => {
     if (m.key === 'configMenu') {
